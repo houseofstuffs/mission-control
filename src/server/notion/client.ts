@@ -23,9 +23,21 @@ export function notionConfigured(): boolean {
 }
 
 export function parentPageId(): string {
-  const id = process.env.NOTION_PARENT_PAGE_ID;
-  if (!id) throw new Error("NOTION_PARENT_PAGE_ID is not set.");
-  return id.replace(/-/g, "");
+  const raw = process.env.NOTION_PARENT_PAGE_ID;
+  if (!raw) throw new Error("NOTION_PARENT_PAGE_ID is not set.");
+  // Accept a bare id, a dashed uuid, or a full pasted Notion URL (with or
+  // without query string) — extract the last 32-hex-char run.
+  const cleaned = raw.trim().split("?")[0].replace(/-/g, "");
+  // The id is the trailing 32 hex chars; a title like "...-Data" can prepend
+  // stray hex-looking letters to the same run, so take the END of the run.
+  const matches = cleaned.match(/[0-9a-f]{32,}/gi);
+  if (!matches || matches.length === 0) {
+    throw new Error(
+      "NOTION_PARENT_PAGE_ID doesn't contain a page id. Paste the 32-character id from the page URL (or the full URL)."
+    );
+  }
+  const run = matches[matches.length - 1];
+  return run.slice(-32);
 }
 
 /** Serialised throttle: ≥350ms between Notion calls keeps us under 3 rps. */

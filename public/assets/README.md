@@ -8,7 +8,7 @@ over with **no code change**.
 |---|---|---|
 | `heart-1.svg` | Sidebar brand lockup (20px) | Minimum size 14px height; clear space = ½ its height on all sides |
 | `figure-mark.svg` | Empty states (140px height) | Reserved for empty states / human moments only |
-| `pattern-5-clean.svg` | Empty-state background fill at opacity .14 | Must be the version with the baked-in frame stroke removed — not the original pattern-5 |
+| `pattern-5-clean.svg` | Empty-state background fill at opacity .14 | Derived from `pattern-5.svg` by removing the baked-in frame stroke (the app uses only the clean version; the original is kept alongside as source) |
 | `stamps-strokes.svg` | Section header decoration (≤1 per screen) | Not yet wired anywhere in Phase 1 |
 
 Retired — never add: pencil motif, `paper-clip.svg`.

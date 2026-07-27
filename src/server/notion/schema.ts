@@ -1,0 +1,390 @@
+/**
+ * STUFFS Mission Control — Notion schema, designed fresh from the project spec.
+ *
+ * Notion is the system of record (spec §2.1). This file is the single source
+ * of truth for every database: the provisioning script creates them from it,
+ * and the generic property mappers read/write against it.
+ *
+ * The schema is shaped to RECEIVE Printify data first (spec: rebuild from the
+ * Printify-seed starting point): Products are keyed blueprint × print provider
+ * (§3.3), variants are first-class records, and print areas / costs land in
+ * dedicated fields. User-owned objects (Collections, Sections, Brand,
+ * Expenses) are layered on top.
+ *
+ * External IDs are stored on every synced record — non-negotiable (§10).
+ */
+
+export type PropType =
+  | "title"
+  | "rich_text"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "checkbox"
+  | "url"
+  | "date"
+  | "files"
+  | "relation"
+  | "created_time";
+
+export interface PropSpec {
+  type: PropType;
+  /** Pre-seeded select/multi_select options (Notion adds more on write). */
+  options?: string[];
+  /** For relations: the `key` of the target database in this schema. */
+  relation?: string;
+}
+
+export interface DbSpec {
+  key: string;
+  title: string;
+  description: string;
+  properties: Record<string, PropSpec>;
+}
+
+/** Creative + listing workflow step options, kept in sync with lib/workflows. */
+const CREATIVE_STEPS = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "Done"];
+const LISTING_STEPS = ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "Pushed"];
+
+const OCCASIONS = [
+  "Halloween", "Christmas", "Valentine's Day", "Mother's Day", "Father's Day",
+  "Easter", "St. Patrick's Day", "Thanksgiving", "Graduation", "None",
+];
+
+/**
+ * Databases in provisioning order — relations only point at databases that
+ * appear earlier in this list. Self-relations (Etsy Listings → parent) are
+ * patched in a second pass by the provisioner.
+ */
+export const SCHEMA: DbSpec[] = [
+  {
+    key: "brand",
+    title: "Brand",
+    description:
+      "Shop identity — visual tokens, logo, graphic templates, verbal voice. Single record. Source for both interface and branded listing graphics.",
+    properties: {
+      Name: { type: "title" },
+      "Visual Tokens (JSON)": { type: "rich_text" },
+      "Logo Links": { type: "rich_text" },
+      "Logo Files": { type: "files" },
+      "Verbal Voice": { type: "rich_text" },
+      "Graphic Templates": { type: "rich_text" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "expenses",
+    title: "Expenses",
+    description:
+      "Subscriptions, asset purchases, sample orders. Manual entry — no API has these. Capture starts now; records can't be recovered later.",
+    properties: {
+      Name: { type: "title" },
+      Category: {
+        type: "select",
+        options: ["Subscription", "Asset purchase", "Sample order", "Fee", "Other"],
+      },
+      Amount: { type: "number" },
+      Currency: { type: "select", options: ["USD"] },
+      Date: { type: "date" },
+      Recurring: { type: "select", options: ["One-off", "Monthly", "Yearly"] },
+      Vendor: { type: "rich_text" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "shop_sections",
+    title: "Shop Sections",
+    description:
+      "Etsy navigation — merchandising only, capped at 20. Section by buyer browsing behavior, not by collection. Seasonal reassignment happens at season END while listings are dormant.",
+    properties: {
+      Name: { type: "title" },
+      "Section Type": { type: "select", options: ["Enduring interest", "Seasonal window"] },
+      "Season Start": { type: "date" },
+      "Season End": { type: "date" },
+      "Etsy Section ID": { type: "rich_text" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "collections",
+    title: "Collections",
+    description:
+      "Creative groupings — shared style, palette, subject. Internal; spans listings. Palette and type are locked WITHIN a series only, never shop-wide.",
+    properties: {
+      Name: { type: "title" },
+      Description: { type: "rich_text" },
+      "Palette Lock": { type: "rich_text" },
+      "Type Lock": { type: "rich_text" },
+      Status: { type: "select", options: ["Active", "Retired"] },
+    },
+  },
+  {
+    key: "niches",
+    title: "Niches",
+    description:
+      "Evaluated micro-niches with evidence and a gate decision (greenlit / parked / killed). The curated keyword bank here is what reaches listing titles — the reason the research workflow exists.",
+    properties: {
+      Name: { type: "title" },
+      Gate: { type: "select", options: ["Unevaluated", "Greenlit", "Parked", "Killed"] },
+      "Gate Reason": { type: "rich_text" },
+      "Beat Thesis": { type: "rich_text" },
+      Buyer: { type: "rich_text" },
+      "Purchase Motivation": { type: "select", options: ["Gift", "Identity", "In-joke", "Mixed"] },
+      "Saturation Read": { type: "rich_text" },
+      "Conversion Diagnostic": { type: "rich_text" },
+      "Seed Keywords": { type: "rich_text" },
+      "Curated Keyword Bank": { type: "rich_text" },
+      "Community Fit": { type: "select", options: ["In it", "Could join", "Tourist"] },
+      "Product Line Fit": { type: "rich_text" },
+      "Screenable Phrases": { type: "rich_text" },
+      "Screening Status": {
+        type: "select",
+        options: ["Not screened", "Phrases emitted", "Screened clear", "Screened flagged"],
+      },
+      Evidence: { type: "files" },
+      "Evaluated At": { type: "date" },
+    },
+  },
+  {
+    key: "ideas",
+    title: "Ideas",
+    description:
+      "Inbox items — photos, screengrabs, clipped URLs, scraps of copy. Most die; lightweight by design. Ideas do not become Designs until greenlit.",
+    properties: {
+      Name: { type: "title" },
+      Status: { type: "select", options: ["Inbox", "Triaged", "Promoted", "Discarded"] },
+      "Capture Type": { type: "select", options: ["Photo", "Screengrab", "URL", "Copy"] },
+      "Source URL": { type: "url" },
+      Image: { type: "files" },
+      Note: { type: "rich_text" },
+      Occasion: { type: "select", options: OCCASIONS },
+      "Occasion Date": { type: "date" },
+      "Lead Time Days": { type: "number" },
+      "Enter Creative By": { type: "date" },
+      Niche: { type: "relation", relation: "niches" },
+      "Captured At": { type: "created_time" },
+    },
+  },
+  {
+    key: "styles",
+    title: "Styles",
+    description:
+      "Captured aesthetics — description, keyword bank, reusable prompt with [SUBJECT] slot, print-suitability constraint on eligible products.",
+    properties: {
+      Name: { type: "title" },
+      Description: { type: "rich_text" },
+      "Keyword Bank": { type: "rich_text" },
+      "Reusable Prompt": { type: "rich_text" },
+      "Print Suitability": {
+        type: "select",
+        options: ["Prints beautifully", "Prints with tweaks", "Avoid"],
+      },
+      "Source Image": { type: "files" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "textures",
+    title: "Textures",
+    description:
+      "Texture references — Kittl (thumbnail only, no API) or owned files (real composites possible). Usage is derived from Design relations, not hand-maintained.",
+    properties: {
+      Name: { type: "title" },
+      Source: { type: "select", options: ["Kittl", "Owned file"] },
+      "File Link": { type: "url" },
+      File: { type: "files" },
+      License: { type: "rich_text" },
+      "Semantic Tags": { type: "rich_text" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "mockup_templates",
+    title: "Mockup Templates",
+    description: "Purchased or collected PSD mockup templates. Usage and license tracked.",
+    properties: {
+      Name: { type: "title" },
+      Source: { type: "rich_text" },
+      License: { type: "rich_text" },
+      "File Link": { type: "url" },
+      "Product Types": { type: "rich_text" },
+      Notes: { type: "rich_text" },
+    },
+  },
+  {
+    key: "products",
+    title: "Products",
+    description:
+      "Blueprint × print provider pairs — NOT product types (§3.3). Auto-seeded from the Printify catalog with specs, costs and print areas. Two copy fields, never merged: vendor_text_raw is the Printify original and is never overwritten; shop_voice_text is the rewrite, cached here at Product level.",
+    properties: {
+      Name: { type: "title" },
+      "Printify Blueprint ID": { type: "number" },
+      "Printify Print Provider ID": { type: "number" },
+      "Blueprint Title": { type: "rich_text" },
+      "Blueprint Brand": { type: "rich_text" },
+      "Blueprint Model": { type: "rich_text" },
+      "Print Provider Name": { type: "rich_text" },
+      "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
+      "Print Areas (JSON)": { type: "rich_text" },
+      "Max Print Width px": { type: "number" },
+      "Max Print Height px": { type: "number" },
+      "Aspect Ratios": { type: "rich_text" },
+      "Recomposition Flag": { type: "checkbox" },
+      "Base Cost Min": { type: "number" },
+      "Base Cost Max": { type: "number" },
+      Currency: { type: "select", options: ["USD"] },
+      "Variant Count": { type: "number" },
+      "Vendor Text Raw": { type: "rich_text" },
+      "Shop Voice Text": { type: "rich_text" },
+      Status: { type: "select", options: ["Active", "Retired"] },
+      "Synced At": { type: "date" },
+    },
+  },
+  {
+    key: "product_variants",
+    title: "Product Variants",
+    description:
+      "Per-variant records from Printify — color, size, cost, per-variant print placeholders. Needed for variant-level design mapping on multi-product listings.",
+    properties: {
+      Name: { type: "title" },
+      Product: { type: "relation", relation: "products" },
+      "Printify Variant ID": { type: "number" },
+      Color: { type: "select" },
+      Size: { type: "select" },
+      "Base Cost": { type: "number" },
+      Currency: { type: "select", options: ["USD"] },
+      Available: { type: "checkbox" },
+      "Placeholders (JSON)": { type: "rich_text" },
+      SKU: { type: "rich_text" },
+    },
+  },
+  {
+    key: "designs",
+    title: "Designs",
+    description:
+      "The creative asset — artwork, PSD master, derivatives. Moves through the creative workflow C1–C11. The PSD is the master asset; every PNG is a disposable derivative. Files live in Drive/S3 — Notion stores links only.",
+    properties: {
+      Name: { type: "title" },
+      "Current Step": { type: "select", options: CREATIVE_STEPS },
+      "Step State (JSON)": { type: "rich_text" },
+      "Has Stale": { type: "checkbox" },
+      "Has Blocked": { type: "checkbox" },
+      Niche: { type: "relation", relation: "niches" },
+      Collection: { type: "relation", relation: "collections" },
+      Style: { type: "relation", relation: "styles" },
+      Texture: { type: "relation", relation: "textures" },
+      "Primary Product": { type: "relation", relation: "products" },
+      "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
+      "Winning Model": { type: "select" },
+      Occasion: { type: "select", options: OCCASIONS },
+      "Occasion Date": { type: "date" },
+      "Lead Time Days": { type: "number" },
+      "Target Publish Date": { type: "date" },
+      "Actual Publish Date": { type: "date" },
+      "Master Canvas (JSON)": { type: "rich_text" },
+      "Artwork Link": { type: "url" },
+      "PSD Master Link": { type: "url" },
+      "PSD Saved At": { type: "date" },
+      "Sample Ordered": { type: "checkbox" },
+      "Sample ETA": { type: "date" },
+      // VA workflow — nullable and invisible in v1 (§3.4)
+      Assignee: { type: "rich_text" },
+      "Review State": { type: "select", options: ["Draft", "In review", "Approved"] },
+      // Second shop/channel becomes additive (§3.4)
+      Shop: { type: "select", options: ["STUFFS"] },
+      Channel: { type: "select", options: ["Etsy"] },
+      // Reconciliation possible forever (§3.4)
+      "External IDs (JSON)": { type: "rich_text" },
+    },
+  },
+  {
+    key: "etsy_listings",
+    title: "Etsy Listings",
+    description:
+      "Market offerings referencing one or more Designs — named EtsyListing deliberately, not Listing (§2.7). Moves through listing workflow L1–L7. cost_at_creation is a snapshot, never a live lookup.",
+    properties: {
+      Name: { type: "title" },
+      "Current Step": { type: "select", options: LISTING_STEPS },
+      "Step State (JSON)": { type: "rich_text" },
+      "Has Stale": { type: "checkbox" },
+      "Has Blocked": { type: "checkbox" },
+      "Etsy State": { type: "select", options: ["Not pushed", "Draft", "Active", "Inactive", "Expired"] },
+      Designs: { type: "relation", relation: "designs" },
+      "Variant Design Map (JSON)": { type: "rich_text" },
+      Product: { type: "relation", relation: "products" },
+      "Shop Section": { type: "relation", relation: "shop_sections" },
+      "Origin Type": {
+        type: "select",
+        options: ["New concept", "Bundle", "Variant of winner", "Seasonal reissue"],
+      },
+      // Parent Listing (self-relation) is patched in provisioning pass 2.
+      "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
+      Title: { type: "rich_text" },
+      Tags: { type: "rich_text" },
+      "Attributes (JSON)": { type: "rich_text" },
+      "Description Hook": { type: "rich_text" },
+      "Body Copy": { type: "rich_text" },
+      Price: { type: "number" },
+      "Cost At Creation": { type: "number" },
+      "Cost Snapshot At": { type: "date" },
+      "Cost Basis": { type: "select", options: ["Printify Standard", "Printify Premium"] },
+      "Gate State (JSON)": { type: "rich_text" },
+      "Trademark Screened": { type: "checkbox" },
+      "Published At": { type: "date" },
+      "Expiry Date": { type: "date" },
+      Shop: { type: "select", options: ["STUFFS"] },
+      Channel: { type: "select", options: ["Etsy"] },
+      "Etsy Listing ID": { type: "rich_text" },
+      "Printify Product ID": { type: "rich_text" },
+      "External IDs (JSON)": { type: "rich_text" },
+    },
+  },
+  {
+    key: "change_log",
+    title: "Change Log",
+    description:
+      "Append-only record of listing edits: what changed, when, why (§3.5). Notion's free plan keeps 7 days of history — this is the permanent record that makes sequential A/B testing possible.",
+    properties: {
+      Name: { type: "title" },
+      Listing: { type: "relation", relation: "etsy_listings" },
+      Field: { type: "rich_text" },
+      "Old Value": { type: "rich_text" },
+      "New Value": { type: "rich_text" },
+      Why: { type: "rich_text" },
+      "Changed At": { type: "date" },
+    },
+  },
+  {
+    key: "workflow_log",
+    title: "Workflow Log",
+    description:
+      "Append-only step-runner events: step done, backtracks (which step, from where, why), still-valid confirmations, blocks. After ten designs this shows where the process leaks.",
+    properties: {
+      Name: { type: "title" },
+      Design: { type: "relation", relation: "designs" },
+      Listing: { type: "relation", relation: "etsy_listings" },
+      Event: {
+        type: "select",
+        options: ["Step done", "Backtrack", "Still valid", "Blocked", "Unblocked", "Moved", "Created"],
+      },
+      "From Step": { type: "rich_text" },
+      "To Step": { type: "rich_text" },
+      Reason: { type: "rich_text" },
+      "Steps Marked Stale": { type: "rich_text" },
+      At: { type: "date" },
+    },
+  },
+];
+
+/** Self-relations patched after all databases exist: db key → prop name → target key. */
+export const SECOND_PASS_RELATIONS: Array<{ dbKey: string; propName: string; targetKey: string }> = [
+  { dbKey: "etsy_listings", propName: "Parent Listing", targetKey: "etsy_listings" },
+];
+
+export const DB_KEYS = SCHEMA.map((d) => d.key);
+
+export function getDbSpec(key: string): DbSpec {
+  const spec = SCHEMA.find((d) => d.key === key);
+  if (!spec) throw new Error(`Unknown database key: ${key}`);
+  return spec;
+}

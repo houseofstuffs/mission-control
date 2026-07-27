@@ -1,0 +1,122 @@
+"use client";
+
+/**
+ * Listings table — multi-select rows with the batch action bar. The schema
+ * is batch-capable from day one; the UI keeps batch actions minimal in v1
+ * (batch operations UI is explicitly deferred, spec §10).
+ */
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+export interface ListingRow {
+  id: string;
+  title: string;
+  currentStep: string;
+  etsyState: string;
+  originType: string;
+  productName: string;
+  sectionName: string;
+  price: number | null;
+  costAtCreation: number | null;
+  hasStale: boolean;
+  hasBlocked: boolean;
+}
+
+export function ListingsTable({ rows }: { rows: ListingRow[] }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const router = useRouter();
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+
+  return (
+    <>
+      <table className="table">
+        <thead>
+          <tr>
+            <th style={{ width: 40 }}>
+              <span
+                role="checkbox"
+                aria-checked={allSelected}
+                tabIndex={0}
+                className={`checkbox${allSelected ? " checked" : ""}`}
+                onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+              >
+                {allSelected ? "✓" : ""}
+              </span>
+            </th>
+            <th>Listing</th>
+            <th>Step</th>
+            <th>Etsy state</th>
+            <th>Origin</th>
+            <th>Product</th>
+            <th>Section</th>
+            <th>Price</th>
+            <th>Cost @ creation</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const isSel = selected.has(row.id);
+            return (
+              <tr
+                key={row.id}
+                className={`row${isSel ? " selected" : ""}`}
+                onClick={() => router.push(`/listings/${row.id}`)}
+              >
+                <td onClick={(e) => e.stopPropagation()}>
+                  <span
+                    role="checkbox"
+                    aria-checked={isSel}
+                    tabIndex={0}
+                    className={`checkbox${isSel ? " checked" : ""}`}
+                    onClick={() => toggle(row.id)}
+                  >
+                    {isSel ? "✓" : ""}
+                  </span>
+                </td>
+                <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{row.title}</td>
+                <td>{row.currentStep}</td>
+                <td>{row.etsyState}</td>
+                <td>{row.originType}</td>
+                <td>{row.productName}</td>
+                <td>{row.sectionName}</td>
+                <td>{row.price != null ? `$${row.price.toFixed(2)}` : "—"}</td>
+                <td>{row.costAtCreation != null ? `$${row.costAtCreation.toFixed(2)}` : "—"}</td>
+                <td>
+                  <span className="row-gap-8">
+                    {row.hasBlocked ? <span className="chip blocked">blocked</span> : null}
+                    {row.hasStale ? <span className="chip stale">stale</span> : null}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {selected.size > 0 ? (
+        <div className="batch-bar">
+          <span className="count">
+            {selected.size} selected
+          </span>
+          <button className="btn btn-secondary" onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+          {/* Batch operations UI is deferred (spec §10) — the bar and the
+              selection model exist so adding actions later is additive. */}
+          <span className="hint">Batch actions arrive with Phase 2</span>
+        </div>
+      ) : null}
+    </>
+  );
+}

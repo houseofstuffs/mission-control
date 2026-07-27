@@ -1,0 +1,40 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { cachedRecord } from "@/server/notion/store";
+import { runnerRecord } from "@/server/viewmodels";
+import { StepRunner } from "@/components/StepRunner";
+import { Kicker } from "@/components/ui";
+
+export const dynamic = "force-dynamic";
+
+export default async function DesignRunnerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const rec = cachedRecord(id);
+  if (!rec || rec.dbKey !== "designs") notFound();
+
+  const canvasRaw = rec.props["Master Canvas (JSON)"];
+  let canvas: Array<{ position: string; maxWidth: number; maxHeight: number; ratioLabel: string }> = [];
+  if (typeof canvasRaw === "string" && canvasRaw.trim()) {
+    try { canvas = JSON.parse(canvasRaw); } catch { canvas = []; }
+  }
+
+  return (
+    <div className="content-inner">
+      <div className="page-head">
+        <div>
+          <Kicker><Link href="/designs">DESIGNS</Link> / CREATIVE WORKFLOW</Kicker>
+          <h1 className="page-title" style={{ textTransform: "none", letterSpacing: 0 }}>{rec.title || "Untitled design"}</h1>
+        </div>
+      </div>
+      {canvas.length > 0 ? (
+        <div className="well" style={{ marginBottom: 22 }}>
+          <Kicker>MASTER CANVAS — GENERATE AT RATIO, EXPORT AT PIXELS</Kicker>
+          <div className="body-sm" style={{ marginTop: 6 }}>
+            {canvas.map((a) => `${a.position}: ${a.maxWidth}×${a.maxHeight}px (${a.ratioLabel})`).join(" · ")}
+          </div>
+        </div>
+      ) : null}
+      <StepRunner record={runnerRecord(rec)} />
+    </div>
+  );
+}

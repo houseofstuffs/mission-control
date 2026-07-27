@@ -7,6 +7,7 @@ import { todaySummary } from "@/server/viewmodels";
 import { syncState, getMeta } from "@/server/cache/db";
 import { notionConfigured } from "@/server/notion/client";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ProvisionButton } from "@/components/ProvisionButton";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 
@@ -30,10 +31,11 @@ export default function TodayPage() {
           title="Let's wire up Notion"
           copy={
             !notionConfigured()
-              ? "Set NOTION_TOKEN and NOTION_PARENT_PAGE_ID in .env.local, then run the provisioning script to build the schema."
-              : "The schema isn't provisioned yet. Run npm run notion:provision, then refresh."
+              ? "Set NOTION_TOKEN and NOTION_PARENT_PAGE_ID in the environment (host dashboard or .env.local), share the parent page with the integration, then come back here."
+              : "Tokens found — one click builds all the databases under your parent page."
           }
-          hint="npm run notion:provision · npm run notion:refresh"
+          action={notionConfigured() ? <ProvisionButton /> : undefined}
+          hint={notionConfigured() ? "Safe to re-run any time — it patches, never duplicates." : "notion.so/my-integrations → new integration → share your page with it"}
           patternUrl={assetUrl("pattern")}
           figureUrl={assetUrl("figure")}
         />

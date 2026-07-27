@@ -50,7 +50,7 @@ create (or pick) an empty parent page, share it with the integration, and put
 both values in `.env.local`. Provisioning is idempotent — re-run it after
 schema changes and it patches new properties without duplicating databases.
 
-## Deploying
+## Deploying (works with zero local tooling)
 
 Any Node host with a persistent volume works (Railway, Fly.io, Render):
 
@@ -59,6 +59,11 @@ Any Node host with a persistent volume works (Railway, Fly.io, Render):
 - Set the env vars from `.env.example`; optionally set `APP_PASSWORD` for a
   shared-password gate, or put Cloudflare Access in front
 - No localhost assumptions anywhere
+
+First-run setup needs no terminal: once `NOTION_TOKEN` and
+`NOTION_PARENT_PAGE_ID` are set in the host's dashboard, the Today page
+offers a one-click **Provision Notion schema** button (same idempotent
+logic as the script), and every view has its own Refresh button.
 
 ## Brand assets
 

@@ -10,6 +10,7 @@ import type { KanbanCardData } from "@/components/Kanban";
 import type { ListingRow } from "@/components/ListingsTable";
 import type { IdeaCardData, NicheOption } from "@/components/InboxGrid";
 import type { ProductCardData } from "@/components/ProductsView";
+import type { NicheCardData } from "@/components/NichesPanel";
 import type { RunnerRecord } from "@/components/StepRunner";
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -106,6 +107,27 @@ export function ideaCards(): { ideas: IdeaCardData[]; niches: NicheOption[] } {
   const order = ["Inbox", "Triaged", "Promoted", "Discarded"];
   cards.sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status));
   return { ideas: cards, niches };
+}
+
+/* ---------- niches ---------- */
+
+export function nicheCards(): NicheCardData[] {
+  const niches = cachedRecords("niches");
+  const ideas = cachedRecords("ideas");
+  const designs = cachedRecords("designs");
+  const order = ["Greenlit", "Unevaluated", "Parked", "Killed"];
+  return niches
+    .map((n) => ({
+      id: n.id,
+      name: n.title || "Untitled niche",
+      gate: str(n.props["Gate"]) || "Unevaluated",
+      gateReason: str(n.props["Gate Reason"]),
+      beatThesis: str(n.props["Beat Thesis"]),
+      evaluatedAt: str(n.props["Evaluated At"]) || null,
+      ideaCount: ideas.filter((i) => rel(i.props["Niche"]).includes(n.id)).length,
+      designCount: designs.filter((d) => rel(d.props["Niche"]).includes(n.id)).length,
+    }))
+    .sort((a, b) => order.indexOf(a.gate) - order.indexOf(b.gate));
 }
 
 /* ---------- products ---------- */

@@ -38,6 +38,45 @@ const OCCASIONS = [
   "Easter", "St. Patrick's Day", "Thanksgiving", "Graduation",
 ];
 
+function ymd(year: number, month1: number, day: number): string {
+  return `${year}-${String(month1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** nth occurrence of a weekday (0=Sun) in a month (1-based) of a year. */
+function nthWeekday(year: number, month1: number, weekday: number, n: number): string {
+  const first = new Date(year, month1 - 1, 1).getDay();
+  const day = 1 + ((weekday - first + 7) % 7) + (n - 1) * 7;
+  return ymd(year, month1, day);
+}
+
+/** Gregorian Easter (Meeus/Jones/Butcher algorithm). */
+function easter(year: number): string {
+  const a = year % 19, b = Math.floor(year / 100), c = year % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return ymd(year, month, day);
+}
+
+/** Auto-fill date for an occasion in the current calendar year (US dates).
+ * Graduation has no single date, so it stays manual. Always editable after. */
+function occasionDateFor(occasion: string, year: number): string | null {
+  switch (occasion) {
+    case "Halloween": return ymd(year, 10, 31);
+    case "Christmas": return ymd(year, 12, 25);
+    case "Valentine's Day": return ymd(year, 2, 14);
+    case "St. Patrick's Day": return ymd(year, 3, 17);
+    case "Mother's Day": return nthWeekday(year, 5, 0, 2); // 2nd Sunday of May
+    case "Father's Day": return nthWeekday(year, 6, 0, 3); // 3rd Sunday of June
+    case "Thanksgiving": return nthWeekday(year, 11, 4, 4); // 4th Thursday of November
+    case "Easter": return easter(year);
+    default: return null;
+  }
+}
+
 export function InboxGrid({
   ideas,
   niches,
@@ -204,7 +243,17 @@ export function InboxGrid({
           </div>
           <div className="field">
             <label className="kicker" htmlFor="cap-occ">OCCASION</label>
-            <select id="cap-occ" className="select" value={occasion} onChange={(e) => setOccasion(e.target.value)}>
+            <select
+              id="cap-occ"
+              className="select"
+              value={occasion}
+              onChange={(e) => {
+                const chosen = e.target.value;
+                setOccasion(chosen);
+                const auto = occasionDateFor(chosen, new Date().getFullYear());
+                if (auto) setOccasionDate(auto); // pre-fill; the date field stays editable
+              }}
+            >
               {OCCASIONS.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
             </select>
           </div>

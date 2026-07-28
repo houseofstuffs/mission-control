@@ -128,11 +128,13 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       <div className="grid-cards">
         {products.map((p) => (
           <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
-            <Kicker>BLUEPRINT {p.blueprintId ?? "—"} × PROVIDER {p.providerId ?? "—"}</Kicker>
+            <Kicker>{p.name}</Kicker>
             <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
               {p.shortName || p.name}
             </div>
-            <div className="hint">{p.name}</div>
+            <div className="hint">
+              BLUEPRINT {p.blueprintId ?? "—"} × PROVIDER {p.providerId ?? "—"}
+            </div>
             <div className="well">
               <Kicker>MASTER CANVAS</Kicker>
               <div className="body-sm" style={{ marginTop: 6 }}>

@@ -6,6 +6,7 @@
 import { cachedRecords } from "@/server/notion/store";
 import { syncState } from "@/server/cache/db";
 import { RefreshButton } from "@/components/RefreshButton";
+import { StyleCapture } from "@/components/StyleCapture";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 
@@ -32,11 +33,13 @@ export default function LibraryPage() {
         <RefreshButton lastSyncedAt={sync?.lastSyncedAt ?? null} />
       </div>
 
+      <StyleCapture />
+
       {empty ? (
         <EmptyState
           title="Your library builds itself"
-          copy="Styles come from the Capture prompt, textures and mockup templates from the clipper. Favorites derive from usage, not a hand-maintained list."
-          hint="Capture mode + the browser extension arrive in Phases 2–3."
+          copy="Styles come from Capture mode above — drop a reference and review the draft. Textures and mockup templates arrive with the clipper. Favorites derive from usage, not a hand-maintained list."
+          hint="The browser extension arrives in Phase 3."
           patternUrl={assetUrl("pattern")}
           figureUrl={assetUrl("figure")}
         />

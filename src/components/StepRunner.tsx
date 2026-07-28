@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
+import { StyleCapture } from "./StyleCapture";
 
 export interface RunnerRecord {
   id: string;
@@ -187,6 +188,12 @@ export function StepRunner({ record }: { record: RunnerRecord }) {
               </button>
             )}
           </div>
+
+          {/* C1 is where a style is chosen or born — capture one from a
+              reference without leaving the runner (spec §9.2 Capture mode). */}
+          {record.workflowKey === "creative" && selected.id === "C1" ? (
+            <StyleCapture compact />
+          ) : null}
         </div>
 
         {/* right panel */}

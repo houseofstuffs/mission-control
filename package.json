@@ -13,6 +13,7 @@
     "notion:refresh": "tsx scripts/refresh-cache.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@notionhq/client": "^2.3.0",
     "better-sqlite3": "^11.10.0",
     "next": "^15.3.0",

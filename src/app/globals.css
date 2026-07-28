@@ -558,11 +558,12 @@ a:hover { color: var(--candy); }
   gap: 8px;
 }
 .idea-card:hover { border-color: var(--blueberry); }
-/* uniform square thumbnails — image centered, cropped to fit */
+/* uniform square thumbnails — whole image visible, letterboxed on the well
+   background (cover-cropping guillotined tall designs) */
 .idea-thumb {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   border-radius: 10px;
   background: var(--surface-well);

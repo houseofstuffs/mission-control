@@ -100,6 +100,9 @@ export function InboxGrid({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // "+ New niche…" inline flow: which idea it's open for, and the typed name
+  const [newNicheFor, setNewNicheFor] = useState<string | null>(null);
+  const [newNicheName, setNewNicheName] = useState("");
 
   // quick capture form
   const [name, setName] = useState("");
@@ -361,25 +364,58 @@ export function InboxGrid({
             {idea.nicheName ? <div className="chip count">→ {idea.nicheName}</div> : null}
             {idea.status === "Inbox" ? (
               <div className="idea-actions">
-                <button className="btn btn-secondary" disabled={busyId === idea.id}
-                  onClick={() => triage(idea.id, { action: "promote", nicheName: idea.title })}>
-                  Promote to niche
-                </button>
-                {niches.length > 0 ? (
+                {newNicheFor === idea.id ? (
+                  <>
+                    <input
+                      className="input input-compact"
+                      style={{ width: 170, height: 32 }}
+                      value={newNicheName}
+                      autoFocus
+                      placeholder="Niche name"
+                      onChange={(e) => setNewNicheName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newNicheName.trim()) {
+                          triage(idea.id, { action: "promote", nicheName: newNicheName.trim() });
+                          setNewNicheFor(null);
+                        }
+                        if (e.key === "Escape") setNewNicheFor(null);
+                      }}
+                    />
+                    <button className="btn btn-secondary" disabled={busyId === idea.id || !newNicheName.trim()}
+                      onClick={() => {
+                        triage(idea.id, { action: "promote", nicheName: newNicheName.trim() });
+                        setNewNicheFor(null);
+                      }}>
+                      Create
+                    </button>
+                    <button className="btn btn-tertiary" onClick={() => setNewNicheFor(null)}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
                   <select
                     className="select input-compact"
-                    style={{ width: 150, height: 32 }}
-                    defaultValue=""
+                    style={{ width: 190, height: 32 }}
+                    value=""
+                    disabled={busyId === idea.id}
                     onChange={(e) => {
-                      if (e.target.value) triage(idea.id, { action: "attach", nicheId: e.target.value });
+                      if (e.target.value === "__new__") {
+                        setNewNicheName(idea.title); // prefill; edit or keep
+                        setNewNicheFor(idea.id);
+                      } else if (e.target.value) {
+                        triage(idea.id, { action: "attach", nicheId: e.target.value });
+                      }
                     }}
                   >
-                    <option value="" disabled>Attach to niche…</option>
+                    <option value="" disabled>Niche…</option>
                     {niches.map((n) => (
-                      <option key={n.id} value={n.id}>{n.name}</option>
+                      <option key={n.id} value={n.id}>
+                        {n.name} · {n.gate.toLowerCase()}
+                      </option>
                     ))}
+                    <option value="__new__">＋ New niche…</option>
                   </select>
-                ) : null}
+                )}
                 <button className="btn btn-tertiary" disabled={busyId === idea.id}
                   onClick={() => triage(idea.id, { action: "discard" })}>
                   Discard

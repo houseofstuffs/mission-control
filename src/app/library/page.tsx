@@ -47,9 +47,23 @@ export default function LibraryPage() {
             <div className="inbox-grid">
               {styles.map((s) => (
                 <div key={s.id} className="idea-card">
+                  {(() => {
+                    const img = s.props["Source Image"];
+                    const first = Array.isArray(img) && img.length > 0 ? (img[0] as { url?: string }) : null;
+                    return first?.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={first.url} alt="" className="idea-thumb" />
+                    ) : null;
+                  })()}
                   <div className="title">{s.title}</div>
                   <div className="body-sm">{String(s.props["Description"] ?? "").slice(0, 140)}</div>
-                  <div className="row-gap-8">
+                  {s.props["Rule of Thumb"] ? (
+                    <div className="hint">{String(s.props["Rule of Thumb"])}</div>
+                  ) : null}
+                  <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                    {s.props["Category"] ? (
+                      <span className="chip neutral">{String(s.props["Category"])}</span>
+                    ) : null}
                     {s.props["Print Suitability"] ? (
                       <span className={`chip ${s.props["Print Suitability"] === "Avoid" ? "blocked" : "done"}`}>
                         {String(s.props["Print Suitability"])}

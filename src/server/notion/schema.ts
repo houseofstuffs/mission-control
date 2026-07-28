@@ -174,9 +174,24 @@ export const SCHEMA: DbSpec[] = [
       "Captured aesthetics — description, keyword bank, reusable prompt with [SUBJECT] slot, print-suitability constraint on eligible products.",
     properties: {
       Name: { type: "title" },
+      // Aesthetic bucket — the range Explore mode works across (§9.2).
+      Category: {
+        type: "select",
+        options: ["Humor", "Minimalist", "Retro", "Illustrative", "Moody"],
+      },
       Description: { type: "rich_text" },
+      Typography: { type: "rich_text" },
       "Keyword Bank": { type: "rich_text" },
+      // Image and type prompts stay separate: C2 generates artwork, C3 sets
+      // lettering as a Kittl layer wherever spelling matters.
       "Reusable Prompt": { type: "rich_text" },
+      "Type Prompt": { type: "rich_text" },
+      // Print suitability is per-product, not one verdict — these three lists
+      // are what constrains which blueprints a style may use at R6.
+      "Prints Beautifully On": { type: "rich_text" },
+      "Works With Tweaks On": { type: "rich_text" },
+      "Avoid On": { type: "rich_text" },
+      "Rule of Thumb": { type: "rich_text" },
       "Print Suitability": {
         type: "select",
         options: ["Prints beautifully", "Prints with tweaks", "Avoid"],

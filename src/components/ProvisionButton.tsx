@@ -10,7 +10,7 @@ interface Diagnosis {
   visible: Array<{ id: string; type: string; title: string }>;
 }
 
-export function ProvisionButton() {
+export function ProvisionButton({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<number | null>(null);
@@ -52,10 +52,10 @@ export function ProvisionButton() {
   }
 
   return (
-    <div className="stack-12" style={{ alignItems: "center" }}>
-      <button className="btn btn-primary" onClick={provision} disabled={busy}>
+    <div className="stack-12" style={{ alignItems: compact ? "flex-end" : "center" }}>
+      <button className={`btn ${compact ? "btn-secondary" : "btn-primary"}`} onClick={provision} disabled={busy}>
         {busy ? <span className="spinner" /> : null}
-        {busy ? "Building databases in Notion…" : "Provision Notion schema"}
+        {compact ? (busy ? "Syncing schema" : "Sync schema") : busy ? "Building databases in Notion…" : "Provision Notion schema"}
       </button>
       {done != null ? <span className="hint">{done} databases ready.</span> : null}
       {error ? <span className="field-error">{error}</span> : null}

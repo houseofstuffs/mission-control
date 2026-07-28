@@ -50,7 +50,11 @@ export default function TodayPage() {
     <div className="content-inner">
       <div className="page-head">
         <h1 className="page-title">Today</h1>
-        <RefreshButton lastSyncedAt={lastSync ?? null} />
+        <div className="page-head-actions">
+          {/* Applies schema changes (new fields/relations) — idempotent, adopts, never duplicates */}
+          <ProvisionButton compact />
+          <RefreshButton lastSyncedAt={lastSync ?? null} />
+        </div>
       </div>
 
       {nothingYet ? (

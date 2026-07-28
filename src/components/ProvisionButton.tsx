@@ -14,6 +14,8 @@ export function ProvisionButton({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<number | null>(null);
+  const [created, setCreated] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [diag, setDiag] = useState<Diagnosis | null>(null);
   const router = useRouter();
 
@@ -37,6 +39,8 @@ export function ProvisionButton({ compact = false }: { compact?: boolean }) {
         throw new Error(json.error ?? "Provisioning failed");
       }
       setDone(json.result.databases.length);
+      setCreated(json.result.createdTitles ?? []);
+      setWarnings(json.result.warnings ?? []);
       // pull the freshly created (empty) databases into the cache
       await fetch("/api/refresh", {
         method: "POST",
@@ -57,7 +61,19 @@ export function ProvisionButton({ compact = false }: { compact?: boolean }) {
         {busy ? <span className="spinner" /> : null}
         {compact ? (busy ? "Syncing schema" : "Sync schema") : busy ? "Building databases in Notion…" : "Provision Notion schema"}
       </button>
-      {done != null ? <span className="hint">{done} databases ready.</span> : null}
+      {done != null ? (
+        <span className="hint">
+          {done} databases ready
+          {created.length > 0 ? ` · created: ${created.join(", ")}` : " · all adopted, none created"}.
+        </span>
+      ) : null}
+      {warnings.length > 0 ? (
+        <div className="callout stale" style={{ maxWidth: 420, textAlign: "left" }}>
+          {warnings.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </div>
+      ) : null}
       {error ? <span className="field-error">{error}</span> : null}
       {diag ? (
         <div className="body-sm" style={{ textAlign: "left", maxWidth: 420 }}>

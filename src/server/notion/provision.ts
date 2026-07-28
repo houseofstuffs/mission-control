@@ -78,7 +78,7 @@ async function ensureDatabase(
   db: DbSpec,
   dbIds: Record<string, string>,
   childIndex: Map<string, string>
-): Promise<string> {
+): Promise<{ id: string; created: boolean; warning?: string }> {
   // Try the registered id first, then a live child with the same title —
   // if the registered database was deleted (duplicate cleanup), adopt the
   // survivor instead of erroring or creating yet another copy.
@@ -86,9 +86,22 @@ async function ensureDatabase(
     (id, i, arr): id is string => Boolean(id) && arr.indexOf(id) === i
   );
   for (const existing of candidates) {
+    // ONLY a failed retrieve means "this candidate isn't usable". Anything
+    // that goes wrong AFTER a successful retrieve must never fall through to
+    // creation — that path is what silently duplicated databases when a
+    // property patch hit a transient error or a cut-off request.
+    let current: any;
     try {
-      const current: any = await throttled(() => notion().databases.retrieve({ database_id: existing }));
-      if (current?.archived || current?.in_trash) continue; // deleted — try next candidate
+      current = await throttled(() => notion().databases.retrieve({ database_id: existing }));
+    } catch {
+      continue; // genuinely unreachable — try the next candidate
+    }
+    if (current?.archived || current?.in_trash) continue; // trashed — try next
+
+    // From here the database provably exists. Patch failures are reported,
+    // never a reason to create a second copy.
+    let warning: string | undefined;
+    try {
       // Renames first (content-preserving), so the patch step below doesn't
       // create an empty duplicate under the new name.
       for (const rename of RENAMED_PROPERTIES.filter((r) => r.dbKey === db.key)) {
@@ -115,11 +128,20 @@ async function ensureDatabase(
           notion().databases.update({ database_id: existing, properties: missing } as any)
         );
       }
-      setDbId(db.key, existing); // winner may be an adopted survivor, not the registered id
-      return existing;
-    } catch {
-      // candidate no longer resolves — try the next one
+    } catch (err) {
+      warning = `${db.title}: properties not fully updated — ${(err as Error).message}. Re-run to finish.`;
     }
+    setDbId(db.key, existing); // winner may be an adopted survivor, not the registered id
+    return { id: existing, created: false, warning };
+  }
+
+  // Nothing adoptable. If a live database with this title is already on the
+  // page, refuse to create — duplicating it is never the right answer.
+  if (childIndex.has(db.title)) {
+    throw new Error(
+      `"${db.title}" already exists on the parent page but could not be opened. ` +
+        `Refusing to create a duplicate. Check that the integration still has access to it.`
+    );
   }
 
   const properties: Record<string, any> = {};
@@ -135,11 +157,15 @@ async function ensureDatabase(
     } as any)
   );
   setDbId(db.key, created.id);
-  return created.id;
+  return { id: created.id, created: true };
 }
 
 export interface ProvisionResult {
   databases: Array<{ key: string; title: string; id: string; created: boolean }>;
+  /** Databases newly created this run — should be empty after first setup. */
+  createdTitles: string[];
+  /** Non-fatal problems (e.g. a property patch that needs a re-run). */
+  warnings: string[];
 }
 
 export async function provisionSchema(): Promise<ProvisionResult> {
@@ -147,11 +173,15 @@ export async function provisionSchema(): Promise<ProvisionResult> {
   const results: ProvisionResult["databases"] = [];
   const childIndex = await indexParentChildDatabases();
 
+  const warnings: string[] = [];
+  const createdTitles: string[] = [];
+
   for (const db of SCHEMA) {
-    const before = getDbId(db.key) ?? childIndex.get(db.title) ?? null;
-    const id = await ensureDatabase(db, dbIds, childIndex);
-    dbIds[db.key] = id;
-    results.push({ key: db.key, title: db.title, id, created: before !== id });
+    const outcome = await ensureDatabase(db, dbIds, childIndex);
+    dbIds[db.key] = outcome.id;
+    if (outcome.created) createdTitles.push(db.title);
+    if (outcome.warning) warnings.push(outcome.warning);
+    results.push({ key: db.key, title: db.title, id: outcome.id, created: outcome.created });
   }
 
   // Second pass: self-relations and forward references (targets created
@@ -197,5 +227,5 @@ export async function provisionSchema(): Promise<ProvisionResult> {
   }
 
   setMeta("schema_provisioned_at", new Date().toISOString());
-  return { databases: results };
+  return { databases: results, createdTitles, warnings };
 }

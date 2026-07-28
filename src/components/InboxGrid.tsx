@@ -38,7 +38,16 @@ const OCCASIONS = [
   "Easter", "St. Patrick's Day", "Thanksgiving", "Graduation",
 ];
 
-export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: NicheOption[] }) {
+export function InboxGrid({
+  ideas,
+  niches,
+  emptyHero,
+}: {
+  ideas: IdeaCardData[];
+  niches: NicheOption[];
+  /** server-rendered empty state, placed inside the drop-target area */
+  emptyHero?: React.ReactNode;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -147,28 +156,34 @@ export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: Ni
   );
 
   return (
-    <div className="stack-22">
-      {/* quick capture — drop zone, paste target, and form in one */}
+    // the WHOLE inbox is the drop zone and paste target — the empty-state
+    // hero is the most inviting square on the page, so it must accept drops
+    <div
+      className="stack-22"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget === e.target) setDragOver(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        takeFile(e.dataTransfer.files?.[0]);
+      }}
+      onPaste={(e) => {
+        const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+        if (file) {
+          e.preventDefault();
+          takeFile(file);
+        }
+      }}
+    >
+      {/* quick capture */}
       <div
         className="card supporting"
         style={dragOver ? { borderColor: "var(--blueberry)", background: "var(--hover-blue-pale)" } : undefined}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          takeFile(e.dataTransfer.files?.[0]);
-        }}
-        onPaste={(e) => {
-          const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
-          if (file) {
-            e.preventDefault();
-            takeFile(file);
-          }
-        }}
       >
         <div className="kicker">QUICK CAPTURE</div>
         <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
@@ -335,6 +350,7 @@ export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: Ni
           </div>
         ))}
       </div>
+      {emptyHero}
     </div>
   );
 }

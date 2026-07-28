@@ -79,17 +79,16 @@ async function ensureDatabase(
   dbIds: Record<string, string>,
   childIndex: Map<string, string>
 ): Promise<string> {
-  let existing = getDbId(db.key);
-  if (!existing) {
-    const adopted = childIndex.get(db.title);
-    if (adopted) {
-      setDbId(db.key, adopted);
-      existing = adopted;
-    }
-  }
-  if (existing) {
+  // Try the registered id first, then a live child with the same title —
+  // if the registered database was deleted (duplicate cleanup), adopt the
+  // survivor instead of erroring or creating yet another copy.
+  const candidates = [getDbId(db.key), childIndex.get(db.title)].filter(
+    (id, i, arr): id is string => Boolean(id) && arr.indexOf(id) === i
+  );
+  for (const existing of candidates) {
     try {
       const current: any = await throttled(() => notion().databases.retrieve({ database_id: existing }));
+      if (current?.archived || current?.in_trash) continue; // deleted — try next candidate
       // Renames first (content-preserving), so the patch step below doesn't
       // create an empty duplicate under the new name.
       for (const rename of RENAMED_PROPERTIES.filter((r) => r.dbKey === db.key)) {
@@ -116,9 +115,10 @@ async function ensureDatabase(
           notion().databases.update({ database_id: existing, properties: missing } as any)
         );
       }
+      setDbId(db.key, existing); // winner may be an adopted survivor, not the registered id
       return existing;
     } catch {
-      // registered id no longer resolves — fall through and create fresh
+      // candidate no longer resolves — try the next one
     }
   }
 

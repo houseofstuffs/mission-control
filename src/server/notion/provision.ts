@@ -8,7 +8,13 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { notion, parentPageId, throttled } from "./client";
-import { SCHEMA, SECOND_PASS_RELATIONS, type DbSpec, type PropSpec } from "./schema";
+import {
+  SCHEMA,
+  SECOND_PASS_RELATIONS,
+  RENAMED_PROPERTIES,
+  type DbSpec,
+  type PropSpec,
+} from "./schema";
 import { getDbId, setDbId, setMeta } from "@/server/cache/db";
 
 function propPayload(spec: PropSpec, dbIds: Record<string, string>): any {
@@ -84,6 +90,20 @@ async function ensureDatabase(
   if (existing) {
     try {
       const current: any = await throttled(() => notion().databases.retrieve({ database_id: existing }));
+      // Renames first (content-preserving), so the patch step below doesn't
+      // create an empty duplicate under the new name.
+      for (const rename of RENAMED_PROPERTIES.filter((r) => r.dbKey === db.key)) {
+        if (current.properties?.[rename.from] && !current.properties?.[rename.to]) {
+          await throttled(() =>
+            notion().databases.update({
+              database_id: existing,
+              properties: { [rename.from]: { name: rename.to } },
+            } as any)
+          );
+          current.properties[rename.to] = current.properties[rename.from];
+          delete current.properties[rename.from];
+        }
+      }
       // Patch any properties added to the schema since last provision.
       const missing: Record<string, any> = {};
       for (const [name, spec] of Object.entries(db.properties)) {
@@ -134,19 +154,45 @@ export async function provisionSchema(): Promise<ProvisionResult> {
     results.push({ key: db.key, title: db.title, id, created: before !== id });
   }
 
-  // Second pass: self-relations (e.g. Etsy Listings → Parent Listing).
+  // Second pass: self-relations and forward references (targets created
+  // later in SCHEMA order than their source).
   for (const rel of SECOND_PASS_RELATIONS) {
     const dbId = dbIds[rel.dbKey];
     const current: any = await throttled(() => notion().databases.retrieve({ database_id: dbId }));
     if (!current.properties?.[rel.propName]) {
+      const relation = rel.dual
+        ? { database_id: dbIds[rel.targetKey], dual_property: {} }
+        : { database_id: dbIds[rel.targetKey], single_property: {} };
       await throttled(() =>
         notion().databases.update({
           database_id: dbId,
-          properties: {
-            [rel.propName]: { relation: { database_id: dbIds[rel.targetKey], single_property: {} } },
-          },
+          properties: { [rel.propName]: { relation } },
         } as any)
       );
+    }
+    // Dual relations: Notion auto-creates the reverse property on the target
+    // with a clunky default name — rename it to rel.dual if not done yet.
+    if (rel.dual) {
+      const targetId = dbIds[rel.targetKey];
+      const target: any = await throttled(() =>
+        notion().databases.retrieve({ database_id: targetId })
+      );
+      if (!target.properties?.[rel.dual]) {
+        const reverse = Object.entries(target.properties ?? {}).find(
+          ([, p]: [string, any]) =>
+            p?.type === "relation" &&
+            String(p.relation?.database_id ?? "").replace(/-/g, "") === dbId.replace(/-/g, "") &&
+            p.relation?.dual_property?.synced_property_name === rel.propName
+        );
+        if (reverse) {
+          await throttled(() =>
+            notion().databases.update({
+              database_id: targetId,
+              properties: { [reverse[0]]: { name: rel.dual } },
+            } as any)
+          );
+        }
+      }
     }
   }
 

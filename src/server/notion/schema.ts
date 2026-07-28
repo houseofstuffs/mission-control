@@ -135,7 +135,9 @@ export const SCHEMA: DbSpec[] = [
       "Seed Keywords": { type: "rich_text" },
       "Curated Keyword Bank": { type: "rich_text" },
       "Community Fit": { type: "select", options: ["In it", "Could join", "Tourist"] },
-      "Product Line Fit": { type: "rich_text" },
+      // "Product Fit" (relation → products) is added in provisioning pass 2 —
+      // Products is created after Niches. Free text covers what isn't seeded.
+      "Other Products": { type: "rich_text" },
       "Screenable Phrases": { type: "rich_text" },
       "Screening Status": {
         type: "select",
@@ -376,9 +378,26 @@ export const SCHEMA: DbSpec[] = [
   },
 ];
 
-/** Self-relations patched after all databases exist: db key → prop name → target key. */
-export const SECOND_PASS_RELATIONS: Array<{ dbKey: string; propName: string; targetKey: string }> = [
+/**
+ * Relations patched after all databases exist (self-relations, or relations
+ * pointing at databases created later in SCHEMA order). `dual` makes it a
+ * two-way relation and names the reverse property on the target database.
+ */
+export const SECOND_PASS_RELATIONS: Array<{
+  dbKey: string;
+  propName: string;
+  targetKey: string;
+  dual?: string;
+}> = [
   { dbKey: "etsy_listings", propName: "Parent Listing", targetKey: "etsy_listings" },
+  // Niche-level product-line fit: which seeded Products this niche wants.
+  // Two-way so the Products side shows which niches point at it.
+  { dbKey: "niches", propName: "Product Fit", targetKey: "products", dual: "Niche Fit" },
+];
+
+/** Property renames applied during provisioning — content is preserved. */
+export const RENAMED_PROPERTIES: Array<{ dbKey: string; from: string; to: string }> = [
+  { dbKey: "niches", from: "Product Line Fit", to: "Other Products" },
 ];
 
 export const DB_KEYS = SCHEMA.map((d) => d.key);

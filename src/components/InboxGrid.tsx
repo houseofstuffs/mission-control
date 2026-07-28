@@ -61,9 +61,7 @@ function easter(year: number): string {
   return ymd(year, month, day);
 }
 
-/** Auto-fill date for an occasion in the current calendar year (US dates).
- * Graduation has no single date, so it stays manual. Always editable after. */
-function occasionDateFor(occasion: string, year: number): string | null {
+function dateInYear(occasion: string, year: number): string | null {
   switch (occasion) {
     case "Halloween": return ymd(year, 10, 31);
     case "Christmas": return ymd(year, 12, 25);
@@ -75,6 +73,18 @@ function occasionDateFor(occasion: string, year: number): string | null {
     case "Easter": return easter(year);
     default: return null;
   }
+}
+
+/** Auto-fill with the NEXT occurrence of an occasion (US dates): this year's
+ * date if it hasn't passed, otherwise next year's — floating holidays are
+ * recomputed for the new year, not just year-bumped. Graduation has no
+ * single date, so it stays manual. Always editable after. */
+function occasionDateFor(occasion: string, today: Date): string | null {
+  const year = today.getFullYear();
+  const thisYear = dateInYear(occasion, year);
+  if (!thisYear) return null;
+  const todayStr = ymd(year, today.getMonth() + 1, today.getDate());
+  return thisYear >= todayStr ? thisYear : dateInYear(occasion, year + 1);
 }
 
 export function InboxGrid({
@@ -250,7 +260,7 @@ export function InboxGrid({
               onChange={(e) => {
                 const chosen = e.target.value;
                 setOccasion(chosen);
-                const auto = occasionDateFor(chosen, new Date().getFullYear());
+                const auto = occasionDateFor(chosen, new Date());
                 if (auto) setOccasionDate(auto); // pre-fill; the date field stays editable
               }}
             >

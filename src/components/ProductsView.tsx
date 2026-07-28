@@ -151,9 +151,6 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
             <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
               {p.shortName || p.name}
             </div>
-            <div className="body-sm muted">
-              blueprint {p.blueprintId ?? "—"} × provider {p.providerId ?? "—"}
-            </div>
             <div className="well">
               <Kicker>MASTER CANVAS</Kicker>
               <div className="body-sm" style={{ marginTop: 6 }}>
@@ -168,7 +165,7 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
                 )}
               </div>
             </div>
-            <div className="body-sm">
+            <div className="body-sm muted">
               {p.variantCount ?? 0} variants
               {p.costMin != null
                 ? ` · base cost $${p.costMin.toFixed(2)}${p.costMax != null && p.costMax !== p.costMin ? `–$${p.costMax.toFixed(2)}` : ""}`

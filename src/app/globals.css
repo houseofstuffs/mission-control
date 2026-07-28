@@ -558,6 +558,15 @@ a:hover { color: var(--candy); }
   gap: 8px;
 }
 .idea-card:hover { border-color: var(--blueberry); }
+/* uniform square thumbnails — image centered, cropped to fit */
+.idea-thumb {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 10px;
+  background: var(--surface-well);
+}
 .idea-card .title { font-family: var(--font-display); font-weight: 700; font-size: 14.5px; color: var(--text-primary); }
 .idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .idea-actions .btn { font-size: 12px; padding: 6px 12px; }

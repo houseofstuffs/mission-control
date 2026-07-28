@@ -349,7 +349,7 @@ export function InboxGrid({
           <div key={idea.id} className="idea-card">
             {idea.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={idea.imageUrl} alt="" style={{ borderRadius: 10, maxHeight: 140, objectFit: "cover" }} />
+              <img src={idea.imageUrl} alt="" className="idea-thumb" />
             ) : null}
             <div className="title">{idea.title}</div>
             <div className="hint">

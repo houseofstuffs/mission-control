@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation";
 /**
  * Explicit refresh — the only way reads reach Notion (spec §2.1). Shows the
  * last-synced time so staleness is visible, not silent.
+ *
+ * Always refreshes ALL databases: every view renders names from related
+ * records (niche names on idea cards, product names on listings), so a
+ * partial refresh can show stale cross-references and quietly lie.
  */
-export function RefreshButton({ db, lastSyncedAt }: { db?: string; lastSyncedAt?: string | null }) {
+export function RefreshButton({ lastSyncedAt }: { db?: string; lastSyncedAt?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -19,7 +23,7 @@ export function RefreshButton({ db, lastSyncedAt }: { db?: string; lastSyncedAt?
       const res = await fetch("/api/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ db: db ?? "all" }),
+        body: JSON.stringify({ db: "all" }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Refresh failed");

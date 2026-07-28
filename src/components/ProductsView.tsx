@@ -129,12 +129,19 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       <div className="grid-cards">
         {products.map((p) => (
           <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
-            {/* Provider flows inline so it lands on line 2 after a short
-                title, and tucks onto the wrapped line after a long one —
-                never orphaned to a third line. */}
+            {/* Provider always starts its own line, and never splits across
+                two ("MONSTER / DIGITAL"). */}
             <Kicker>
-              {p.blueprintTitle || p.name}{" "}
-              <span style={{ color: "var(--status-done)" }}>{p.providerName}</span>
+              {p.blueprintTitle || p.name}
+              <span
+                style={{
+                  display: "block",
+                  whiteSpace: "nowrap",
+                  color: "var(--status-done)",
+                }}
+              >
+                {p.providerName}
+              </span>
             </Kicker>
             <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
               {p.shortName || p.name}

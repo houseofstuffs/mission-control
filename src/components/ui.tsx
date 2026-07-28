@@ -16,7 +16,7 @@ export function EmptyState({
   figureUrl,
 }: {
   title: string;
-  copy: string;
+  copy?: string;
   action?: ReactNode;
   hint?: string;
   patternUrl?: string | null;
@@ -44,7 +44,7 @@ export function EmptyState({
           <FigurePlaceholder height={140} />
         )}
         <div className="title">{title}</div>
-        <div className="copy">{copy}</div>
+        {copy ? <div className="copy">{copy}</div> : null}
         {action}
         {hint ? <div className="hint">{hint}</div> : null}
       </div>

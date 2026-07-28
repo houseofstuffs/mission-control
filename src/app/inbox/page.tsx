@@ -24,8 +24,6 @@ export default function InboxPage() {
           ideas.length === 0 ? (
             <EmptyState
               title="Nothing to triage"
-              copy="Ideas die in the camera roll because capture costs too much. Drop a screenshot anywhere on this page — one action and done; organize later, at a desk."
-              hint="Phone album sync and the browser clipper arrive in Phase 3."
               patternUrl={assetUrl("pattern")}
               figureUrl={assetUrl("figure")}
             />

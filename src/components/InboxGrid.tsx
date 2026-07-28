@@ -155,23 +155,25 @@ export function InboxGrid({
       new Date(i.enterCreativeBy).getTime() - Date.now() < 7 * 86400_000
   );
 
+  // the COLORED BOX is the one and only drop target — the big mint hero when
+  // the inbox is empty, a compact mint tile in the grid once ideas exist.
+  // Paste (Ctrl+V) still works anywhere on the page; it has no target to miss.
+  const dropHandlers = {
+    onDragOver: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(true);
+    },
+    onDragLeave: () => setDragOver(false),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      takeFile(e.dataTransfer.files?.[0]);
+    },
+  };
+
   return (
-    // the WHOLE inbox is the drop zone and paste target — the empty-state
-    // hero is the most inviting square on the page, so it must accept drops
     <div
       className="stack-22"
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragOver(true);
-      }}
-      onDragLeave={(e) => {
-        if (e.currentTarget === e.target) setDragOver(false);
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        setDragOver(false);
-        takeFile(e.dataTransfer.files?.[0]);
-      }}
       onPaste={(e) => {
         const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
         if (file) {
@@ -181,10 +183,7 @@ export function InboxGrid({
       }}
     >
       {/* quick capture */}
-      <div
-        className="card supporting"
-        style={dragOver ? { borderColor: "var(--blueberry)", background: "var(--hover-blue-pale)" } : undefined}
-      >
+      <div className="card supporting">
         <div className="kicker">QUICK CAPTURE</div>
         <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ flex: "1 1 220px" }}>
@@ -229,56 +228,36 @@ export function InboxGrid({
         <div className="field">
           <input className="input" placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} />
         </div>
-        <div className="row-gap-12">
-          {previewUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={previewUrl}
-              alt=""
-              style={{ height: 56, borderRadius: 10, border: "2px solid var(--border-faint)" }}
-            />
-          ) : null}
-          {pendingFile ? (
-            <>
-              <span className="body-sm">{pendingFile.name}</span>
-              <button
-                className="btn btn-tertiary"
-                style={{ fontSize: 12, padding: "5px 10px" }}
-                onClick={() => {
-                  setPendingFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-              >
-                Remove
-              </button>
-            </>
-          ) : (
-            <span className="hint">
-              Drag an image here, paste a screenshot, or{" "}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                style={{
-                  background: "none",
-                  border: "none",
-                  padding: 0,
-                  font: "inherit",
-                  color: "var(--blueberry)",
-                  cursor: "pointer",
-                }}
-              >
-                browse
-              </button>
-              . With an image attached, the name is optional.
-            </span>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={(e) => takeFile(e.target.files?.[0])}
-          />
-        </div>
+        {pendingFile ? (
+          <div className="row-gap-12">
+            {previewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={previewUrl}
+                alt=""
+                style={{ height: 56, borderRadius: 10, border: "2px solid var(--border-faint)" }}
+              />
+            ) : null}
+            <span className="body-sm">{pendingFile.name}</span>
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "5px 10px" }}
+              onClick={() => {
+                setPendingFile(null);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ) : null}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => takeFile(e.target.files?.[0])}
+        />
       </div>
 
       {urgent.length > 0 ? (
@@ -292,6 +271,18 @@ export function InboxGrid({
       {error ? <div className="callout blocked">{error}</div> : null}
 
       <div className="inbox-grid">
+        {ideas.length > 0 ? (
+          <button
+            className="drop-tile"
+            {...dropHandlers}
+            onClick={() => fileInputRef.current?.click()}
+            style={dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : undefined}
+            aria-label="Drop an image to capture an idea"
+          >
+            <span style={{ fontSize: 30, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
+            <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>DROP IMAGE</span>
+          </button>
+        ) : null}
         {ideas.map((idea) => (
           <div key={idea.id} className="idea-card">
             {idea.imageUrl ? (
@@ -350,7 +341,19 @@ export function InboxGrid({
           </div>
         ))}
       </div>
-      {emptyHero}
+      {emptyHero ? (
+        <div
+          {...dropHandlers}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            cursor: "pointer",
+            borderRadius: 20,
+            ...(dragOver ? { background: "var(--hover-blue-pale)" } : {}),
+          }}
+        >
+          {emptyHero}
+        </div>
+      ) : null}
     </div>
   );
 }

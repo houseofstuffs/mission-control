@@ -41,8 +41,46 @@ function propPayload(spec: PropSpec, dbIds: Record<string, string>): any {
   }
 }
 
-async function ensureDatabase(db: DbSpec, dbIds: Record<string, string>): Promise<string> {
-  const existing = getDbId(db.key);
+/**
+ * Index of child databases already under the parent page, by exact title.
+ * This is what makes provisioning idempotent even when the local registry
+ * is empty (fresh volume, wiped cache): existing databases are ADOPTED,
+ * never recreated as duplicates.
+ */
+async function indexParentChildDatabases(): Promise<Map<string, string>> {
+  const index = new Map<string, string>();
+  let cursor: string | undefined;
+  do {
+    const page: any = await throttled(() =>
+      notion().blocks.children.list({
+        block_id: parentPageId(),
+        start_cursor: cursor,
+        page_size: 100,
+      })
+    );
+    for (const block of page.results ?? []) {
+      if (block.type === "child_database") {
+        index.set(block.child_database?.title ?? "", block.id);
+      }
+    }
+    cursor = page.has_more ? page.next_cursor : undefined;
+  } while (cursor);
+  return index;
+}
+
+async function ensureDatabase(
+  db: DbSpec,
+  dbIds: Record<string, string>,
+  childIndex: Map<string, string>
+): Promise<string> {
+  let existing = getDbId(db.key);
+  if (!existing) {
+    const adopted = childIndex.get(db.title);
+    if (adopted) {
+      setDbId(db.key, adopted);
+      existing = adopted;
+    }
+  }
   if (existing) {
     try {
       const current: any = await throttled(() => notion().databases.retrieve({ database_id: existing }));
@@ -87,10 +125,11 @@ export interface ProvisionResult {
 export async function provisionSchema(): Promise<ProvisionResult> {
   const dbIds: Record<string, string> = {};
   const results: ProvisionResult["databases"] = [];
+  const childIndex = await indexParentChildDatabases();
 
   for (const db of SCHEMA) {
-    const before = getDbId(db.key);
-    const id = await ensureDatabase(db, dbIds);
+    const before = getDbId(db.key) ?? childIndex.get(db.title) ?? null;
+    const id = await ensureDatabase(db, dbIds, childIndex);
     dbIds[db.key] = id;
     results.push({ key: db.key, title: db.title, id, created: before !== id });
   }

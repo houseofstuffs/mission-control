@@ -533,6 +533,21 @@ a:hover { color: var(--candy); }
 /* ---------- inbox grid ---------- */
 
 .inbox-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.drop-tile {
+  background: var(--surface-panel-accent);
+  border: none;
+  border-radius: var(--radius-card);
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.drop-tile:hover { background: #b8e6d6; }
+
 .idea-card {
   background: #fff;
   border: 2px solid var(--border-faint);

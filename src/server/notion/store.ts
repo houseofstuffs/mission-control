@@ -16,7 +16,8 @@ function requireDbId(dbKey: string): string {
   const id = getDbId(dbKey);
   if (!id) {
     throw new Error(
-      `Notion database for "${dbKey}" is not provisioned. Run: npm run notion:provision`
+      `The app doesn't know where the "${dbKey}" database lives (fresh or wiped cache). ` +
+        `Open Today and click "Provision Notion schema" — it re-adopts existing databases, no duplicates.`
     );
   }
   return id;

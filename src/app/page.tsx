@@ -8,6 +8,7 @@ import { syncState, getMeta } from "@/server/cache/db";
 import { notionConfigured } from "@/server/notion/client";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ProvisionButton } from "@/components/ProvisionButton";
+import { DedupePanel } from "@/components/DedupePanel";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 
@@ -120,6 +121,8 @@ export default function TodayPage() {
               <div className="body-sm">{s.greenlitWaiting.join(" · ")}</div>
             </div>
           )}
+
+          <DedupePanel />
 
           <div className="card supporting">
             <Kicker>RECENT MOVES</Kicker>

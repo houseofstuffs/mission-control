@@ -209,6 +209,7 @@ export function productCards(): ProductCardData[] {
       ]
         .filter(Boolean)
         .join(" "),
+    blueprintTitle: str(p.props["Blueprint Title"]),
     technique: str(p.props["Print Technique"]) || null,
     blueprintId: num(p.props["Printify Blueprint ID"]),
     providerId: num(p.props["Printify Print Provider ID"]),

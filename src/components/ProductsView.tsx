@@ -15,6 +15,7 @@ export interface ProductCardData {
   name: string;
   /** {Brand} {SHORT WORD} {Model} — the dashboard headline */
   shortName: string;
+  blueprintTitle: string;
   technique: string | null;
   blueprintId: number | null;
   providerId: number | null;
@@ -128,12 +129,18 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       <div className="grid-cards">
         {products.map((p) => (
           <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
-            <Kicker>{p.name}</Kicker>
+            {/* Provider flows inline so it lands on line 2 after a short
+                title, and tucks onto the wrapped line after a long one —
+                never orphaned to a third line. */}
+            <Kicker>
+              {p.blueprintTitle || p.name}{" "}
+              <span style={{ color: "var(--status-done)" }}>{p.providerName}</span>
+            </Kicker>
             <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
               {p.shortName || p.name}
             </div>
-            <div className="hint">
-              BLUEPRINT {p.blueprintId ?? "—"} × PROVIDER {p.providerId ?? "—"}
+            <div className="body-sm muted">
+              blueprint {p.blueprintId ?? "—"} × provider {p.providerId ?? "—"}
             </div>
             <div className="well">
               <Kicker>MASTER CANVAS</Kicker>

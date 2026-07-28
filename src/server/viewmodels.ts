@@ -154,6 +154,12 @@ const QUALIFIERS: Record<string, Array<[RegExp, string]>> = {
   ],
 };
 
+/** Printify returns "Generic brand" for unbranded blueprints — the word
+ * "brand" is noise in a headline wherever it appears. */
+function cleanBrand(brand: string): string {
+  return brand.replace(/\bbrands?\b/gi, "").replace(/\s+/g, " ").trim();
+}
+
 /** Short product label for the dashboard headline — order matters (hoodie
  * before sweatshirt before shirt; long sleeve before shirt), with any
  * material qualifier preserved. */
@@ -197,7 +203,7 @@ export function productCards(): ProductCardData[] {
     shortName:
       str(p.props["Short Name"]).trim() ||
       [
-        str(p.props["Blueprint Brand"]),
+        cleanBrand(str(p.props["Blueprint Brand"])),
         shortProductWord(str(p.props["Blueprint Title"]) || p.title),
         str(p.props["Blueprint Model"]),
       ]

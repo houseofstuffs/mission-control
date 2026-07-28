@@ -158,7 +158,6 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
             <div className="row-gap-8">
               {p.technique ? <span className="chip count">{p.technique}</span> : null}
               {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
-              <span className="hint">{p.syncedAt ? `synced ${p.syncedAt.slice(0, 10)}` : ""}</span>
             </div>
           </div>
         ))}

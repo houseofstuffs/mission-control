@@ -81,7 +81,9 @@ export function NichesPanel({ niches }: { niches: NicheCardData[] }) {
                 <option value="Unevaluated">Unevaluated</option>
                 <option value="Greenlit">Greenlit — ready for designs</option>
                 <option value="Parked">Parked — right idea, wrong time</option>
-                <option value="Killed">Killed — with a reason</option>
+                {/* Killed stays a valid value (set in Notion, still renders
+                    struck through here) but isn't offered as a choice. */}
+                {n.gate === "Killed" ? <option value="Killed">Killed</option> : null}
               </select>
 
               <input

@@ -39,6 +39,14 @@ interface BlueprintOption {
   image: string | null;
 }
 
+/** One line, ellipsis on overflow — keeps the card header exactly two lines. */
+const CLAMP: React.CSSProperties = {
+  display: "block",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
 export function ProductsView({ products, printifyReady }: { products: ProductCardData[]; printifyReady: boolean }) {
   const router = useRouter();
   const [seeding, setSeeding] = useState(false);
@@ -129,17 +137,14 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       <div className="grid-cards">
         {products.map((p) => (
           <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
-            {/* Provider always starts its own line, and never splits across
-                two ("MONSTER / DIGITAL"). */}
+            {/* Exactly two lines: title on 1, vendor on 2. Both clamp with an
+                ellipsis rather than wrapping, so the vendor can never be
+                pushed to a third line. Full text on hover. */}
             <Kicker>
-              {p.blueprintTitle || p.name}
-              <span
-                style={{
-                  display: "block",
-                  whiteSpace: "nowrap",
-                  color: "var(--status-done)",
-                }}
-              >
+              <span style={CLAMP} title={p.blueprintTitle || p.name}>
+                {p.blueprintTitle || p.name}
+              </span>
+              <span style={{ ...CLAMP, color: "var(--status-done)" }} title={p.providerName}>
                 {p.providerName}
               </span>
             </Kicker>

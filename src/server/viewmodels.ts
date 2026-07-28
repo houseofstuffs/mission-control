@@ -110,8 +110,53 @@ export function ideaCards(): { ideas: IdeaCardData[]; niches: NicheOption[] } {
 
 /* ---------- products ---------- */
 
-/** Short garment/product word for the dashboard headline — order matters
- * (hoodie before sweatshirt before shirt; long sleeve before shirt). */
+/**
+ * Material/style qualifiers kept in the headline so same-type products stay
+ * distinguishable ("there will be other kinds of blankets"). Rendered in
+ * title case before the uppercase product word: "Generic Woven BLANKET".
+ */
+const QUALIFIERS: Record<string, Array<[RegExp, string]>> = {
+  BLANKET: [
+    [/woven/, "Woven"],
+    [/sherpa/, "Sherpa"],
+    [/minky/, "Minky"],
+    [/plush/, "Plush"],
+    [/fleece/, "Fleece"],
+  ],
+  MUG: [
+    [/color[- ]changing|magic/, "Color Changing"],
+    [/enamel/, "Enamel"],
+    [/travel/, "Travel"],
+    [/glass/, "Glass"],
+    [/ceramic/, "Ceramic"],
+  ],
+  TUMBLER: [
+    [/stainless/, "Stainless"],
+    [/insulated/, "Insulated"],
+  ],
+  TOTE: [
+    [/canvas/, "Canvas"],
+    [/cotton/, "Cotton"],
+    [/jute/, "Jute"],
+  ],
+  PILLOW: [
+    [/sequin/, "Sequin"],
+    [/throw/, "Throw"],
+  ],
+  STICKER: [
+    [/kiss[- ]cut/, "Kiss Cut"],
+    [/die[- ]cut/, "Die Cut"],
+    [/vinyl/, "Vinyl"],
+  ],
+  SHIRT: [
+    [/garment[- ]dyed/, "Garment Dyed"],
+    [/ringer/, "Ringer"],
+  ],
+};
+
+/** Short product label for the dashboard headline — order matters (hoodie
+ * before sweatshirt before shirt; long sleeve before shirt), with any
+ * material qualifier preserved. */
 function shortProductWord(blueprintTitle: string): string {
   const t = blueprintTitle.toLowerCase();
   const rules: Array<[RegExp, string]> = [
@@ -134,7 +179,11 @@ function shortProductWord(blueprintTitle: string): string {
     [/apron/, "APRON"],
     [/ornament/, "ORNAMENT"],
   ];
-  for (const [re, word] of rules) if (re.test(t)) return word;
+  for (const [re, word] of rules) {
+    if (!re.test(t)) continue;
+    const qualifier = (QUALIFIERS[word] ?? []).find(([q]) => q.test(t))?.[1];
+    return qualifier ? `${qualifier} ${word}` : word;
+  }
   const last = blueprintTitle.trim().split(/\s+/).pop() ?? "";
   return last.toUpperCase();
 }
@@ -144,13 +193,16 @@ export function productCards(): ProductCardData[] {
   return products.map((p) => ({
     id: p.id,
     name: p.title || "Untitled product",
-    shortName: [
-      str(p.props["Blueprint Brand"]),
-      shortProductWord(str(p.props["Blueprint Title"]) || p.title),
-      str(p.props["Blueprint Model"]),
-    ]
-      .filter(Boolean)
-      .join(" "),
+    // A "Short Name" typed in Notion always wins over the derived label.
+    shortName:
+      str(p.props["Short Name"]).trim() ||
+      [
+        str(p.props["Blueprint Brand"]),
+        shortProductWord(str(p.props["Blueprint Title"]) || p.title),
+        str(p.props["Blueprint Model"]),
+      ]
+        .filter(Boolean)
+        .join(" "),
     technique: str(p.props["Print Technique"]) || null,
     blueprintId: num(p.props["Printify Blueprint ID"]),
     providerId: num(p.props["Printify Print Provider ID"]),

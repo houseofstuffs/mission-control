@@ -220,6 +220,9 @@ export const SCHEMA: DbSpec[] = [
       "Blueprint × print provider pairs — NOT product types (§3.3). Auto-seeded from the Printify catalog with specs, costs and print areas. Two copy fields, never merged: vendor_text_raw is the Printify original and is never overwritten; shop_voice_text is the rewrite, cached here at Product level.",
     properties: {
       Name: { type: "title" },
+      // Optional override for the dashboard headline; blank = derived from
+      // brand + product type + model.
+      "Short Name": { type: "rich_text" },
       "Printify Blueprint ID": { type: "number" },
       "Printify Print Provider ID": { type: "number" },
       "Blueprint Title": { type: "rich_text" },

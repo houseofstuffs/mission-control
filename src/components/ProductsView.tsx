@@ -13,6 +13,9 @@ import { Kicker } from "./ui";
 export interface ProductCardData {
   id: string;
   name: string;
+  /** {Brand} {SHORT WORD} {Model} — the dashboard headline */
+  shortName: string;
+  technique: string | null;
   blueprintId: number | null;
   providerId: number | null;
   providerName: string;
@@ -126,7 +129,10 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
         {products.map((p) => (
           <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
             <Kicker>BLUEPRINT {p.blueprintId ?? "—"} × PROVIDER {p.providerId ?? "—"}</Kicker>
-            <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>{p.name}</div>
+            <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
+              {p.shortName || p.name}
+            </div>
+            <div className="hint">{p.name}</div>
             <div className="well">
               <Kicker>MASTER CANVAS</Kicker>
               <div className="body-sm" style={{ marginTop: 6 }}>
@@ -141,18 +147,14 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
                 )}
               </div>
             </div>
-            {p.recompose ? (
-              <div className="callout stale">
-                Ratio spread across print areas — some positions need recomposition, not scaling.
-              </div>
-            ) : null}
             <div className="body-sm">
               {p.variantCount ?? 0} variants
               {p.costMin != null
                 ? ` · base cost $${p.costMin.toFixed(2)}${p.costMax != null && p.costMax !== p.costMin ? `–$${p.costMax.toFixed(2)}` : ""}`
-                : " · costs arrive when the shop connects"}
+                : " · base cost: add in Notion (not in Printify's public catalog)"}
             </div>
             <div className="row-gap-8">
+              {p.technique ? <span className="chip count">{p.technique}</span> : null}
               {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
               <span className="hint">{p.syncedAt ? `synced ${p.syncedAt.slice(0, 10)}` : ""}</span>
             </div>

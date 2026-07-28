@@ -226,6 +226,11 @@ export const SCHEMA: DbSpec[] = [
       "Blueprint Brand": { type: "rich_text" },
       "Blueprint Model": { type: "rich_text" },
       "Print Provider Name": { type: "rich_text" },
+      // Not in Printify's public API — set once per product from their UI.
+      "Print Technique": {
+        type: "select",
+        options: ["DTG", "DTF", "Sublimation", "Embroidery", "Screen print", "UV printing", "Laser engraving", "Other"],
+      },
       "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
       "Print Areas (JSON)": { type: "rich_text" },
       "Max Print Width px": { type: "number" },

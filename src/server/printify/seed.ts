@@ -49,13 +49,18 @@ export async function seedProduct(
     "Max Print Height px": canvas.maxHeight,
     "Aspect Ratios": canvas.areas.map((a) => `${a.position}: ${a.ratioLabel}`).join(" · "),
     "Recomposition Flag": canvas.recompositionFlag,
-    "Base Cost Min": costs.length ? Math.min(...costs) : null,
-    "Base Cost Max": costs.length ? Math.max(...costs) : null,
     Currency: "USD",
     "Variant Count": variants.length,
     Status: "Active",
     "Synced At": new Date().toISOString(),
   };
+  // The public catalog has no base costs (they're shop-scoped). Only write
+  // cost fields when Printify supplies them — never blank out values entered
+  // by hand in Notion.
+  if (costs.length > 0) {
+    values["Base Cost Min"] = Math.min(...costs);
+    values["Base Cost Max"] = Math.max(...costs);
+  }
 
   // Upsert on blueprint × provider — reseeding refreshes specs, and NEVER
   // touches Vendor Text Raw / Shop Voice Text (the two copy fields, §3.3).

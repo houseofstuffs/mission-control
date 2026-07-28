@@ -110,11 +110,48 @@ export function ideaCards(): { ideas: IdeaCardData[]; niches: NicheOption[] } {
 
 /* ---------- products ---------- */
 
+/** Short garment/product word for the dashboard headline — order matters
+ * (hoodie before sweatshirt before shirt; long sleeve before shirt). */
+function shortProductWord(blueprintTitle: string): string {
+  const t = blueprintTitle.toLowerCase();
+  const rules: Array<[RegExp, string]> = [
+    [/hood/, "HOODIE"],
+    [/sweatshirt|crewneck|crew neck/, "SWEATSHIRT"],
+    [/long sleeve/, "LONG SLEEVE"],
+    [/tank/, "TANK"],
+    [/t-shirt|tee\b|shirt/, "SHIRT"],
+    [/mug/, "MUG"],
+    [/tumbler/, "TUMBLER"],
+    [/blanket/, "BLANKET"],
+    [/tote|bag/, "TOTE"],
+    [/hat|cap\b|beanie/, "HAT"],
+    [/sticker/, "STICKER"],
+    [/poster|print\b/, "POSTER"],
+    [/canvas/, "CANVAS"],
+    [/pillow|cushion/, "PILLOW"],
+    [/phone case|case/, "CASE"],
+    [/sock/, "SOCKS"],
+    [/apron/, "APRON"],
+    [/ornament/, "ORNAMENT"],
+  ];
+  for (const [re, word] of rules) if (re.test(t)) return word;
+  const last = blueprintTitle.trim().split(/\s+/).pop() ?? "";
+  return last.toUpperCase();
+}
+
 export function productCards(): ProductCardData[] {
   const products = cachedRecords("products");
   return products.map((p) => ({
     id: p.id,
     name: p.title || "Untitled product",
+    shortName: [
+      str(p.props["Blueprint Brand"]),
+      shortProductWord(str(p.props["Blueprint Title"]) || p.title),
+      str(p.props["Blueprint Model"]),
+    ]
+      .filter(Boolean)
+      .join(" "),
+    technique: str(p.props["Print Technique"]) || null,
     blueprintId: num(p.props["Printify Blueprint ID"]),
     providerId: num(p.props["Printify Print Provider ID"]),
     providerName: str(p.props["Print Provider Name"]),

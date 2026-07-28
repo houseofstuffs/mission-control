@@ -1,19 +1,40 @@
 import { NextResponse } from "next/server";
 import { createRecord } from "@/server/notion/store";
+import { uploadFileToNotion } from "@/server/notion/upload";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // image upload + page create, both throttled
 
-/** Capture is one action — everything but a name is optional (spec §4.3). */
+/**
+ * Capture is one action — everything but a name is optional (spec §4.3),
+ * and if an image is attached even the name can be derived from it.
+ * Accepts JSON, or multipart/form-data when an image rides along.
+ */
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    if (!body.name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+    const contentType = req.headers.get("content-type") ?? "";
+    let body: Record<string, string> = {};
+    let image: File | null = null;
+
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData();
+      for (const [key, value] of form.entries()) {
+        if (typeof value === "string") body[key] = value;
+      }
+      const f = form.get("image");
+      if (f && typeof f !== "string" && f.size > 0) image = f;
+    } else {
+      body = await req.json();
+    }
+
+    const name = body.name?.trim() || (image ? image.name.replace(/\.[^.]+$/, "") : "");
+    if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
 
     const values: Record<string, SimpleValue> = {
-      Name: String(body.name),
+      Name: name,
       Status: "Inbox",
-      "Capture Type": body.captureType ?? "Copy",
+      "Capture Type": body.captureType || (image ? "Photo" : "Copy"),
       Note: body.note ?? "",
     };
     if (body.sourceUrl) values["Source URL"] = String(body.sourceUrl);
@@ -27,6 +48,11 @@ export async function POST(req: Request) {
       const enterBy = new Date(body.occasionDate);
       enterBy.setDate(enterBy.getDate() - Number(body.leadTimeDays));
       values["Enter Creative By"] = enterBy.toISOString().slice(0, 10);
+    }
+
+    if (image) {
+      const upload = await uploadFileToNotion(image);
+      values["Image"] = [{ name: image.name, uploadId: upload.id }];
     }
 
     const record = await createRecord("ideas", values);

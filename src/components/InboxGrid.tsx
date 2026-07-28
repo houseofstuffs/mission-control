@@ -6,8 +6,11 @@
  * existing niches, or get discarded. Seasonal lead-time math surfaces which
  * ideas must enter creative this week.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+
+/** Single-part Notion upload cap; free-plan workspaces enforce ~5MB server-side. */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 export interface IdeaCardData {
   id: string;
@@ -49,28 +52,74 @@ export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: Ni
   const [occasionDate, setOccasionDate] = useState("");
   const [leadTime, setLeadTime] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!pendingFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(pendingFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingFile]);
+
+  function takeFile(file: File | undefined | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setError("Only images can be attached to an idea.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError("That image is over 20MB — idea snapshots should be small; artwork belongs in Drive.");
+      return;
+    }
+    setError(null);
+    setPendingFile(file);
+    setCaptureType("Photo");
+  }
 
   async function capture() {
-    if (!name.trim()) return;
+    if (!name.trim() && !pendingFile) return;
     setSaving(true);
     setError(null);
-    const res = await fetch("/api/ideas", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        captureType,
-        sourceUrl: sourceUrl || undefined,
-        note: note || undefined,
-        occasion: occasion || undefined,
-        occasionDate: occasionDate || undefined,
-        leadTimeDays: leadTime || undefined,
-      }),
-    });
+    // multipart when an image rides along; plain JSON otherwise
+    let res: Response;
+    if (pendingFile) {
+      const form = new FormData();
+      form.append("name", name.trim());
+      form.append("captureType", captureType);
+      if (sourceUrl) form.append("sourceUrl", sourceUrl);
+      if (note) form.append("note", note);
+      if (occasion) form.append("occasion", occasion);
+      if (occasionDate) form.append("occasionDate", occasionDate);
+      if (leadTime) form.append("leadTimeDays", leadTime);
+      form.append("image", pendingFile, pendingFile.name);
+      res = await fetch("/api/ideas", { method: "POST", body: form });
+    } else {
+      res = await fetch("/api/ideas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          captureType,
+          sourceUrl: sourceUrl || undefined,
+          note: note || undefined,
+          occasion: occasion || undefined,
+          occasionDate: occasionDate || undefined,
+          leadTimeDays: leadTime || undefined,
+        }),
+      });
+    }
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Capture failed");
     else {
       setName(""); setSourceUrl(""); setNote(""); setOccasion(""); setOccasionDate(""); setLeadTime("");
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       router.refresh();
     }
     setSaving(false);
@@ -99,8 +148,28 @@ export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: Ni
 
   return (
     <div className="stack-22">
-      {/* quick capture */}
-      <div className="card supporting">
+      {/* quick capture — drop zone, paste target, and form in one */}
+      <div
+        className="card supporting"
+        style={dragOver ? { borderColor: "var(--blueberry)", background: "var(--hover-blue-pale)" } : undefined}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          takeFile(e.dataTransfer.files?.[0]);
+        }}
+        onPaste={(e) => {
+          const file = Array.from(e.clipboardData.files).find((f) => f.type.startsWith("image/"));
+          if (file) {
+            e.preventDefault();
+            takeFile(file);
+          }
+        }}
+      >
         <div className="kicker">QUICK CAPTURE</div>
         <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ flex: "1 1 220px" }}>
@@ -133,13 +202,67 @@ export function InboxGrid({ ideas, niches }: { ideas: IdeaCardData[]; niches: Ni
             <label className="kicker" htmlFor="cap-lead">LEAD DAYS</label>
             <input id="cap-lead" type="number" className="input" placeholder="e.g. 45" value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={capture} disabled={saving || !name.trim()}>
+          <button
+            className="btn btn-primary"
+            onClick={capture}
+            disabled={saving || (!name.trim() && !pendingFile)}
+          >
             {saving ? <span className="spinner" /> : null}
-            Capture
+            {saving && pendingFile ? "Uploading" : "Capture"}
           </button>
         </div>
         <div className="field">
           <input className="input" placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        <div className="row-gap-12">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt=""
+              style={{ height: 56, borderRadius: 10, border: "2px solid var(--border-faint)" }}
+            />
+          ) : null}
+          {pendingFile ? (
+            <>
+              <span className="body-sm">{pendingFile.name}</span>
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12, padding: "5px 10px" }}
+                onClick={() => {
+                  setPendingFile(null);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+              >
+                Remove
+              </button>
+            </>
+          ) : (
+            <span className="hint">
+              Drag an image here, paste a screenshot, or{" "}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  font: "inherit",
+                  color: "var(--blueberry)",
+                  cursor: "pointer",
+                }}
+              >
+                browse
+              </button>
+              . With an image attached, the name is optional.
+            </span>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={(e) => takeFile(e.target.files?.[0])}
+          />
         </div>
       </div>
 

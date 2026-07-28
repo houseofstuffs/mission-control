@@ -7,7 +7,13 @@
  */
 import type { DbSpec, PropSpec } from "./schema";
 
-export type SimpleValue = string | number | boolean | string[] | Array<{ name: string; url: string }> | null;
+export type SimpleValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | Array<{ name: string; url?: string; uploadId?: string }>
+  | null;
 export type SimpleRecord = {
   id: string;
   dbKey: string;
@@ -69,14 +75,15 @@ export function toNotionProperties(
         };
         break;
       case "files":
-        // External files only via API; uploads happen in Notion itself.
+        // Two shapes: {url} attaches an external link; {uploadId} attaches a
+        // file uploaded via the File Upload API (see upload.ts).
         out[name] = {
           files: Array.isArray(value)
-            ? (value as Array<{ name: string; url: string }>).map((f) => ({
-                type: "external",
-                name: f.name || "file",
-                external: { url: f.url },
-              }))
+            ? (value as Array<{ name: string; url?: string; uploadId?: string }>).map((f) =>
+                f.uploadId
+                  ? { type: "file_upload", name: f.name || "file", file_upload: { id: f.uploadId } }
+                  : { type: "external", name: f.name || "file", external: { url: f.url ?? "" } }
+              )
             : [],
         };
         break;

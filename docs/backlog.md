@@ -36,6 +36,26 @@ that went active before its L6 gates passed (§6.1). Has already bitten twice
 in real life via Printify's missed "Hide in Store" checkbox. Small piece of
 work on top of the Etsy module that already exists.
 
+## Future — workflow variants per product type
+
+**Assessed 2026-07-29: schema has room; nothing to build yet.** The C1–C11
+flow is the print workflow; digital downloads need a slightly different
+sequence, and custom/personalized artwork a very different one.
+
+The design already accommodates this: `Step State (JSON)` is keyed by step
+id (any variant's steps fit), workflows are data in `workflows.ts` (a
+variant is one more definition), and `Physical/Digital` exists on Designs
+and Listings. When the first variant lands: (1) add a `Workflow Variant`
+select on Designs (Print / Digital Download / Custom, default Print),
+(2) union the variant's step ids into the `Current Step` select options,
+(3) switch `runnerRecord`'s workflow lookup from dbKey to the variant field.
+All additive — existing records keep working untouched.
+
+**Custom artwork** additionally splits the data: the design becomes a
+template, and personalization input (customer's name etc.) arrives per
+ORDER — so it needs a new Orders/Custom Requests database linking
+customer input → template → rendered output → delivery. Purely additive.
+
 ## Small open offers (say the word)
 
 - Collapse **Triaged** and **Promoted** idea statuses into one — they mean the

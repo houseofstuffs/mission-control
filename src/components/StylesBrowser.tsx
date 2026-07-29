@@ -7,9 +7,10 @@
  * not browsing material). Delete archives to Notion's trash (30-day recovery)
  * and warns when designs still reference the style.
  */
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
+import { AutoTextarea } from "./AutoTextarea";
 
 export interface StyleCard {
   id: string;
@@ -37,35 +38,6 @@ const FIELDS: Array<{ key: string; label: string; copyable?: boolean }> = [
   { key: "notes", label: "NOTES" },
 ];
 
-/** Textarea that grows to fit its content — no manual resizing to read a long prompt. */
-function AutoTextarea({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [value]);
-  return (
-    <textarea
-      ref={ref}
-      id={id}
-      className="textarea"
-      rows={1}
-      style={{ overflow: "hidden", resize: "none", minHeight: 40 }}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  );
-}
 
 const CATEGORIES = ["Humor", "Minimalist", "Retro", "Illustrative", "Moody"];
 

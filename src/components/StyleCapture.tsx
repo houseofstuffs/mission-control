@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
+import { AutoTextarea } from "./AutoTextarea";
 
 interface Draft {
   name: string;
@@ -27,18 +28,20 @@ interface Draft {
   ruleOfThumb: string;
 }
 
-const FIELDS: Array<{ key: keyof Draft; label: string; rows?: number }> = [
-  { key: "description", label: "DESCRIPTION — LOOK ONLY, NO SUBJECT MATTER", rows: 3 },
-  { key: "composition", label: "COMPOSITION — LAYOUT IN SLOT TERMS", rows: 3 },
-  { key: "slots", label: "SLOTS", rows: 1 },
-  { key: "typography", label: "TYPOGRAPHY", rows: 2 },
-  { key: "keywordBank", label: "KEYWORD BANK", rows: 3 },
-  { key: "reusablePrompt", label: "REUSABLE PROMPT", rows: 6 },
-  { key: "typePrompt", label: "TYPE PROMPT — LETTERING", rows: 3 },
-  { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON", rows: 2 },
-  { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON", rows: 2 },
-  { key: "avoidOn", label: "AVOID ON", rows: 2 },
-  { key: "ruleOfThumb", label: "RULE OF THUMB", rows: 2 },
+// Same working order as the Styles detail view: prompts near the top,
+// layout mechanics (composition, slots) at the bottom.
+const FIELDS: Array<{ key: keyof Draft; label: string }> = [
+  { key: "description", label: "DESCRIPTION — LOOK ONLY, NO SUBJECT MATTER" },
+  { key: "reusablePrompt", label: "REUSABLE PROMPT" },
+  { key: "typePrompt", label: "TYPE PROMPT — LETTERING" },
+  { key: "typography", label: "TYPOGRAPHY" },
+  { key: "keywordBank", label: "KEYWORD BANK" },
+  { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON" },
+  { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON" },
+  { key: "avoidOn", label: "AVOID ON" },
+  { key: "ruleOfThumb", label: "RULE OF THUMB" },
+  { key: "composition", label: "COMPOSITION — LAYOUT IN SLOT TERMS" },
+  { key: "slots", label: "SLOTS — APPLY MODE'S FILL-IN FIELDS" },
 ];
 
 const JOB_KEY = "stuffs-capture-job";
@@ -323,12 +326,10 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
           {FIELDS.map((f) => (
             <div key={f.key} className="field">
               <label className="kicker" htmlFor={`cap-${f.key}`}>{f.label}</label>
-              <textarea
+              <AutoTextarea
                 id={`cap-${f.key}`}
-                className="textarea"
-                rows={f.rows ?? 3}
                 value={draft[f.key]}
-                onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })}
+                onChange={(v) => setDraft({ ...draft, [f.key]: v })}
               />
             </div>
           ))}

@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
+import { AutoTextarea } from "./AutoTextarea";
 
 export interface StyleOption {
   id: string;
@@ -236,39 +237,25 @@ export function ApplyPanel({
               <label className="kicker" htmlFor="apply-img">IMAGE PROMPT — FOR C2</label>
               <CopyButton text={imagePrompt} />
             </div>
-            <textarea
-              id="apply-img"
-              className="textarea"
-              rows={6}
-              value={imagePrompt}
-              onChange={(e) => setImagePrompt(e.target.value)}
-            />
+            <AutoTextarea id="apply-img" value={imagePrompt} onChange={setImagePrompt} />
           </div>
           <div className="field">
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <label className="kicker" htmlFor="apply-txt">TEXT PROMPT — FOR C3 (KITTL LAYER)</label>
               <CopyButton text={textPrompt} />
             </div>
-            <textarea
-              id="apply-txt"
-              className="textarea"
-              rows={4}
-              value={textPrompt}
-              onChange={(e) => setTextPrompt(e.target.value)}
-            />
+            <AutoTextarea id="apply-txt" value={textPrompt} onChange={setTextPrompt} />
           </div>
           <div className="field">
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <label className="kicker" htmlFor="apply-tex">TEXTURE NOTE — FOR C5 (SEPARATE LAYER, NEVER BAKED IN)</label>
               <CopyButton text={textureNote} />
             </div>
-            <textarea
+            <AutoTextarea
               id="apply-tex"
-              className="textarea"
-              rows={2}
               placeholder="no texture — clean style"
               value={textureNote}
-              onChange={(e) => setTextureNote(e.target.value)}
+              onChange={setTextureNote}
             />
           </div>
           {screening ? (

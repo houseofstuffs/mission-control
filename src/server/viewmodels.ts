@@ -393,7 +393,7 @@ export function todaySummary(): TodaySummary {
     .map((n) => n.title);
 
   // Step ids are unique across workflows (C*/L*) — resolve to runner titles.
-  const stepTitle = (id: string): string => {
+  const titleOfStep = (id: string): string => {
     for (const wf of [WORKFLOWS.creative, WORKFLOWS.listing]) {
       const s = wf.steps.find((x) => x.id === id);
       if (s) return s.title;
@@ -413,25 +413,25 @@ export function todaySummary(): TodaySummary {
       let event = rawEvent;
       switch (rawEvent) {
         case "Step done":
-          event = from ? `${stepTitle(from)} done` : "Step done";
+          event = from ? `${titleOfStep(from)} done` : "Step done";
           break;
         case "Backtrack":
-          event = to ? `Backtracked to ${stepTitle(to)}` : "Backtrack";
+          event = to ? `Backtracked to ${titleOfStep(to)}` : "Backtrack";
           break;
         case "Still valid":
-          event = to ? `${stepTitle(to)} still valid` : "Still valid";
+          event = to ? `${titleOfStep(to)} still valid` : "Still valid";
           break;
         case "Blocked":
-          event = to ? `Blocked at ${stepTitle(to)}` : "Blocked";
+          event = to ? `Blocked at ${titleOfStep(to)}` : "Blocked";
           break;
         case "Unblocked":
-          event = to ? `Unblocked at ${stepTitle(to)}` : "Unblocked";
+          event = to ? `Unblocked at ${titleOfStep(to)}` : "Unblocked";
           break;
         case "Moved":
-          event = to ? `Moved to ${stepTitle(to)}` : "Moved";
+          event = to ? `Moved to ${titleOfStep(to)}` : "Moved";
           break;
         case "Created new":
-          event = to ? `Created new at ${stepTitle(to)}` : "Created new";
+          event = to ? `Created new at ${titleOfStep(to)}` : "Created new";
           break;
       }
       // page titles carry an " — event" suffix; show the record name alone

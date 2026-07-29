@@ -71,7 +71,8 @@ export function ApplyPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // union of slots across every selected style, order preserved
+  // union of slots across every selected style, in canonical fill order:
+  // HERO first, then MOTIF 1..n, anything else, COPY last
   const slots: string[] = [];
   for (const id of selected) {
     const s = styles.find((x) => x.id === id);
@@ -79,6 +80,14 @@ export function ApplyPanel({
       if (!slots.includes(slot)) slots.push(slot);
     }
   }
+  const slotRank = (slot: string): number => {
+    if (/hero/i.test(slot)) return 0;
+    const motif = slot.match(/motif\s*(\d+)/i);
+    if (motif) return 10 + Number(motif[1]);
+    if (/copy/i.test(slot)) return 100;
+    return 50;
+  };
+  slots.sort((a, b) => slotRank(a) - slotRank(b));
 
   const byCategory = CATEGORY_ORDER.map((cat) => ({
     cat,

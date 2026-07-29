@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
 import { composeCandidates, type Candidate } from "@/server/anthropic/apply";
 import { anthropicConfigured } from "@/server/anthropic/client";
+import {
+  createComposeJob,
+  getComposeJob,
+  completeComposeJob,
+  failComposeJob,
+} from "@/server/cache/composeJobs";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -90,27 +96,47 @@ export async function POST(req: Request) {
     }
     if (design.props["Occasion"]) parts.push(`occasion ${String(design.props["Occasion"])}`);
 
-    const raw = await composeCandidates({
+    // Job-based: a multi-candidate compose runs for minutes — far past what
+    // one web request survives. The job finishes server-side and writes the
+    // candidates onto the design; the client polls and refreshes.
+    const jobId = createComposeJob(design.id);
+    const designId = design.id;
+    void composeCandidates({
       styles: styles.map((s) => ({ name: s.name, fields: s.fields })),
       fills: (body.fills as Record<string, string>) ?? {},
       copy: String(body.copy ?? ""),
       context: parts.length ? parts.join(", ") : undefined,
       suggestCount: suggest,
-    });
+    })
+      .then(async (raw) => {
+        // Library candidates come back in input order; suggested ones follow.
+        const library = raw.filter((c) => !c.suggested);
+        const candidates: StoredCandidate[] = raw.map((c) => {
+          if (c.suggested) return { ...c, styleId: null };
+          const idx = library.indexOf(c);
+          return { ...c, styleId: styles[idx]?.id ?? styles.find((s) => s.name === c.styleName)?.id ?? null };
+        });
+        await updateRecord("designs", designId, {
+          "Prompt Candidates (JSON)": JSON.stringify(candidates),
+        });
+        completeComposeJob(jobId);
+      })
+      .catch((err) => failComposeJob(jobId, (err as Error).message));
 
-    // Library candidates come back in input order; suggested ones follow.
-    const library = raw.filter((c) => !c.suggested);
-    const candidates: StoredCandidate[] = raw.map((c) => {
-      if (c.suggested) return { ...c, styleId: null };
-      const idx = library.indexOf(c);
-      return { ...c, styleId: styles[idx]?.id ?? styles.find((s) => s.name === c.styleName)?.id ?? null };
-    });
+    return NextResponse.json({ jobId });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
 
-    // Persist immediately — these must survive the trip to Kittl and back.
-    await updateRecord("designs", design.id, {
-      "Prompt Candidates (JSON)": JSON.stringify(candidates),
-    });
-    return NextResponse.json({ candidates });
+/** Poll a compose job. */
+export async function GET(req: Request) {
+  try {
+    const jobId = new URL(req.url).searchParams.get("job");
+    if (!jobId) return NextResponse.json({ error: "job parameter required" }, { status: 400 });
+    const job = getComposeJob(jobId);
+    if (!job) return NextResponse.json({ error: "Job not found — it may have expired." }, { status: 404 });
+    return NextResponse.json({ status: job.status, error: job.error });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

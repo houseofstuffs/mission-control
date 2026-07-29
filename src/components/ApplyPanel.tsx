@@ -9,7 +9,7 @@
  *
  * Style choice is toggle pills grouped by category — all choices visible.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
@@ -68,8 +68,60 @@ export function ApplyPanel({
   const [fills, setFills] = useState<Record<string, string>>({});
   const [copy, setCopy] = useState("");
   const [suggest, setSuggest] = useState(0);
-  const [busy, setBusy] = useState(false);
+  const [jobId, setJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = jobId !== null;
+  const jobKey = `stuffs-compose-job:${designId}`;
+
+  function clearJob() {
+    setJobId(null);
+    try {
+      localStorage.removeItem(jobKey);
+    } catch {}
+  }
+
+  // Resume a compose started before navigating away — it kept running
+  // server-side and its result lands on the design record.
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(jobKey);
+    } catch {}
+    if (stored) {
+      setJobId(stored);
+      setOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!jobId) return;
+    let cancelled = false;
+    async function check() {
+      const res = await fetch(`/api/prompts/compose?job=${jobId}`);
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.status === 404 ? "That compose expired — hit Compose again." : "Couldn't check the compose job.");
+        clearJob();
+        return;
+      }
+      const json = await res.json();
+      if (json.status === "done") {
+        clearJob();
+        router.refresh(); // candidates are on the design now; the board picks them up
+      } else if (json.status === "error") {
+        setError(json.error ?? "Compose failed");
+        clearJob();
+      }
+    }
+    check();
+    const t = setInterval(check, 3000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
 
   // union of slots across every selected style, in canonical fill order:
   // HERO first, then MOTIF 1..n, anything else, COPY last
@@ -102,7 +154,6 @@ export function ApplyPanel({
 
   async function compose() {
     if (selected.length === 0) return;
-    setBusy(true);
     setError(null);
     const res = await fetch("/api/prompts/compose", {
       method: "POST",
@@ -111,8 +162,12 @@ export function ApplyPanel({
     });
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Compose failed");
-    else router.refresh(); // candidates persisted server-side; the board below picks them up
-    setBusy(false);
+    else {
+      setJobId(json.jobId as string);
+      try {
+        localStorage.setItem(jobKey, json.jobId as string);
+      } catch {}
+    }
   }
 
   if (!open) {
@@ -228,7 +283,9 @@ export function ApplyPanel({
                     ? "Composing"
                     : `Compose ${total} candidate${total === 1 ? "" : "s"}`}
                 </button>
-                {hasCandidates ? (
+                {busy ? (
+                  <span className="hint">Runs on the server — safe to leave this page and come back.</span>
+                ) : hasCandidates ? (
                   <span className="hint">Recomposing replaces the current candidate set.</span>
                 ) : null}
               </div>

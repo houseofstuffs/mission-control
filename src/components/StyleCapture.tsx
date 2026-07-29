@@ -204,14 +204,14 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
 
   if (compact && !open) {
     return (
-      <button className="btn btn-tertiary" onClick={() => setOpen(true)}>
+      <button className="btn btn-tertiary" style={{ flex: "1 1 240px" }} onClick={() => setOpen(true)}>
         Capture a style from a reference
       </button>
     );
   }
 
   return (
-    <div className="card supporting">
+    <div className="card supporting" style={compact ? { flex: "1 1 100%" } : undefined}>
       <div className="row-gap-12" style={{ justifyContent: "space-between" }}>
         <Kicker>CAPTURE A STYLE</Kicker>
         {compact ? (

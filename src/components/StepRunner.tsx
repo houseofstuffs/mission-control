@@ -105,7 +105,8 @@ export function StepRunner({
       </div>
 
       <div className="runner-grid">
-        {/* step card */}
+        {/* step card + the tools that live under it */}
+        <div className="stack-16">
         <div className="card">
           <Kicker>
             STEP {selIdx + 1} OF {wf.steps.length}
@@ -197,20 +198,22 @@ export function StepRunner({
               </button>
             )}
           </div>
+        </div>
 
-          {/* C1 is where a style meets this design's content. Apply composes
-              the prompt pair; Capture births a style from a reference without
-              leaving the runner (spec §9.2). */}
-          {record.workflowKey === "creative" && selected.id === "C1" ? (
-            <>
-              <ApplyPanel
-                designId={record.id}
-                styles={styles ?? []}
-                saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "", textureNote: "" }}
-              />
-              <StyleCapture compact />
-            </>
-          ) : null}
+        {/* C1 is where a style meets this design's content. Apply composes
+            the prompt pair; Capture births a style from a reference without
+            leaving the runner (spec §9.2). Outside the step card — these are
+            work surfaces, not step state. Collapsed buttons share one row. */}
+        {record.workflowKey === "creative" && selected.id === "C1" ? (
+          <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "stretch" }}>
+            <ApplyPanel
+              designId={record.id}
+              styles={styles ?? []}
+              saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "", textureNote: "" }}
+            />
+            <StyleCapture compact />
+          </div>
+        ) : null}
         </div>
 
         {/* right panel */}

@@ -110,14 +110,14 @@ export function ApplyPanel({
 
   if (!open) {
     return (
-      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
+      <button className="btn btn-secondary" style={{ flex: "1 1 240px" }} onClick={() => setOpen(true)}>
         {hasSaved ? "Prompt pair saved — view / recompose" : "Compose prompt pair from a style"}
       </button>
     );
   }
 
   return (
-    <div className="card supporting">
+    <div className="card supporting" style={{ flex: "1 1 100%" }}>
       <div className="row-gap-12" style={{ justifyContent: "space-between" }}>
         <Kicker>APPLY A STYLE — COMPOSE THE C1 PROMPT PAIR</Kicker>
         <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "5px 10px" }} onClick={() => setOpen(false)}>

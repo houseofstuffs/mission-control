@@ -579,8 +579,16 @@ a:hover { color: var(--candy); }
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
 }
-.idea-card:hover { border-color: var(--blueberry); }
+/* hover = border + lift with the offset shadow. On photo cards a border
+   change alone drowns under the image; the lift reads at any card size,
+   so every idea-card (photos, copy, niches, styles) responds identically. */
+.idea-card:hover {
+  border-color: var(--blueberry);
+  box-shadow: 4px 4px 0 var(--shadow-offset-mint);
+  transform: translate(-1px, -1px);
+}
 /* uniform square thumbnails — whole image visible, letterboxed on the well
    background (cover-cropping guillotined tall designs) */
 /* Square thumbnails fill the frame — zoom and center-crop rather than

@@ -439,7 +439,7 @@ export function InboxGrid({
                   <>
                     <input
                       className="input input-compact"
-                      style={{ width: 170, height: 32 }}
+                      style={{ flex: "1 1 140px" }}
                       value={newNicheName}
                       autoFocus
                       placeholder="Niche name"
@@ -466,7 +466,7 @@ export function InboxGrid({
                 ) : (
                   <select
                     className="select input-compact"
-                    style={{ width: 190, height: 32 }}
+                    style={{ width: "100%" }}
                     value=""
                     disabled={busyId === idea.id}
                     onChange={(e) => {
@@ -491,7 +491,7 @@ export function InboxGrid({
                     lead-time math works without a trip to Notion */}
                 <select
                   className="select input-compact"
-                  style={{ width: 140, height: 32 }}
+                  style={{ width: "100%" }}
                   value={idea.occasion ?? ""}
                   disabled={busyId === idea.id}
                   onChange={(e) => {

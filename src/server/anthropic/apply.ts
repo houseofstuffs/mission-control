@@ -187,13 +187,17 @@ export async function composeCandidates(input: ApplyInput): Promise<Candidate[]>
       : "Compose one candidate per style above.",
   ].join("\n");
 
-  const message = await anthropic().messages.create({
-    model: model(),
-    max_tokens: 32000,
-    system: SYSTEM + MULTI_ADDENDUM,
-    output_config: { format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
-    messages: [{ role: "user", content: [{ type: "text", text: user }] }],
-  });
+  // Streamed: at 32k max tokens the SDK refuses non-streaming requests
+  // (they could outlive the HTTP window). Same response, collected here.
+  const message = await anthropic()
+    .messages.stream({
+      model: model(),
+      max_tokens: 32000,
+      system: SYSTEM + MULTI_ADDENDUM,
+      output_config: { format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
+      messages: [{ role: "user", content: [{ type: "text", text: user }] }],
+    })
+    .finalMessage();
 
   if (message.stop_reason === "refusal") {
     throw new Error("The model declined to compose these candidates. Check the copy and try again.");

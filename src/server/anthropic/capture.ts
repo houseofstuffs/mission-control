@@ -174,7 +174,10 @@ export async function captureStyle(
   mediaType: "image/jpeg" | "image/png" | "image/gif" | "image/webp",
   hint?: string
 ): Promise<CapturedStyle> {
-  const message = await anthropic().messages.create({
+  // Streamed so a slow generation can never trip the SDK's 10-minute
+  // non-streaming refusal; the full message is still collected here.
+  const message = await anthropic()
+    .messages.stream({
     model: model(),
     max_tokens: 16000,
     system: SYSTEM,
@@ -193,7 +196,8 @@ export async function captureStyle(
         ],
       },
     ],
-  });
+    })
+    .finalMessage();
 
   // Safety classifiers can decline; check before reading content.
   if (message.stop_reason === "refusal") {

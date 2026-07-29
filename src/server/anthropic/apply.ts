@@ -85,9 +85,11 @@ Rules:
   say so in notes rather than silently bending one.
 - Keep prompts tight. Every sentence that isn't doing work narrows the
   generation for no reason.
-- Palette and type stay locked within a series, so do not invent new colours
-  or type treatments beyond what the style record defines — fill, don't
-  redesign.
+- The style's palette is a register with a default family, not a locked list.
+  A SERIES commits to one colourway and keeps it across its designs: use the
+  style's default family unless the operator's fills or copy ask for another
+  family in the same tonal register. Type treatments stay as the style
+  defines them — fill, don't redesign.
 - List every verbatim phrase that will be printed for trademark screening.
 
 Write prompts as working prompts — no preamble, no explanation inside them.`;

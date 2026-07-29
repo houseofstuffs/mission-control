@@ -73,7 +73,7 @@ const STYLE_SCHEMA = {
     reusablePrompt: {
       type: "string",
       description:
-        "An image-generation prompt for the artwork, using the same slot placeholders as the composition. Cover palette, linework, fill treatment, arrangement and mood, plus the negatives that matter (no gradients, no photorealism). Generation is always FLAT: if the reference has distress, weathering or grain, that is an applied production layer — keep it OUT of this prompt (note it in the description instead) and end the prompt with 'flat clean artwork, no distress or weathering, clean edges'. Keep it tight — every sentence that isn't a style constraint narrows what can be generated. Name no actual subject matter, and say nothing about lettering; that is the type prompt's job.",
+        "An image-generation prompt for the artwork, using the same slot placeholders as the composition. Cover palette, linework, fill treatment, arrangement and mood, plus the negatives that matter (no gradients, no photorealism). Phrase the palette as a DEFAULT WITH ROOM, never a locked list: name the reference's actual colours, then open the door to equivalents in the same tonal family — e.g. 'deep blood red, dusty rose, olive-sage, charcoal and bone — or another muted, low-saturation family in the same earthy register'. Never write 'palette limited to' or 'only these colours'. Generation is always FLAT: if the reference has distress, weathering or grain, that is an applied production layer — keep it OUT of this prompt (note it in the description instead) and end the prompt with 'flat clean artwork, no distress or weathering, clean edges'. Keep it tight — every sentence that isn't a style constraint narrows what can be generated. Name no actual subject matter, and say nothing about lettering; that is the type prompt's job.",
     },
     typePrompt: {
       type: "string",
@@ -150,6 +150,11 @@ How to think about it:
 - Keep it lean. Every extra sentence is a constraint on what can be generated
   later, and over-specified records produce samey work. Say what makes the style
   itself, and stop.
+- Palettes are a register, not a lock. What makes a style's colour identity is
+  its saturation, warmth and mood — not the five exact hues the reference used.
+  Name the reference's colours as the default, then explicitly allow another
+  family in the same tonal register, so one style can carry a whole range of
+  colourways.
 - Keep artwork and lettering separate. AI image generation misspells text, so
   lettering is set as a Kittl layer over the artwork. The reusable prompt
   describes artwork only; the type prompt describes lettering only.

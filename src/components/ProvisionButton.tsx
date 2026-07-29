@@ -55,18 +55,23 @@ export function ProvisionButton({ compact = false }: { compact?: boolean }) {
     }
   }
 
+  const doneText =
+    done != null
+      ? `${done} databases ready${created.length > 0 ? ` · created: ${created.join(", ")}` : " · all adopted, none created"}.`
+      : null;
+
   return (
     <div className="stack-12" style={{ alignItems: compact ? "flex-end" : "center" }}>
-      <button className={`btn ${compact ? "btn-secondary" : "btn-primary"}`} onClick={provision} disabled={busy}>
-        {busy ? <span className="spinner" /> : null}
-        {compact ? (busy ? "Syncing schema" : "Sync schema") : busy ? "Building databases in Notion…" : "Provision Notion schema"}
-      </button>
-      {done != null ? (
-        <span className="hint">
-          {done} databases ready
-          {created.length > 0 ? ` · created: ${created.join(", ")}` : " · all adopted, none created"}.
-        </span>
-      ) : null}
+      {/* status stays INLINE in the row — a caption wrapping underneath makes
+          this block taller than its neighbours and knocks the header out of line */}
+      <div className="row-gap-12">
+        {compact && doneText ? <span className="hint">{doneText}</span> : null}
+        <button className={`btn ${compact ? "btn-secondary" : "btn-primary"}`} onClick={provision} disabled={busy}>
+          {busy ? <span className="spinner" /> : null}
+          {compact ? (busy ? "Syncing schema" : "Sync schema") : busy ? "Building databases in Notion…" : "Provision Notion schema"}
+        </button>
+      </div>
+      {!compact && doneText ? <span className="hint">{doneText}</span> : null}
       {warnings.length > 0 ? (
         <div className="callout stale" style={{ maxWidth: 420, textAlign: "left" }}>
           {warnings.map((w) => (

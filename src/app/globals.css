@@ -629,7 +629,11 @@ a:hover { color: var(--candy); }
 .stack-22 { display: flex; flex-direction: column; gap: 22px; }
 .row-gap-12 { display: flex; align-items: center; gap: 12px; }
 .row-gap-8 { display: flex; align-items: center; gap: 8px; }
-.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; align-items: stretch; }
+/* every card in a row shares the row's full height — tops and bottoms align
+   even when one card's caption wraps to a second line */
+.grid-cards > a { display: block; height: 100%; }
+.grid-cards .card { height: 100%; box-sizing: border-box; }
 
 .modal-scrim {
   position: fixed; inset: 0; background: rgba(47, 40, 23, 0.35);

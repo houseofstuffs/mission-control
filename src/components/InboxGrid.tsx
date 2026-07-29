@@ -237,82 +237,116 @@ export function InboxGrid({
       {/* quick capture */}
       <div className="card supporting">
         <div className="kicker">QUICK CAPTURE</div>
-        <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
-          <div className="field" style={{ flex: "1 1 220px" }}>
-            <label className="kicker" htmlFor="cap-name">IDEA</label>
-            <input id="cap-name" className="input" placeholder="One line is enough" value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") capture(); }} />
+        {/* split layout, same as the styles capture panel: form left, drop
+            zone right, equal halves (stacks on narrow screens) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18, alignItems: "stretch" }}>
+          <div className="stack-12">
+            <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div className="field" style={{ flex: "1 1 200px" }}>
+                <label className="kicker" htmlFor="cap-name">IDEA</label>
+                <input id="cap-name" className="input" placeholder="One line is enough" value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") capture(); }} />
+              </div>
+              <div className="field">
+                <label className="kicker" htmlFor="cap-type">TYPE</label>
+                <select id="cap-type" className="select" value={captureType} onChange={(e) => setCaptureType(e.target.value)}>
+                  <option>Copy</option><option>URL</option><option>Photo</option><option>Screengrab</option>
+                </select>
+              </div>
+            </div>
+            <div className="field">
+              <label className="kicker" htmlFor="cap-url">URL</label>
+              <input id="cap-url" className="input" placeholder="https://…" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
+            </div>
+            <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+              <div className="field">
+                <label className="kicker" htmlFor="cap-occ">OCCASION</label>
+                <select
+                  id="cap-occ"
+                  className="select"
+                  value={occasion}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    setOccasion(chosen);
+                    const auto = occasionDateFor(chosen, new Date());
+                    if (auto) setOccasionDate(auto); // pre-fill; the date field stays editable
+                  }}
+                >
+                  {OCCASIONS.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="kicker" htmlFor="cap-date">OCCASION DATE</label>
+                <input id="cap-date" type="date" className="input" value={occasionDate} onChange={(e) => setOccasionDate(e.target.value)} />
+              </div>
+              <div className="field" style={{ width: 110 }}>
+                <label className="kicker" htmlFor="cap-lead">LEAD DAYS</label>
+                <input id="cap-lead" type="number" className="input" placeholder="e.g. 45" value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <input className="input" placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} />
+            </div>
+            <div className="row-gap-12">
+              <button
+                className="btn btn-primary"
+                onClick={capture}
+                disabled={saving || (!name.trim() && !pendingFile)}
+              >
+                {saving ? <span className="spinner" /> : null}
+                {saving && pendingFile ? "Uploading" : "Capture"}
+              </button>
+            </div>
           </div>
-          <div className="field">
-            <label className="kicker" htmlFor="cap-type">TYPE</label>
-            <select id="cap-type" className="select" value={captureType} onChange={(e) => setCaptureType(e.target.value)}>
-              <option>Copy</option><option>URL</option><option>Photo</option><option>Screengrab</option>
-            </select>
-          </div>
-          <div className="field" style={{ flex: "1 1 180px" }}>
-            <label className="kicker" htmlFor="cap-url">URL</label>
-            <input id="cap-url" className="input" placeholder="https://…" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="cap-occ">OCCASION</label>
-            <select
-              id="cap-occ"
-              className="select"
-              value={occasion}
-              onChange={(e) => {
-                const chosen = e.target.value;
-                setOccasion(chosen);
-                const auto = occasionDateFor(chosen, new Date());
-                if (auto) setOccasionDate(auto); // pre-fill; the date field stays editable
-              }}
-            >
-              {OCCASIONS.map((o) => <option key={o} value={o}>{o || "—"}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="cap-date">OCCASION DATE</label>
-            <input id="cap-date" type="date" className="input" value={occasionDate} onChange={(e) => setOccasionDate(e.target.value)} />
-          </div>
-          <div className="field" style={{ width: 120 }}>
-            <label className="kicker" htmlFor="cap-lead">LEAD DAYS</label>
-            <input id="cap-lead" type="number" className="input" placeholder="e.g. 45" value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={capture}
-            disabled={saving || (!name.trim() && !pendingFile)}
-          >
-            {saving ? <span className="spinner" /> : null}
-            {saving && pendingFile ? "Uploading" : "Capture"}
-          </button>
-        </div>
-        <div className="field">
-          <input className="input" placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} />
-        </div>
-        {pendingFile ? (
-          <div className="row-gap-12">
-            {previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={previewUrl}
-                alt=""
-                style={{ height: 56, borderRadius: 10, border: "2px solid var(--border-faint)" }}
-              />
-            ) : null}
-            <span className="body-sm">{pendingFile.name}</span>
+
+          <div className="stack-12">
             <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 12, padding: "5px 10px" }}
-              onClick={() => {
-                setPendingFile(null);
-                if (fileInputRef.current) fileInputRef.current.value = "";
+              className="drop-tile"
+              {...dropHandlers}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                flex: 1,
+                minHeight: 180,
+                ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
               }}
+              aria-label="Drop an image to capture an idea"
             >
-              Remove
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt=""
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <>
+                  <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
+                  <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
+                    DROP, PASTE (CTRL+V) OR CLICK
+                  </span>
+                </>
+              )}
             </button>
+            {pendingFile ? (
+              <div className="row-gap-12">
+                <span className="body-sm" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {pendingFile.name}
+                </span>
+                <button
+                  className="btn btn-tertiary"
+                  style={{ fontSize: 12, padding: "5px 10px" }}
+                  onClick={() => {
+                    setPendingFile(null);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
         <input
           ref={fileInputRef}
           type="file"
@@ -331,26 +365,6 @@ export function InboxGrid({
       ) : null}
 
       {error ? <div className="callout blocked">{error}</div> : null}
-
-      {/* full-width horizontal drop band, same shape as the styles capture tile */}
-      {ideas.length > 0 ? (
-        <button
-          className="drop-tile"
-          {...dropHandlers}
-          onClick={() => fileInputRef.current?.click()}
-          style={{
-            minHeight: 120,
-            width: "100%",
-            ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
-          }}
-          aria-label="Drop an image to capture an idea"
-        >
-          <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
-          <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-            DROP, PASTE (CTRL+V) OR CLICK
-          </span>
-        </button>
-      ) : null}
 
       <div className="inbox-grid">
         {ideas.map((idea) => (

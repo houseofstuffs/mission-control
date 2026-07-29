@@ -227,40 +227,71 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
 
       {!draft ? (
         <>
-          <button
-            className="drop-tile"
-            style={{
-              minHeight: 120,
-              ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
-            }}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              take(e.dataTransfer.files?.[0]);
-            }}
-          >
-            {previewUrl || serverPreview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={(previewUrl || serverPreview)!}
-                alt=""
-                style={{ width: "100%", height: 220, objectFit: "cover", objectPosition: "center", borderRadius: 8 }}
-              />
-            ) : (
-              <>
-                <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
-                <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                  DROP, PASTE (CTRL+V) OR CLICK
-                </span>
-              </>
-            )}
-          </button>
+          {/* split layout, same as the ideas quick capture: form left, drop
+              zone right, equal halves (stacks on narrow screens) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18, alignItems: "stretch" }}>
+            <div className="stack-12">
+              <div className="field">
+                <label className="kicker" htmlFor="cap-hint">ANYTHING IT SHOULD KNOW (OPTIONAL)</label>
+                <input
+                  id="cap-hint"
+                  className="input"
+                  placeholder="e.g. this is my own artwork, prints on dark garments"
+                  value={hint}
+                  onChange={(e) => setHint(e.target.value)}
+                />
+              </div>
+              <div className="row-gap-12">
+                <button className="btn btn-primary" onClick={generate} disabled={!file || generating}>
+                  {generating ? <span className="spinner" /> : null}
+                  {generating ? "Reading the reference" : "Capture"}
+                </button>
+                {file && !generating ? (
+                  <button className="btn btn-tertiary" onClick={() => setFile(null)}>
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+              {generating ? (
+                <span className="hint">Runs on the server — safe to leave this page and come back.</span>
+              ) : null}
+            </div>
+
+            <button
+              className="drop-tile"
+              style={{
+                minHeight: 180,
+                ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
+              }}
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                take(e.dataTransfer.files?.[0]);
+              }}
+            >
+              {previewUrl || serverPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={(previewUrl || serverPreview)!}
+                  alt=""
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                <>
+                  <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
+                  <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
+                    DROP, PASTE (CTRL+V) OR CLICK
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
           <input
             ref={inputRef}
             type="file"
@@ -268,30 +299,6 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
             style={{ display: "none" }}
             onChange={(e) => take(e.target.files?.[0])}
           />
-          <div className="field">
-            <label className="kicker" htmlFor="cap-hint">ANYTHING IT SHOULD KNOW (OPTIONAL)</label>
-            <input
-              id="cap-hint"
-              className="input"
-              placeholder="e.g. this is my own artwork, prints on dark garments"
-              value={hint}
-              onChange={(e) => setHint(e.target.value)}
-            />
-          </div>
-          <div className="row-gap-12">
-            <button className="btn btn-primary" onClick={generate} disabled={!file || generating}>
-              {generating ? <span className="spinner" /> : null}
-              {generating ? "Reading the reference" : "Capture style"}
-            </button>
-            {file && !generating ? (
-              <button className="btn btn-tertiary" onClick={() => setFile(null)}>
-                Remove
-              </button>
-            ) : null}
-            {generating ? (
-              <span className="hint">Runs on the server — safe to leave this page and come back.</span>
-            ) : null}
-          </div>
         </>
       ) : (
         <>

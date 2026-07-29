@@ -40,7 +40,7 @@ export function toNotionProperties(
   for (const [name, value] of Object.entries(values)) {
     const propSpec: PropSpec | undefined = spec.properties[name];
     if (!propSpec) throw new Error(`Unknown property "${name}" on ${spec.key}`);
-    if (propSpec.type === "created_time") continue; // read-only
+    if (propSpec.type === "created_time" || propSpec.type === "formula") continue; // read-only
 
     switch (propSpec.type) {
       case "title":
@@ -145,6 +145,16 @@ export function fromNotionPage(spec: DbSpec, page: any): SimpleRecord {
       case "created_time":
         props[name] = p.created_time ?? null;
         break;
+      case "formula": {
+        const f = p.formula;
+        props[name] =
+          f?.type === "number" ? f.number ?? null
+          : f?.type === "boolean" ? f.boolean ?? null
+          : f?.type === "string" ? f.string ?? null
+          : f?.type === "date" ? f.date?.start ?? null
+          : null;
+        break;
+      }
     }
   }
   return {

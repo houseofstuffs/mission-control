@@ -276,6 +276,16 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]) },
       { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null }
     );
+    // SEO hard gate: no visibility keyword attached = blocked. The bucket
+    // mix ratios are advisory; this is the only hard keyword rule.
+    const attachedKws = cachedRecords("keywords").filter((k) =>
+      rel(k.props["Etsy Listings"]).includes(rec.id)
+    );
+    const hasVisibility = attachedKws.some((k) => str(k.props["Bucket"]) === "Visibility");
+    gates.push({
+      label: hasVisibility ? "Visibility keyword attached" : "No visibility keyword attached.",
+      ok: hasVisibility,
+    });
   } else {
     // creative gate check — what's failing that blocks C10/C11
     const niches = cachedRecords("niches");

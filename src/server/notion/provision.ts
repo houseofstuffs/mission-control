@@ -39,6 +39,8 @@ function propPayload(spec: PropSpec, dbIds: Record<string, string>): any {
       return { files: {} };
     case "created_time":
       return { created_time: {} };
+    case "formula":
+      return { formula: { expression: spec.expression ?? "" } };
     case "relation": {
       const target = dbIds[spec.relation!];
       if (!target) throw new Error(`Relation target "${spec.relation}" not provisioned yet`);

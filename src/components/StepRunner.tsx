@@ -12,6 +12,7 @@ import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workf
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
+import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 
 export interface RunnerRecord {
   id: string;
@@ -37,11 +38,13 @@ export function StepRunner({
   styles,
   savedPair,
   candidates,
+  seo,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
   savedPair?: SavedPair;
   candidates?: CandidateData[];
+  seo?: SeoData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -216,6 +219,13 @@ export function StepRunner({
             />
             <StyleCapture compact />
           </div>
+        ) : null}
+
+        {/* L2 is where title and tags are written — attached keywords by
+            bucket, the 13-tag composer, manual entry. Outside the step card,
+            same as the C1 tools. */}
+        {record.workflowKey === "listing" && selected.id === "L2" && seo ? (
+          <KeywordSeoPanel seo={seo} />
         ) : null}
 
         {/* the candidate set follows the design to C2 — generate each image

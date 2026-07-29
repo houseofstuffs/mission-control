@@ -25,7 +25,8 @@ export type PropType =
   | "date"
   | "files"
   | "relation"
-  | "created_time";
+  | "created_time"
+  | "formula";
 
 export interface PropSpec {
   type: PropType;
@@ -33,6 +34,8 @@ export interface PropSpec {
   options?: string[];
   /** For relations: the `key` of the target database in this schema. */
   relation?: string;
+  /** For formulas: the Notion formula expression. Read-only at runtime. */
+  expression?: string;
 }
 
 export interface DbSpec {
@@ -413,6 +416,34 @@ export const SCHEMA: DbSpec[] = [
       Reason: { type: "rich_text" },
       "Steps Marked Stale": { type: "rich_text" },
       At: { type: "date" },
+    },
+  },
+  {
+    key: "keywords",
+    title: "Keywords",
+    description:
+      "SEO keyword bank. Bucket is computed from avg searches × competition (thresholds in src/config/keywords.ts) on write and on refresh — unless Bucket Manual Override is checked. Null metrics mean Unknown, never a default bucket. Manual entry in Phase 1; the eRank/Everbee CSV importer (Phase 2) maps into this same shape.",
+    properties: {
+      Keyword: { type: "title" },
+      "Avg Searches": { type: "number" },
+      "Avg Clicks": { type: "number" },
+      "Etsy Competition": { type: "number" },
+      // Live in Notion itself — the length rule can't drift from the data.
+      "Char Count": { type: "formula", expression: 'length(prop("Keyword"))' },
+      // Etsy hard-caps tags at 20 chars; longer keywords are title-only.
+      "Tag Eligible": { type: "formula", expression: 'length(prop("Keyword")) <= 20' },
+      Bucket: {
+        type: "select",
+        options: ["Visibility", "Reach", "Best Seller", "Dead", "Unknown"],
+      },
+      "Bucket Manual Override": { type: "checkbox" },
+      Seasonality: { type: "select", options: ["Evergreen", "Seasonal", "Unknown"] },
+      "Pulled At": { type: "date" },
+      Source: { type: "select", options: ["eRank", "Everbee", "Manual"] },
+      Notes: { type: "rich_text" },
+      Designs: { type: "relation", relation: "designs" },
+      Collections: { type: "relation", relation: "collections" },
+      "Etsy Listings": { type: "relation", relation: "etsy_listings" },
     },
   },
 ];

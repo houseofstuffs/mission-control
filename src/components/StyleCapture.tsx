@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
+import { CopyIconButton } from "./CopyIconButton";
 
 interface Draft {
   name: string;
@@ -30,17 +31,17 @@ interface Draft {
 
 // Same working order as the Styles detail view: prompts near the top,
 // layout mechanics (composition, slots) at the bottom.
-const FIELDS: Array<{ key: keyof Draft; label: string }> = [
-  { key: "description", label: "DESCRIPTION — LOOK ONLY, NO SUBJECT MATTER" },
-  { key: "reusablePrompt", label: "REUSABLE PROMPT" },
-  { key: "typePrompt", label: "TYPE PROMPT — LETTERING" },
-  { key: "typography", label: "TYPOGRAPHY" },
-  { key: "keywordBank", label: "KEYWORD BANK" },
+const FIELDS: Array<{ key: keyof Draft; label: string; copyable?: boolean }> = [
+  { key: "description", label: "DESCRIPTION — LOOK ONLY, NO SUBJECT MATTER", copyable: true },
+  { key: "reusablePrompt", label: "REUSABLE PROMPT", copyable: true },
+  { key: "typePrompt", label: "TYPE PROMPT — LETTERING", copyable: true },
+  { key: "typography", label: "TYPOGRAPHY", copyable: true },
+  { key: "keywordBank", label: "KEYWORD BANK", copyable: true },
   { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON" },
   { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON" },
   { key: "avoidOn", label: "AVOID ON" },
   { key: "ruleOfThumb", label: "RULE OF THUMB" },
-  { key: "composition", label: "COMPOSITION — LAYOUT IN SLOT TERMS" },
+  { key: "composition", label: "COMPOSITION — LAYOUT IN SLOT TERMS", copyable: true },
   { key: "slots", label: "SLOTS — APPLY MODE'S FILL-IN FIELDS" },
 ];
 
@@ -325,7 +326,10 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
           </div>
           {FIELDS.map((f) => (
             <div key={f.key} className="field">
-              <label className="kicker" htmlFor={`cap-${f.key}`}>{f.label}</label>
+              <div className="row-gap-8" style={{ alignItems: "center" }}>
+                <label className="kicker" htmlFor={`cap-${f.key}`}>{f.label}</label>
+                {f.copyable ? <CopyIconButton text={draft[f.key]} label={f.label} /> : null}
+              </div>
               <AutoTextarea
                 id={`cap-${f.key}`}
                 value={draft[f.key]}

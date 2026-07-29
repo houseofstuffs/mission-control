@@ -11,6 +11,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
+import { CopyIconButton } from "./CopyIconButton";
 
 export interface StyleCard {
   id: string;
@@ -40,24 +41,6 @@ const FIELDS: Array<{ key: string; label: string; copyable?: boolean }> = [
 
 
 const CATEGORIES = ["Humor", "Minimalist", "Retro", "Illustrative", "Moody"];
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className="btn btn-tertiary"
-      style={{ fontSize: 11, padding: "2px 8px", marginLeft: "auto" }}
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? "Copied ✓" : "Copy"}
-    </button>
-  );
-}
 
 export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
   const router = useRouter();
@@ -192,7 +175,7 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
               <div key={f.key} className="field">
                 <div className="row-gap-8" style={{ alignItems: "center" }}>
                   <label className="kicker" htmlFor={`st-${f.key}`}>{f.label}</label>
-                  {f.copyable ? <CopyButton text={draft[f.key] ?? ""} /> : null}
+                  {f.copyable ? <CopyIconButton text={draft[f.key] ?? ""} label={f.label} /> : null}
                 </div>
                 <AutoTextarea
                   id={`st-${f.key}`}

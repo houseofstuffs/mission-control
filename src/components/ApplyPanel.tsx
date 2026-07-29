@@ -12,6 +12,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
+import { CopyIconButton } from "./CopyIconButton";
 
 export interface StyleOption {
   id: string;
@@ -34,24 +35,6 @@ function parseSlots(raw: string): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      className="btn btn-tertiary"
-      style={{ fontSize: 11, padding: "2px 8px", marginLeft: "auto" }}
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? "Copied ✓" : "Copy"}
-    </button>
-  );
 }
 
 export function ApplyPanel({
@@ -235,21 +218,21 @@ export function ApplyPanel({
           <div className="field">
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <label className="kicker" htmlFor="apply-img">IMAGE PROMPT — FOR C2</label>
-              <CopyButton text={imagePrompt} />
+              <CopyIconButton text={imagePrompt} label="image prompt" />
             </div>
             <AutoTextarea id="apply-img" value={imagePrompt} onChange={setImagePrompt} />
           </div>
           <div className="field">
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <label className="kicker" htmlFor="apply-txt">TEXT PROMPT — FOR C3 (KITTL LAYER)</label>
-              <CopyButton text={textPrompt} />
+              <CopyIconButton text={textPrompt} label="text prompt" />
             </div>
             <AutoTextarea id="apply-txt" value={textPrompt} onChange={setTextPrompt} />
           </div>
           <div className="field">
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <label className="kicker" htmlFor="apply-tex">TEXTURE NOTE — FOR C5 (SEPARATE LAYER, NEVER BAKED IN)</label>
-              <CopyButton text={textureNote} />
+              <CopyIconButton text={textureNote} label="texture note" />
             </div>
             <AutoTextarea
               id="apply-tex"

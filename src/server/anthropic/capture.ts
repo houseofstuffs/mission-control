@@ -38,7 +38,8 @@ const STYLE_SCHEMA = {
   properties: {
     name: {
       type: "string",
-      description: "Short evocative name, 2-5 words, title case. e.g. 'Vintage Halloween Doodle Collage'",
+      description:
+        "Short evocative name: THREE WORDS MAXIMUM, 24 characters or fewer, title case. It must fit on one line of a card — 'Faded Rainbow Nostalgia', never 'Vintage Halloween Doodle Collage'.",
     },
     category: {
       type: "string",
@@ -202,5 +203,9 @@ export async function captureStyle(
   if (!text || text.type !== "text") {
     throw new Error("No style returned — try again.");
   }
-  return JSON.parse(text.text) as CapturedStyle;
+  const style = JSON.parse(text.text) as CapturedStyle;
+  // Backstop the three-word cap — names must fit one line on a tile.
+  const words = style.name.trim().split(/\s+/);
+  if (words.length > 3) style.name = words.slice(0, 3).join(" ");
+  return style;
 }

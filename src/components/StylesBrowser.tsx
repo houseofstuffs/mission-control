@@ -226,7 +226,10 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={s.imageUrl} alt="" className="idea-thumb" />
           ) : null}
-          <div className="title">{s.name}</div>
+          {/* one line, always — long names ellipsize rather than wrap */}
+          <div className="title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {s.name}
+          </div>
           <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
             {s.category ? <span className="chip neutral">{s.category}</span> : null}
             <span className="chip count">used in {s.usedIn}</span>

@@ -226,24 +226,36 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
     );
   }
 
-  // ---- grid ----
+  // ---- grid, bundled by category (same grouping as the C1 style chooser) ----
+  const groups = [...CATEGORIES, ""]
+    .map((cat) => ({ cat, items: styles.filter((s) => (s.category || "") === cat) }))
+    .filter((g) => g.items.length > 0);
+
   return (
-    <div className="inbox-grid">
-      {styles.map((s) => (
-        <button key={s.id} className="idea-card" style={{ textAlign: "left", cursor: "pointer" }} onClick={() => openStyle(s)}>
-          {s.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={s.imageUrl} alt="" className="idea-thumb" />
-          ) : null}
-          {/* one line, always — long names ellipsize rather than wrap */}
-          <div className="title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {s.name}
+    <div className="stack-22">
+      {groups.map((g) => (
+        <section key={g.cat || "uncategorised"} className="stack-12">
+          <span className="kicker">
+            {(g.cat || "UNCATEGORISED").toUpperCase()} · {g.items.length}
+          </span>
+          <div className="inbox-grid">
+            {g.items.map((s) => (
+              <button key={s.id} className="idea-card" style={{ textAlign: "left", cursor: "pointer" }} onClick={() => openStyle(s)}>
+                {s.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.imageUrl} alt="" className="idea-thumb" />
+                ) : null}
+                {/* one line, always — long names ellipsize rather than wrap */}
+                <div className="title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {s.name}
+                </div>
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                  <span className="chip count">used in {s.usedIn}</span>
+                </div>
+              </button>
+            ))}
           </div>
-          <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-            {s.category ? <span className="chip neutral">{s.category}</span> : null}
-            <span className="chip count">used in {s.usedIn}</span>
-          </div>
-        </button>
+        </section>
       ))}
       {styles.length === 0 ? (
         <div className="hint">No styles yet — capture one from a reference above.</div>

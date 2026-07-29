@@ -366,8 +366,10 @@ export function InboxGrid({
 
       {error ? <div className="callout blocked">{error}</div> : null}
 
-      <div className="inbox-grid">
-        {ideas.map((idea) => (
+      {/* photo ideas up top; copy-only ideas in a compact strip below — no
+          thumbnail IS the signal that it's a copy idea */}
+      {(() => {
+        const renderIdea = (idea: (typeof ideas)[number]) => (
           <div key={idea.id} className="idea-card">
             {idea.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -456,8 +458,21 @@ export function InboxGrid({
               </div>
             )}
           </div>
-        ))}
-      </div>
+        );
+        const photo = ideas.filter((i) => i.imageUrl);
+        const copyOnly = ideas.filter((i) => !i.imageUrl);
+        return (
+          <>
+            {photo.length > 0 ? <div className="inbox-grid">{photo.map(renderIdea)}</div> : null}
+            {copyOnly.length > 0 ? (
+              <div className="stack-12">
+                <span className="kicker">COPY-ONLY · {copyOnly.length}</span>
+                <div className="inbox-grid inbox-grid-compact">{copyOnly.map(renderIdea)}</div>
+              </div>
+            ) : null}
+          </>
+        );
+      })()}
       {emptyHero ? (
         <div
           {...dropHandlers}

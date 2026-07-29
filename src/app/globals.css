@@ -562,6 +562,12 @@ a:hover { color: var(--candy); }
 .drop-tile > * { position: relative; }
 .drop-tile:hover { background: #b8e6d6; }
 
+/* copy-only ideas: denser grid, smaller cards — the missing thumbnail is
+   itself the "this is a copy idea" signal */
+.inbox-grid-compact { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.inbox-grid-compact .idea-card { padding: 10px 12px; gap: 6px; }
+.inbox-grid-compact .idea-card .title { font-size: 13px; }
+
 .idea-card {
   background: #fff;
   border: 2px solid var(--border-faint);

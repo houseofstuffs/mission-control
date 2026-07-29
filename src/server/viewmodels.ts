@@ -85,7 +85,12 @@ export function ideaCards(): { ideas: IdeaCardData[]; niches: NicheOption[] } {
     name: n.title,
     gate: str(n.props["Gate"]) || "Unevaluated",
   }));
-  const cards = ideas.map((i) => {
+  // Newest captured first — the cache's default is last-EDITED, which lets a
+  // touched old idea jump the queue and makes the grid feel shuffled.
+  const cards = ideas
+    .slice()
+    .sort((a, b) => str(b.props["Captured At"]).localeCompare(str(a.props["Captured At"])))
+    .map((i) => {
       const imgs = i.props["Image"];
       const first = Array.isArray(imgs) && imgs.length > 0 ? (imgs[0] as { url?: string }) : null;
       return {

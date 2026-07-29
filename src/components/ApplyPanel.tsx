@@ -308,10 +308,13 @@ export function CandidatesBoard({
   designId,
   candidates,
   chosenImagePrompt,
+  focusWinner = false,
 }: {
   designId: string;
   candidates: CandidateData[];
   chosenImagePrompt: string;
+  /** once a winner is committed, show only it (C2 view) */
+  focusWinner?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<number | null>(null);
@@ -350,12 +353,25 @@ export function CandidatesBoard({
     setBusy(null);
   }
 
+  const winnerChosen = Boolean(chosenImagePrompt) && candidates.some((c) => c.imagePrompt === chosenImagePrompt);
+  const shown = focusWinner && winnerChosen ? candidates.filter((c) => c.imagePrompt === chosenImagePrompt) : candidates;
+
   return (
     <div className="stack-12">
-      <Kicker>CANDIDATES · {candidates.length} — GENERATE EACH AT C2, THEN CROWN THE WINNER</Kicker>
+      <Kicker>
+        {shown.length === 1 && winnerChosen
+          ? `WINNER — ${shown[0].styleName}`
+          : `CANDIDATES · ${candidates.length} — GENERATE EACH AT C2, THEN CROWN THE WINNER`}
+      </Kicker>
       {error ? <div className="callout blocked">{error}</div> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
-        {candidates.map((c, i) => {
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: shown.length === 1 ? "1fr" : "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: 16,
+        }}
+      >
+        {shown.map((c, i) => {
           const chosen = Boolean(chosenImagePrompt) && c.imagePrompt === chosenImagePrompt;
           return (
             <div key={`${c.styleName}-${i}`} className="card supporting stack-12">

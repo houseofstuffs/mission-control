@@ -4,6 +4,8 @@ import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
+import type { ArtworkData } from "@/components/ArtworkCapture";
+import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +28,11 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
           <Kicker><Link href="/designs">DESIGNS</Link> / CREATIVE WORKFLOW</Kicker>
           <h1 className="page-title" style={{ textTransform: "none", letterSpacing: 0 }}>{rec.title || "Untitled design"}</h1>
         </div>
+        <ProductPicker
+          designId={rec.id}
+          products={cachedRecords("products").map((p) => ({ id: p.id, name: p.title }))}
+          currentId={(rec.props["Primary Product"] as string[] | null)?.[0] ?? null}
+        />
       </div>
       {canvas.length > 0 ? (
         <div className="well" style={{ marginBottom: 22 }}>
@@ -40,6 +47,7 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
         styles={styleOptions()}
         savedPair={savedPair(rec)}
         candidates={parseCandidates(rec)}
+        artwork={artworkData(rec)}
       />
     </div>
   );
@@ -52,6 +60,16 @@ function styleOptions(): StyleOption[] {
     category: String(s.props["Category"] ?? ""),
     slots: String(s.props["Slots"] ?? ""),
   }));
+}
+
+function artworkData(rec: NonNullable<ReturnType<typeof cachedRecord>>): ArtworkData {
+  const snap = rec.props["Artwork Snapshot"];
+  const first = Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }) : null;
+  return {
+    designId: rec.id,
+    snapshotUrl: first?.url || null,
+    artworkLink: String(rec.props["Artwork Link"] ?? ""),
+  };
 }
 
 function parseCandidates(rec: NonNullable<ReturnType<typeof cachedRecord>>): CandidateData[] {

@@ -326,6 +326,10 @@ export const SCHEMA: DbSpec[] = [
       "Target Publish Date": { type: "date" },
       "Actual Publish Date": { type: "date" },
       "Master Canvas (JSON)": { type: "rich_text" },
+      // Lightweight preview of the selected generation (C2's output) —
+      // powers Kanban thumbnails. The MASTER file lives in Drive/S3 (§3.6);
+      // this is a snapshot, never the asset.
+      "Artwork Snapshot": { type: "files" },
       // C1's output — the composed pair from Apply mode (style × subject).
       // Stored on the design so C2/C3 read from the record, not a chat log.
       "Image Prompt": { type: "rich_text" },

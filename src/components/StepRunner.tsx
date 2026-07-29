@@ -14,6 +14,7 @@ import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
+import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 
 export interface RunnerRecord {
   id: string;
@@ -41,6 +42,7 @@ export function StepRunner({
   candidates,
   seo,
   slots,
+  artwork,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -48,6 +50,7 @@ export function StepRunner({
   candidates?: CandidateData[];
   seo?: SeoData;
   slots?: SlotsData;
+  artwork?: ArtworkData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -236,6 +239,11 @@ export function StepRunner({
           <ImageSlotsPanel data={slots} />
         ) : null}
 
+        {/* C2's output: the selected generation — snapshot + master link */}
+        {record.workflowKey === "creative" && selected.id === "C2" && artwork ? (
+          <ArtworkCapture data={artwork} />
+        ) : null}
+
         {/* the candidate set follows the design to C2 — generate each image
             prompt there, then crown the winner */}
         {record.workflowKey === "creative" &&
@@ -245,6 +253,7 @@ export function StepRunner({
             designId={record.id}
             candidates={candidates!}
             chosenImagePrompt={savedPair?.imagePrompt ?? ""}
+            focusWinner={selected.id === "C2"}
           />
         ) : null}
         </div>

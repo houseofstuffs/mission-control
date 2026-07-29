@@ -37,7 +37,12 @@ export function designKanbanCards(): KanbanCardData[] {
     const nicheId = rel(d.props["Niche"])[0];
     const niche = niches.find((n) => n.id === nicheId);
     const inListings = listings.filter((l) => rel(l.props["Designs"]).includes(d.id)).length;
-    const files = d.props["Artwork Link"];
+    // snapshot first (a real image, uploaded at C2); Artwork Link is the
+    // master-file fallback and may not be a directly renderable image
+    const snap = d.props["Artwork Snapshot"];
+    const snapUrl =
+      Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }).url || null : null;
+    const files = snapUrl ?? d.props["Artwork Link"];
     return {
       id: d.id,
       title: d.title || "Untitled design",

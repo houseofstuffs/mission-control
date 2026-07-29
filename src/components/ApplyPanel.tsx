@@ -500,23 +500,27 @@ export function CandidatesBoard({
                 <div className="hint">Screen: {c.screeningPhrases}</div>
               ) : null}
               <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
-                <button className="btn btn-secondary" disabled={busy !== null} onClick={() => commit(c, i)}>
-                  {busy === i ? <span className="spinner" /> : null}
-                  This one won
-                </button>
+                {/* ONE button per card: crown first; once a winner exists,
+                    the others' button converts to Spin off (a second winner
+                    is a second design). */}
                 {spunOff[i] ? (
                   <a className="chip done" href={`/designs/${spunOff[i].id}`}>
                     → {spunOff[i].title}
                   </a>
-                ) : (
+                ) : chosen ? null : winnerChosen ? (
                   <button
-                    className="btn btn-tertiary"
-                    style={{ fontSize: 12, padding: "5px 10px" }}
+                    className="btn btn-secondary"
                     disabled={busy !== null}
                     onClick={() => spinOff(c, i)}
-                    title="Two winners = two designs — this one gets its own record, starting at C2"
+                    title="Gets its own design record, starting at C2"
                   >
-                    Spin off as its own design
+                    {busy === i ? <span className="spinner" /> : null}
+                    Spin off
+                  </button>
+                ) : (
+                  <button className="btn btn-secondary" disabled={busy !== null} onClick={() => commit(c, i)}>
+                    {busy === i ? <span className="spinner" /> : null}
+                    Winning Prompt
                   </button>
                 )}
                 {c.suggested && chosen ? (

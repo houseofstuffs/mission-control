@@ -1,11 +1,16 @@
 /**
  * Design Tool — Capture mode (spec §9.2).
  *
- * Reference image in, Style record out: description, typography, keyword bank,
- * a reusable prompt with a [SUBJECT] slot, a separate type prompt (C2 generates
- * artwork, C3 sets lettering as a Kittl layer wherever spelling matters), and
- * print suitability as three per-product lists — the constraint that decides
- * which blueprints a style may use at R6.
+ * Reference image in, Style record out: description, composition, named slots,
+ * typography, keyword bank, a reusable prompt, a separate type prompt (C2
+ * generates artwork, C3 sets lettering as a Kittl layer wherever spelling
+ * matters), and print suitability as three per-product lists — the constraint
+ * that decides which blueprints a style may use at R6.
+ *
+ * A style is subject-independent by definition: the reference supplies look and
+ * layout, the subject comes from the idea it gets paired with. Everything the
+ * reference happens to depict is abstracted into [HERO] / [MOTIF n] / [COPY]
+ * slots, so one record can carry many different compositions.
  *
  * Output is structured JSON matching the Notion schema, per the spec's rule
  * that prose-only output means re-keying by hand.
@@ -16,6 +21,8 @@ export interface CapturedStyle {
   name: string;
   category: "Humor" | "Minimalist" | "Retro" | "Illustrative" | "Moody";
   description: string;
+  composition: string;
+  slots: string;
   typography: string;
   keywordBank: string;
   reusablePrompt: string;
@@ -41,7 +48,17 @@ const STYLE_SCHEMA = {
     description: {
       type: "string",
       description:
-        "2-4 sentences covering vibe, illustration treatment, palette (name actual colours), layout and mood. Concrete and specific — someone should be able to recognise another design in this style from this alone.",
+        "2-3 sentences covering ONLY subject-independent traits: palette (name the actual colours), linework and illustration treatment, texture and finish, mood. Never name what the reference depicts — a design with completely different subject matter must still match this description.",
+    },
+    composition: {
+      type: "string",
+      description:
+        "The layout skeleton in slot terms: where things sit, their relative size and weight, how the space is divided. Refer to elements only as [HERO], [MOTIF 1], [MOTIF 2], [COPY]. e.g. '[HERO] centred and dominant; [MOTIF 1] as a vertical graphic band down one side; [MOTIF 2] clustered opposite it; [COPY] arched above.' Describe positions and proportions, never the actual objects.",
+    },
+    slots: {
+      type: "string",
+      description:
+        "Comma-separated list of the slots this style expects, in fill order — e.g. '[HERO], [MOTIF 1], [MOTIF 2], [COPY]'. Use only slots that appear in the composition and reusable prompt. Simple layouts may need just [HERO].",
     },
     typography: {
       type: "string",
@@ -56,7 +73,7 @@ const STYLE_SCHEMA = {
     reusablePrompt: {
       type: "string",
       description:
-        "An image-generation prompt describing ONLY the artwork, with a literal [SUBJECT] placeholder where the subject goes. Include palette, linework, fill treatment, texture, composition and mood. State negatives that matter (no gradients, no photorealism). Say nothing about lettering — that is the type prompt's job.",
+        "An image-generation prompt for the artwork, using the same slot placeholders as the composition. Cover palette, linework, fill treatment, texture, arrangement and mood, plus the negatives that matter (no gradients, no photorealism). Keep it tight — every sentence that isn't a style constraint narrows what can be generated. Name no actual subject matter, and say nothing about lettering; that is the type prompt's job.",
     },
     typePrompt: {
       type: "string",
@@ -88,6 +105,8 @@ const STYLE_SCHEMA = {
     "name",
     "category",
     "description",
+    "composition",
+    "slots",
     "typography",
     "keywordBank",
     "reusablePrompt",
@@ -102,18 +121,35 @@ const STYLE_SCHEMA = {
 
 const SYSTEM = `You capture reusable design styles for STUFFS, a solo-operator Etsy print-on-demand shop.
 
-Given a reference image, produce a Style record: a description precise enough to
-recognise the aesthetic elsewhere, and prompts reusable enough to generate new
-designs in it.
+A reference image is being borrowed for its LOOK and its LAYOUT — never its
+contents. The subject matter comes from somewhere else entirely: a niche, an
+idea, a piece of copy. Your job is to separate the two and keep only the part
+that travels.
+
+THE RULE: no actual subject matter appears anywhere in your output. If the
+reference shows a skull wreathed in marigolds over a checkerboard, you do not
+write "skull", "marigolds" or "checkerboard". You write that a single dominant
+[HERO] sits centred, [MOTIF 1] forms a dense organic frame around it, and
+[MOTIF 2] repeats as a hard geometric band beneath. Someone reading your record
+should be able to build a design about something completely different and have
+it read as the same style. Naming the reference's contents is the one failure
+that makes a record useless.
 
 How to think about it:
 
-- Describe what is ACTUALLY in the image. Name the real colours, the real
-  linework, the real type. Do not drift toward a generic version of the genre.
-- The reusable prompt is the deliverable. It must produce work in this style for
-  a completely different subject. Put the subject-independent character in it —
-  palette, linework, fill treatment, texture, composition, mood — and mark the
-  subject slot as [SUBJECT].
+- Be precise about what DOES travel: the real colours, the real linework weight
+  and quality, the real texture and finish, the real type character. Precision
+  here is what stops the record drifting into a generic version of the genre.
+- Be abstract about what does NOT: subjects, objects, specific imagery. These
+  become slots — [HERO] for the focal element, [MOTIF 1] / [MOTIF 2] for
+  supporting imagery, [COPY] for lettering. Use only as many slots as the layout
+  genuinely has.
+- Composition is its own field because layout is often the real reason a
+  reference was saved. Describe the arrangement — what sits where, at what
+  relative weight, how the space divides — in slot terms only.
+- Keep it lean. Every extra sentence is a constraint on what can be generated
+  later, and over-specified records produce samey work. Say what makes the style
+  itself, and stop.
 - Keep artwork and lettering separate. AI image generation misspells text, so
   lettering is set as a Kittl layer over the artwork. The reusable prompt
   describes artwork only; the type prompt describes lettering only.
@@ -122,9 +158,8 @@ How to think about it:
   gradients or knocked-out negative space, and whether it needs a specific
   garment colour behind it. Flat many-colour detail loves smooth full-colour
   surfaces (DTG, sublimation, paper) and degrades on per-colour or textured
-  methods (screen print, vinyl, embroidery, laser, woven blankets).
-- Be honest and specific. A style that would print badly on something should say
-  so plainly and say why.
+  methods (screen print, vinyl, embroidery, laser, woven blankets). A style that
+  would print badly on something should say so plainly and say why.
 
 Write in a working designer's voice — concrete, unfussy, no marketing language.`;
 
@@ -146,8 +181,8 @@ export async function captureStyle(
           {
             type: "text",
             text: hint?.trim()
-              ? `Capture this design's style as a reusable Style record.\n\nContext from the operator: ${hint.trim()}`
-              : "Capture this design's style as a reusable Style record.",
+              ? `Capture this reference's style and layout as a reusable Style record. Its subject matter is not part of the record.\n\nContext from the operator: ${hint.trim()}`
+              : "Capture this reference's style and layout as a reusable Style record. Its subject matter is not part of the record.",
           },
         ],
       },

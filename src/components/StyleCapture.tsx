@@ -15,6 +15,8 @@ interface Draft {
   name: string;
   category: string;
   description: string;
+  composition: string;
+  slots: string;
   typography: string;
   keywordBank: string;
   reusablePrompt: string;
@@ -26,10 +28,12 @@ interface Draft {
 }
 
 const FIELDS: Array<{ key: keyof Draft; label: string; rows?: number }> = [
-  { key: "description", label: "DESCRIPTION", rows: 4 },
+  { key: "description", label: "DESCRIPTION — LOOK ONLY, NO SUBJECT MATTER", rows: 3 },
+  { key: "composition", label: "COMPOSITION — LAYOUT IN SLOT TERMS", rows: 3 },
+  { key: "slots", label: "SLOTS", rows: 1 },
   { key: "typography", label: "TYPOGRAPHY", rows: 2 },
   { key: "keywordBank", label: "KEYWORD BANK", rows: 3 },
-  { key: "reusablePrompt", label: "REUSABLE PROMPT — [SUBJECT] SLOT", rows: 6 },
+  { key: "reusablePrompt", label: "REUSABLE PROMPT", rows: 6 },
   { key: "typePrompt", label: "TYPE PROMPT — LETTERING", rows: 3 },
   { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON", rows: 2 },
   { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON", rows: 2 },
@@ -195,7 +199,11 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
         </>
       ) : (
         <>
-          <div className="body-sm muted">Review and edit anything it got wrong, then save.</div>
+          <div className="body-sm muted">
+            Review and edit anything it got wrong, then save. If any field names what the
+            reference actually depicted, generalise it into a slot — a style should work for
+            a completely different subject.
+          </div>
           <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
             <div className="field" style={{ flex: "1 1 240px" }}>
               <label className="kicker" htmlFor="cap-name">NAME</label>

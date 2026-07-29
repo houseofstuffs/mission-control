@@ -34,6 +34,8 @@ export async function POST(req: Request) {
     const values: Record<string, SimpleValue> = {
       Name: body.name.trim(),
       Description: body.description ?? "",
+      Composition: body.composition ?? "",
+      Slots: body.slots ?? "",
       Typography: body.typography ?? "",
       "Keyword Bank": body.keywordBank ?? "",
       "Reusable Prompt": body.reusablePrompt ?? "",

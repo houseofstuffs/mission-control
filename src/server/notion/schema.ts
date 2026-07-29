@@ -171,7 +171,7 @@ export const SCHEMA: DbSpec[] = [
     key: "styles",
     title: "Styles",
     description:
-      "Captured aesthetics — description, keyword bank, reusable prompt with [SUBJECT] slot, print-suitability constraint on eligible products.",
+      "Captured aesthetics — subject-independent by design. Description, composition skeleton, named slots, reusable prompt, print-suitability constraint on eligible products.",
     properties: {
       Name: { type: "title" },
       // Aesthetic bucket — the range Explore mode works across (§9.2).
@@ -180,6 +180,12 @@ export const SCHEMA: DbSpec[] = [
         options: ["Humor", "Minimalist", "Retro", "Illustrative", "Moody"],
       },
       Description: { type: "rich_text" },
+      // Layout skeleton in slot terms, separate from surface treatment: a
+      // reference is often being borrowed for its arrangement, not its subject.
+      Composition: { type: "rich_text" },
+      // The slots this style expects, in fill order — the fill-in fields when
+      // a style is combined with an idea's content at C1.
+      Slots: { type: "rich_text" },
       Typography: { type: "rich_text" },
       "Keyword Bank": { type: "rich_text" },
       // Image and type prompts stay separate: C2 generates artwork, C3 sets

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { captureStyle } from "@/server/anthropic/capture";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import {
@@ -46,13 +47,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const raw = Buffer.from(await file.arrayBuffer());
     const hint = String(form.get("hint") ?? "");
-    const jobId = createCaptureJob(base64, file.type, file.name, hint);
+    // Original goes to the job (Notion gets full quality on save); the model
+    // gets a downscaled copy — its hard cap is 8000px a side, and reading a
+    // style needs nowhere near that.
+    const forModel = await sharp(raw)
+      .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+    const jobId = createCaptureJob(raw.toString("base64"), file.type, file.name, hint);
 
     // Fire and return — the job finishes server-side whether or not the
     // page that started it is still open.
-    void captureStyle(base64, file.type as Allowed, hint)
+    void captureStyle(forModel.toString("base64"), "image/jpeg", hint)
       .then((style) => completeCaptureJob(jobId, JSON.stringify(style)))
       .catch((err) => failCaptureJob(jobId, (err as Error).message));
 

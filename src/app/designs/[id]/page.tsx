@@ -54,5 +54,6 @@ function savedPair(rec: NonNullable<ReturnType<typeof cachedRecord>>): SavedPair
     styleId: (rec.props["Style"] as string[] | null)?.[0] ?? null,
     imagePrompt: String(rec.props["Image Prompt"] ?? ""),
     textPrompt: String(rec.props["Text Prompt"] ?? ""),
+    textureNote: String(rec.props["Texture Note"] ?? ""),
   };
 }

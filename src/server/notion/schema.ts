@@ -317,6 +317,9 @@ export const SCHEMA: DbSpec[] = [
       // Stored on the design so C2/C3 read from the record, not a chat log.
       "Image Prompt": { type: "rich_text" },
       "Text Prompt": { type: "rich_text" },
+      // The C5 instruction: which texture, mask vs overlay, strength.
+      // Generation stays flat; texture is a layer, never baked in.
+      "Texture Note": { type: "rich_text" },
       "Artwork Link": { type: "url" },
       "PSD Master Link": { type: "url" },
       "PSD Saved At": { type: "date" },

@@ -7,7 +7,7 @@
  * not browsing material). Delete archives to Notion's trash (30-day recovery)
  * and warns when designs still reference the style.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 
@@ -20,20 +20,52 @@ export interface StyleCard {
   fields: Record<string, string>; // form key → value
 }
 
-const FIELDS: Array<{ key: string; label: string; rows: number; copyable?: boolean }> = [
-  { key: "description", label: "DESCRIPTION", rows: 3, copyable: true },
-  { key: "composition", label: "COMPOSITION", rows: 3, copyable: true },
-  { key: "slots", label: "SLOTS", rows: 1 },
-  { key: "typography", label: "TYPOGRAPHY", rows: 2, copyable: true },
-  { key: "keywordBank", label: "KEYWORD BANK", rows: 2, copyable: true },
-  { key: "reusablePrompt", label: "REUSABLE PROMPT", rows: 6, copyable: true },
-  { key: "typePrompt", label: "TYPE PROMPT", rows: 3, copyable: true },
-  { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON", rows: 2 },
-  { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON", rows: 2 },
-  { key: "avoidOn", label: "AVOID ON", rows: 2 },
-  { key: "ruleOfThumb", label: "RULE OF THUMB", rows: 2 },
-  { key: "notes", label: "NOTES", rows: 2 },
+// Working order: the two prompts you actually copy sit at the top, layout
+// mechanics (composition, slots — Apply mode's inputs) at the bottom.
+const FIELDS: Array<{ key: string; label: string; copyable?: boolean }> = [
+  { key: "description", label: "DESCRIPTION", copyable: true },
+  { key: "reusablePrompt", label: "REUSABLE PROMPT", copyable: true },
+  { key: "typePrompt", label: "TYPE PROMPT", copyable: true },
+  { key: "typography", label: "TYPOGRAPHY", copyable: true },
+  { key: "keywordBank", label: "KEYWORD BANK", copyable: true },
+  { key: "printsBeautifullyOn", label: "PRINTS BEAUTIFULLY ON" },
+  { key: "worksWithTweaksOn", label: "WORKS WITH TWEAKS ON" },
+  { key: "avoidOn", label: "AVOID ON" },
+  { key: "ruleOfThumb", label: "RULE OF THUMB" },
+  { key: "composition", label: "COMPOSITION — LAYOUT SKELETON", copyable: true },
+  { key: "slots", label: "SLOTS — APPLY MODE'S FILL-IN FIELDS" },
+  { key: "notes", label: "NOTES" },
 ];
+
+/** Textarea that grows to fit its content — no manual resizing to read a long prompt. */
+function AutoTextarea({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value]);
+  return (
+    <textarea
+      ref={ref}
+      id={id}
+      className="textarea"
+      rows={1}
+      style={{ overflow: "hidden", resize: "none", minHeight: 40 }}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
 
 const CATEGORIES = ["Humor", "Minimalist", "Retro", "Illustrative", "Moody"];
 
@@ -190,12 +222,10 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
                   <label className="kicker" htmlFor={`st-${f.key}`}>{f.label}</label>
                   {f.copyable ? <CopyButton text={draft[f.key] ?? ""} /> : null}
                 </div>
-                <textarea
+                <AutoTextarea
                   id={`st-${f.key}`}
-                  className="textarea"
-                  rows={f.rows}
                   value={draft[f.key] ?? ""}
-                  onChange={(e) => edit(f.key, e.target.value)}
+                  onChange={(v) => edit(f.key, v)}
                 />
               </div>
             ))}

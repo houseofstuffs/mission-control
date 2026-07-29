@@ -206,7 +206,7 @@ export function StepRunner({
               <ApplyPanel
                 designId={record.id}
                 styles={styles ?? []}
-                saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "" }}
+                saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "", textureNote: "" }}
               />
               <StyleCapture compact />
             </>

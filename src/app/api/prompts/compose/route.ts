@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       );
     }
     const body = await req.json();
-    const { designId, styleId, fills, copy, save, imagePrompt, textPrompt } = body as {
+    const { designId, styleId, fills, copy, save, imagePrompt, textPrompt, textureNote } = body as {
       designId: string;
       styleId: string;
       fills?: Record<string, string>;
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       save?: boolean;
       imagePrompt?: string;
       textPrompt?: string;
+      textureNote?: string;
     };
 
     const design = cachedRecord(designId);
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
       const record = await updateRecord("designs", designId, {
         "Image Prompt": imagePrompt ?? "",
         "Text Prompt": textPrompt ?? "",
+        "Texture Note": textureNote ?? "",
         ...(styleId ? { Style: [styleId] } : {}),
       });
       return NextResponse.json({ record });

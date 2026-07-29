@@ -23,6 +23,7 @@ export interface SavedPair {
   styleId: string | null;
   imagePrompt: string;
   textPrompt: string;
+  textureNote: string;
 }
 
 const CATEGORY_ORDER = ["Humor", "Minimalist", "Retro", "Illustrative", "Moody", ""];
@@ -69,6 +70,7 @@ export function ApplyPanel({
   const [copy, setCopy] = useState("");
   const [imagePrompt, setImagePrompt] = useState(saved.imagePrompt);
   const [textPrompt, setTextPrompt] = useState(saved.textPrompt);
+  const [textureNote, setTextureNote] = useState(saved.textureNote);
   const [screening, setScreening] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState<"compose" | "save" | null>(null);
@@ -97,6 +99,7 @@ export function ApplyPanel({
     else {
       setImagePrompt(json.pair.imagePrompt ?? "");
       setTextPrompt(json.pair.textPrompt ?? "");
+      setTextureNote(json.pair.textureNote ?? "");
       setScreening(json.pair.screeningPhrases ?? "");
       setNotes(json.pair.notes ?? "");
     }
@@ -109,7 +112,7 @@ export function ApplyPanel({
     const res = await fetch("/api/prompts/compose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ designId, styleId, save: true, imagePrompt, textPrompt }),
+      body: JSON.stringify({ designId, styleId, save: true, imagePrompt, textPrompt, textureNote }),
     });
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Save failed");
@@ -252,6 +255,20 @@ export function ApplyPanel({
               rows={4}
               value={textPrompt}
               onChange={(e) => setTextPrompt(e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <div className="row-gap-8" style={{ alignItems: "center" }}>
+              <label className="kicker" htmlFor="apply-tex">TEXTURE NOTE — FOR C5 (SEPARATE LAYER, NEVER BAKED IN)</label>
+              <CopyButton text={textureNote} />
+            </div>
+            <textarea
+              id="apply-tex"
+              className="textarea"
+              rows={2}
+              placeholder="no texture — clean style"
+              value={textureNote}
+              onChange={(e) => setTextureNote(e.target.value)}
             />
           </div>
           {screening ? (

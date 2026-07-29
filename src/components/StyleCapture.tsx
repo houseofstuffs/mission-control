@@ -64,6 +64,22 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // Ctrl+V anywhere on the page drops the clipboard image in — no need to
+  // click the tile first. Only while the panel is open and awaiting an image.
+  useEffect(() => {
+    if (!open || draft) return;
+    function onPaste(e: ClipboardEvent) {
+      const f = Array.from(e.clipboardData?.files ?? []).find((x) => x.type.startsWith("image/"));
+      if (f) {
+        e.preventDefault();
+        take(f);
+      }
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, draft]);
+
   function take(f: File | undefined | null) {
     if (!f) return;
     if (!f.type.startsWith("image/")) {
@@ -163,7 +179,7 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
               <>
                 <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
                 <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                  DROP A REFERENCE
+                  DROP, PASTE (CTRL+V) OR CLICK
                 </span>
               </>
             )}

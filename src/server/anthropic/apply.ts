@@ -15,6 +15,7 @@ import { anthropic, model } from "./client";
 export interface ComposedPair {
   imagePrompt: string;
   textPrompt: string;
+  textureNote: string;
   screeningPhrases: string;
   notes: string;
 }
@@ -25,12 +26,17 @@ const PAIR_SCHEMA = {
     imagePrompt: {
       type: "string",
       description:
-        "The ready-to-paste image-generation prompt: the style's reusable prompt with every slot filled with the actual subject matter, tightened into one coherent prompt. Artwork only — no lettering, and explicitly say text-free where the style risks generating some.",
+        "The ready-to-paste image-generation prompt: the style's reusable prompt with every slot filled with the actual subject matter, tightened into one coherent prompt. Artwork only — no lettering (explicitly say text-free where the style risks generating some), and FLAT: no distress, weathering, grain or aging effects, clean edges. Texture is a separate layer applied at C5.",
     },
     textPrompt: {
       type: "string",
       description:
         "The lettering instruction for Kittl: the exact copy to set, the style's type treatment applied to it, arrangement, colour, and any distress or warp. Font suggestions must be plausible Kittl merch-licensed library picks, named as character descriptions (e.g. 'a bold condensed vintage serif such as...') so a close match can be chosen if the exact font is absent.",
+    },
+    textureNote: {
+      type: "string",
+      description:
+        "The C5 texture instruction, derived from the style's character: what kind of texture (grain, grunge, halftone, paper...), applied as a MASK/knockout when the distress should also eat the artwork's edges (same grain through interior and silhouette) or as an overlay when it shouldn't, rough strength, and any blend-mode note. One executable sentence or two — something to do in Kittl in thirty seconds. Empty string if the style is clean and needs no texture.",
     },
     screeningPhrases: {
       type: "string",
@@ -43,7 +49,7 @@ const PAIR_SCHEMA = {
         "One or two sentences, only if genuinely useful: a tension between the style and this subject, a print-suitability caution for the chosen product, or an adjustment worth making at C2. Empty string if nothing needs saying.",
     },
   },
-  required: ["imagePrompt", "textPrompt", "screeningPhrases", "notes"],
+  required: ["imagePrompt", "textPrompt", "textureNote", "screeningPhrases", "notes"],
   additionalProperties: false,
 } as const;
 
@@ -60,6 +66,15 @@ prompts:
   AI image generation misspells text, so if the design has lettering, the
   image prompt must not ask for any (say "no text, no lettering" explicitly
   when the style might otherwise produce some).
+- The image prompt asks for FLAT artwork: no distress, weathering, grain,
+  aging or halftone effects, clean edges. Baked-in texture is different on
+  every generation and can't be adjusted per product — texture is applied as
+  a separate layer at the texture step (C5). If the style's character calls
+  for distress, that goes in the TEXTURE NOTE instead: which kind of texture,
+  applied as a mask/knockout when the grain should also eat the artwork's
+  edges, or as an overlay when it shouldn't, and how strong. Fill treatment
+  that is genuinely part of the illustration (flat muted fills, visible
+  brushwork) stays in the image prompt — only applied-effect texture moves out.
 - The TEXT prompt is for setting the copy as a Kittl text layer over the
   artwork: exact copy, type character, arrangement, colour, distress. Fonts
   must be realistic picks from Kittl's merch-licensed library — describe the

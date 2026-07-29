@@ -73,7 +73,7 @@ const STYLE_SCHEMA = {
     reusablePrompt: {
       type: "string",
       description:
-        "An image-generation prompt for the artwork, using the same slot placeholders as the composition. Cover palette, linework, fill treatment, texture, arrangement and mood, plus the negatives that matter (no gradients, no photorealism). Keep it tight — every sentence that isn't a style constraint narrows what can be generated. Name no actual subject matter, and say nothing about lettering; that is the type prompt's job.",
+        "An image-generation prompt for the artwork, using the same slot placeholders as the composition. Cover palette, linework, fill treatment, arrangement and mood, plus the negatives that matter (no gradients, no photorealism). Generation is always FLAT: if the reference has distress, weathering or grain, that is an applied production layer — keep it OUT of this prompt (note it in the description instead) and end the prompt with 'flat clean artwork, no distress or weathering, clean edges'. Keep it tight — every sentence that isn't a style constraint narrows what can be generated. Name no actual subject matter, and say nothing about lettering; that is the type prompt's job.",
     },
     typePrompt: {
       type: "string",

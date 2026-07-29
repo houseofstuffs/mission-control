@@ -560,10 +560,13 @@ a:hover { color: var(--candy); }
 .idea-card:hover { border-color: var(--blueberry); }
 /* uniform square thumbnails — whole image visible, letterboxed on the well
    background (cover-cropping guillotined tall designs) */
+/* Square thumbnails fill the frame — zoom and center-crop rather than
+   letterbox. Full image is always visible where it matters (style detail,
+   idea page); the grid is for recognition, not inspection. */
 .idea-thumb {
   width: 100%;
   aspect-ratio: 1 / 1;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
   border-radius: 10px;
   background: var(--surface-well);

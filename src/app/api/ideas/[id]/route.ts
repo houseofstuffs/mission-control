@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, createRecord, updateRecord, archiveRecord } from "@/server/notion/store";
+import { screenCopy } from "@/server/anthropic/screen";
+import { anthropicConfigured } from "@/server/anthropic/client";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60; // the screen action waits on a model call
 
 /**
  * Triage actions on an idea: discard, attach to an existing niche, or
@@ -18,7 +21,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "Idea not found in cache — refresh first" }, { status: 404 });
     }
 
-    const action = body.action as "discard" | "restore" | "attach" | "promote" | "update" | "delete";
+    const action = body.action as
+      | "discard" | "restore" | "attach" | "promote" | "update" | "delete" | "screen";
+
+    // Manual (re-)screen — synchronous, the card updates on return.
+    if (action === "screen") {
+      if (!anthropicConfigured()) {
+        return NextResponse.json({ error: "ANTHROPIC_API_KEY is not set." }, { status: 400 });
+      }
+      const text = [idea.title, String(idea.props["Note"] ?? "")].filter(Boolean).join(" — ");
+      const r = await screenCopy(text);
+      const record = await updateRecord("ideas", id, {
+        "Trademark Risk": r.risk,
+        "Risk Reason": r.reason,
+      });
+      return NextResponse.json({ record });
+    }
 
     // Delete is archive — Notion's trash keeps it recoverable for 30 days.
     if (action === "delete") {

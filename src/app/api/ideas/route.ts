@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { createRecord } from "@/server/notion/store";
+import { createRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
+import { screenCopy } from "@/server/anthropic/screen";
+import { anthropicConfigured } from "@/server/anthropic/client";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +58,20 @@ export async function POST(req: Request) {
     }
 
     const record = await createRecord("ideas", values);
+
+    // Copy ideas get a capture-time trademark pre-screen — fire-and-forget,
+    // the chip appears on the card once the result lands on the record.
+    const isCopy = String(values["Capture Type"]) === "Copy" || (!image && (name || body.note));
+    if (isCopy && anthropicConfigured()) {
+      const text = [name, body.note ?? ""].filter(Boolean).join(" — ");
+      void screenCopy(text)
+        .then((r) =>
+          updateRecord("ideas", record.id, { "Trademark Risk": r.risk, "Risk Reason": r.reason })
+        )
+        .catch(() => {
+          /* advisory only — a failed screen never blocks capture */
+        });
+    }
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

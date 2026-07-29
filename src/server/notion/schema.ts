@@ -162,6 +162,10 @@ export const SCHEMA: DbSpec[] = [
       "Source URL": { type: "url" },
       Image: { type: "files" },
       Note: { type: "rich_text" },
+      // Capture-time trademark pre-screen for copy ideas — advisory early
+      // warning, never a gate; the real screen (R5/L6) still applies.
+      "Trademark Risk": { type: "select", options: ["Clear", "Caution", "High"] },
+      "Risk Reason": { type: "rich_text" },
       Occasion: { type: "select", options: OCCASIONS },
       "Occasion Date": { type: "date" },
       "Lead Time Days": { type: "number" },

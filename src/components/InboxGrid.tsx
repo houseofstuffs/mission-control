@@ -25,6 +25,8 @@ export interface IdeaCardData {
   enterCreativeBy: string | null;
   nicheName: string | null;
   imageUrl: string | null;
+  trademarkRisk: string | null;
+  riskReason: string;
 }
 
 export interface NicheOption {
@@ -427,6 +429,28 @@ export function InboxGrid({
               </div>
               {trash(idea)}
             </div>
+            {/* trademark pre-screen chip — advisory; hover shows the reason.
+                Copy ideas without a verdict yet offer a manual screen. */}
+            {idea.trademarkRisk ? (
+              <span
+                className={`chip ${
+                  idea.trademarkRisk === "High" ? "blocked" : idea.trademarkRisk === "Caution" ? "stale" : "done"
+                }`}
+                style={{ alignSelf: "flex-start", cursor: idea.riskReason ? "help" : undefined }}
+                title={idea.riskReason || undefined}
+              >
+                ™ {idea.trademarkRisk.toLowerCase()}
+              </span>
+            ) : idea.captureType === "Copy" && idea.status === "Inbox" ? (
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 11, padding: "3px 8px", alignSelf: "flex-start" }}
+                disabled={busyId === idea.id}
+                onClick={() => triage(idea.id, { action: "screen" })}
+              >
+                ™ screen
+              </button>
+            ) : null}
             {/* occasion lives in its dropdown now; only the due date earns a line */}
             {!compact && idea.enterCreativeBy ? (
               <div className="hint">due {monthDay(idea.enterCreativeBy)}</div>

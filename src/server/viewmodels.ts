@@ -111,6 +111,8 @@ export function ideaCards(): { ideas: IdeaCardData[]; niches: NicheOption[] } {
         enterCreativeBy: str(i.props["Enter Creative By"]) || null,
         nicheName: titleOf(nichesAll, rel(i.props["Niche"])[0]) || null,
         imageUrl: first?.url || null,
+        trademarkRisk: str(i.props["Trademark Risk"]) || null,
+        riskReason: str(i.props["Risk Reason"]),
       };
     });
   // inbox first, then triaged/promoted, discarded last

@@ -332,19 +332,27 @@ export function InboxGrid({
 
       {error ? <div className="callout blocked">{error}</div> : null}
 
+      {/* full-width horizontal drop band, same shape as the styles capture tile */}
+      {ideas.length > 0 ? (
+        <button
+          className="drop-tile"
+          {...dropHandlers}
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            minHeight: 120,
+            width: "100%",
+            ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
+          }}
+          aria-label="Drop an image to capture an idea"
+        >
+          <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
+          <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
+            DROP, PASTE (CTRL+V) OR CLICK
+          </span>
+        </button>
+      ) : null}
+
       <div className="inbox-grid">
-        {ideas.length > 0 ? (
-          <button
-            className="drop-tile"
-            {...dropHandlers}
-            onClick={() => fileInputRef.current?.click()}
-            style={dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : undefined}
-            aria-label="Drop an image to capture an idea"
-          >
-            <span style={{ fontSize: 30, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
-            <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>DROP IMAGE</span>
-          </button>
-        ) : null}
         {ideas.map((idea) => (
           <div key={idea.id} className="idea-card">
             {idea.imageUrl ? (

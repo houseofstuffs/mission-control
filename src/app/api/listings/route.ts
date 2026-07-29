@@ -40,8 +40,8 @@ export async function POST(req: Request) {
 
     const record = await createRecord("etsy_listings", values);
     await createRecord("workflow_log", {
-      Name: `${record.title} — Created`,
-      Event: "Created",
+      Name: `${record.title} — Created new`,
+      Event: "Created new",
       Listing: [record.id],
       "To Step": "L1",
       At: new Date().toISOString(),

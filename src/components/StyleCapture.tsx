@@ -300,6 +300,17 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
             reference actually depicted, generalise it into a slot — a style should work for
             a completely different subject.
           </div>
+          {/* save up top too — skim the whole draft, save, then tweak the top
+              fields without scrolling back down */}
+          <div className="row-gap-12">
+            <button className="btn btn-primary" onClick={save} disabled={busy !== null || !draft.name.trim()}>
+              {busy === "save" ? <span className="spinner" /> : null}
+              Save to Styles
+            </button>
+            <button className="btn btn-tertiary" onClick={discard} disabled={busy !== null}>
+              Discard
+            </button>
+          </div>
           <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
             <div className="field" style={{ flex: "1 1 240px" }}>
               <label className="kicker" htmlFor="cap-name">NAME</label>

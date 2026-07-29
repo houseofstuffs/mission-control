@@ -46,8 +46,8 @@ export async function POST(req: Request) {
 
     const record = await createRecord("designs", values);
     await createRecord("workflow_log", {
-      Name: `${record.title} — Created`,
-      Event: "Created",
+      Name: `${record.title} — Created new`,
+      Event: "Created new",
       Design: [record.id],
       "To Step": "C1",
       At: new Date().toISOString(),

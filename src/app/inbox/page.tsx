@@ -15,7 +15,7 @@ export default function InboxPage() {
   return (
     <div className="content-inner">
       <div className="page-head">
-        <h1 className="page-title">Inbox</h1>
+        <h1 className="page-title">Ideas</h1>
         <RefreshButton db="ideas" lastSyncedAt={sync?.lastSyncedAt ?? null} />
       </div>
       <div className="stack-22">

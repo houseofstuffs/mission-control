@@ -340,7 +340,8 @@ export function todaySummary(): TodaySummary {
     .map((l) => ({
       id: l.id,
       name: l.title,
-      event: str(l.props["Event"]),
+      // older rows wrote "Created"; read them as the current label
+      event: str(l.props["Event"]) === "Created" ? "Created new" : str(l.props["Event"]),
       detail: [str(l.props["From Step"]), str(l.props["To Step"])].filter(Boolean).join(" → "),
       at: str(l.props["At"]),
     }));

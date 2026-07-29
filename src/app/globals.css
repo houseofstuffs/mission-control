@@ -545,7 +545,21 @@ a:hover { color: var(--candy); }
   gap: 8px;
   cursor: pointer;
   font-family: inherit;
+  /* brand pattern fills the mint box; content rides above it */
+  position: relative;
+  overflow: hidden;
 }
+.drop-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("/assets/pattern-5-clean.svg");
+  background-repeat: repeat;
+  background-size: 220px;
+  opacity: 0.14;
+  pointer-events: none;
+}
+.drop-tile > * { position: relative; }
 .drop-tile:hover { background: #b8e6d6; }
 
 .idea-card {

@@ -184,6 +184,15 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
                 />
               </div>
             ))}
+            {/* second save at the bottom — after a full read-through you're
+                down here, not back at the top */}
+            <div className="row-gap-12">
+              <button className="btn btn-primary" onClick={save} disabled={busy !== null || !dirty}>
+                {busy === "save" ? <span className="spinner" /> : null}
+                Save changes
+              </button>
+              {dirty ? <span className="hint">Unsaved changes</span> : null}
+            </div>
           </div>
         </div>
 

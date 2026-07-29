@@ -68,6 +68,20 @@ export default function TodayPage() {
         />
       ) : (
         <div className="stack-22">
+          {/* what to do next, in priority order — Today's whole job (spec §2.2) */}
+          {s.nextUp.length > 0 && (
+            <div className="card" style={{ gap: 12 }}>
+              <Kicker>NEXT UP</Kicker>
+              {s.nextUp.map((n) => (
+                <Link key={n.label} href={n.href} style={{ display: "block" }}>
+                  <div className="body-sm">
+                    <strong>{n.label}</strong>
+                    <span className="muted"> — {n.why}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
           {(s.designs.blocked > 0 || s.listings.blocked > 0) && (
             <div className="callout blocked">
               {s.designs.blocked + s.listings.blocked} record

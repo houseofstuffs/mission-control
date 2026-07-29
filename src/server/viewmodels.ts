@@ -4,7 +4,7 @@
  */
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState } from "@/server/steps";
-import { KANBAN_STAGES } from "@/lib/workflows";
+import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
 import type { ListingRow } from "@/components/ListingsTable";
@@ -306,6 +306,7 @@ export interface TodaySummary {
   urgentIdeas: number;
   recentMoves: Array<{ id: string; name: string; event: string; detail: string; at: string }>;
   greenlitWaiting: string[];
+  nextUp: Array<{ label: string; why: string; href: string }>;
 }
 
 export function todaySummary(): TodaySummary {
@@ -346,6 +347,74 @@ export function todaySummary(): TodaySummary {
       at: str(l.props["At"]),
     }));
 
+  // ---- Next up: what to work on, in priority order, three items max ----
+  // Rule-based on workflow state — no model call, no guessing. Order:
+  // blocked (dead until touched) → stale (invalidated work) → occasion
+  // deadlines → the active record's current step → greenlit niches without
+  // a design → inbox triage when it piles up.
+  const nextUp: TodaySummary["nextUp"] = [];
+  const recordHref = (r: SimpleRecord) =>
+    r.dbKey === "designs" ? `/designs/${r.id}` : `/listings/${r.id}`;
+  const stepTitle = (r: SimpleRecord) => {
+    const wf = WORKFLOWS[r.dbKey === "designs" ? "creative" : "listing"];
+    const cur = str(r.props["Current Step"]);
+    return wf.steps.find((s) => s.id === cur)?.title ?? cur;
+  };
+
+  for (const r of [...designs, ...listings]) {
+    if (r.props["Has Blocked"]) {
+      nextUp.push({
+        label: `Unblock ${r.title || "Untitled"}`,
+        why: "blocked — nothing moves until the named condition clears",
+        href: recordHref(r),
+      });
+    }
+  }
+  for (const r of [...designs, ...listings]) {
+    if (r.props["Has Stale"] && !r.props["Has Blocked"]) {
+      nextUp.push({
+        label: `Redo or confirm stale steps on ${r.title || "Untitled"}`,
+        why: "a backtrack invalidated downstream work — redo it or mark it still valid",
+        href: recordHref(r),
+      });
+    }
+  }
+  for (const i of ideas) {
+    const by = str(i.props["Enter Creative By"]);
+    if (str(i.props["Status"]) === "Inbox" && by && new Date(by).getTime() - Date.now() < 7 * 86400_000) {
+      nextUp.push({
+        label: `Promote "${i.title}" now`,
+        why: `must enter creative by ${by} to make its occasion`,
+        href: "/inbox",
+      });
+    }
+  }
+  for (const r of [...designs, ...listings]) {
+    const cur = str(r.props["Current Step"]);
+    if (r.props["Has Blocked"] || r.props["Has Stale"]) continue;
+    if (!cur || cur === "Done" || cur === "Pushed") continue;
+    nextUp.push({
+      label: `${r.title || "Untitled"}: do ${cur} — ${stepTitle(r)}`,
+      why: "the active record's next step",
+      href: recordHref(r),
+    });
+  }
+  for (const name of greenlitWaiting) {
+    nextUp.push({
+      label: `Start a design for ${name}`,
+      why: "greenlit but nothing in creative yet",
+      href: "/inbox",
+    });
+  }
+  const inboxCount = ideas.filter((i) => str(i.props["Status"]) === "Inbox").length;
+  if (inboxCount >= 5) {
+    nextUp.push({
+      label: `Triage the inbox — ${inboxCount} ideas waiting`,
+      why: "capture is one action; triage weekly",
+      href: "/inbox",
+    });
+  }
+
   return {
     designs: {
       total: designs.length,
@@ -358,9 +427,10 @@ export function todaySummary(): TodaySummary {
       stale: listings.filter((l) => l.props["Has Stale"]).length,
       blocked: listings.filter((l) => l.props["Has Blocked"]).length,
     },
-    inboxCount: ideas.filter((i) => str(i.props["Status"]) === "Inbox").length,
+    inboxCount,
     urgentIdeas: urgent,
     recentMoves,
     greenlitWaiting,
+    nextUp: nextUp.slice(0, 3),
   };
 }

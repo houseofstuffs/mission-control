@@ -94,50 +94,113 @@ Rules:
 
 Write prompts as working prompts — no preamble, no explanation inside them.`;
 
+/** One composed candidate — a pair plus provenance. */
+export interface Candidate extends ComposedPair {
+  styleName: string;
+  /** true = a direction the model proposed, not a library style */
+  suggested: boolean;
+}
+
+const CANDIDATES_SCHEMA = {
+  type: "object",
+  properties: {
+    candidates: {
+      type: "array",
+      description:
+        "One candidate per given style, IN THE ORDER GIVEN, then any suggested new directions after them.",
+      items: {
+        type: "object",
+        properties: {
+          styleName: {
+            type: "string",
+            description:
+              "For library styles: the style's name exactly as given. For suggested directions: a fresh 2-3 word name for the direction.",
+          },
+          suggested: {
+            type: "boolean",
+            description: "false for the given library styles; true for directions you proposed.",
+          },
+          imagePrompt: (PAIR_SCHEMA.properties as Record<string, unknown>).imagePrompt,
+          textPrompt: (PAIR_SCHEMA.properties as Record<string, unknown>).textPrompt,
+          textureNote: (PAIR_SCHEMA.properties as Record<string, unknown>).textureNote,
+          screeningPhrases: (PAIR_SCHEMA.properties as Record<string, unknown>).screeningPhrases,
+          notes: (PAIR_SCHEMA.properties as Record<string, unknown>).notes,
+        },
+        required: ["styleName", "suggested", "imagePrompt", "textPrompt", "textureNote", "screeningPhrases", "notes"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["candidates"],
+  additionalProperties: false,
+} as const;
+
+const MULTI_ADDENDUM = `
+
+MULTIPLE STYLES: when given several style records, compose one complete
+candidate per style, in the order given. Keep them genuinely distinct — each
+candidate honours ITS style's register, linework and type; do not let
+phrasings bleed between them. The same slot fills and copy apply to all.
+
+SUGGESTED DIRECTIONS: when asked for N extra directions, add N candidates
+after the library ones, marked suggested=true, each with a fresh 2-3 word
+name. Draw them from registers deliberately OUTSIDE the given styles'
+territory — they exist to widen the comparison at C2, not to echo it. Same
+rules apply: flat artwork, no subject drift, lettering separate.`;
+
 export interface ApplyInput {
-  style: Record<string, string>;
+  /** 1-5 library style records, name → full field map */
+  styles: Array<{ name: string; fields: Record<string, string> }>;
   fills: Record<string, string>;
   copy: string;
   context?: string; // niche / product / occasion, assembled by the caller
+  /** 0-2 model-proposed directions on top of the library styles */
+  suggestCount: number;
 }
 
-export async function composePair(input: ApplyInput): Promise<ComposedPair> {
-  const styleBlock = Object.entries(input.style)
-    .filter(([, v]) => v.trim())
-    .map(([k, v]) => `${k}: ${v}`)
-    .join("\n");
+export async function composeCandidates(input: ApplyInput): Promise<Candidate[]> {
+  const styleBlocks = input.styles
+    .map((s, i) => {
+      const body = Object.entries(s.fields)
+        .filter(([, v]) => v.trim())
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n");
+      return `STYLE ${i + 1} — "${s.name}":\n${body}`;
+    })
+    .join("\n\n");
   const fillsBlock = Object.entries(input.fills)
     .filter(([, v]) => v.trim())
     .map(([k, v]) => `${k} = ${v}`)
     .join("\n");
 
   const user = [
-    "STYLE RECORD:",
-    styleBlock,
+    styleBlocks,
     "",
-    "SLOT FILLS:",
+    "SLOT FILLS (apply to every candidate):",
     fillsBlock || "(none — single-subject design)",
     "",
     `COPY (exact text to set): ${input.copy.trim() || "(no lettering on this design)"}`,
     input.context ? `\nDESIGN CONTEXT: ${input.context}` : "",
     "",
-    "Compose the image + text prompt pair.",
+    input.suggestCount > 0
+      ? `Compose one candidate per style above, then suggest ${input.suggestCount} additional direction${input.suggestCount === 1 ? "" : "s"} from outside their territory.`
+      : "Compose one candidate per style above.",
   ].join("\n");
 
   const message = await anthropic().messages.create({
     model: model(),
-    max_tokens: 16000,
-    system: SYSTEM,
-    output_config: { format: { type: "json_schema", schema: PAIR_SCHEMA } },
+    max_tokens: 32000,
+    system: SYSTEM + MULTI_ADDENDUM,
+    output_config: { format: { type: "json_schema", schema: CANDIDATES_SCHEMA } },
     messages: [{ role: "user", content: [{ type: "text", text: user }] }],
   });
 
   if (message.stop_reason === "refusal") {
-    throw new Error("The model declined to compose this pair. Check the copy and try again.");
+    throw new Error("The model declined to compose these candidates. Check the copy and try again.");
   }
   const text = message.content.find((b) => b.type === "text");
   if (!text || text.type !== "text") {
-    throw new Error("No prompts returned — try again.");
+    throw new Error("No candidates returned — try again.");
   }
-  return JSON.parse(text.text) as ComposedPair;
+  return (JSON.parse(text.text) as { candidates: Candidate[] }).candidates;
 }

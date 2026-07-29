@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
-import { ApplyPanel, type StyleOption, type SavedPair } from "./ApplyPanel";
+import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 
 export interface RunnerRecord {
   id: string;
@@ -36,10 +36,12 @@ export function StepRunner({
   record,
   styles,
   savedPair,
+  candidates,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
   savedPair?: SavedPair;
+  candidates?: CandidateData[];
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -200,8 +202,8 @@ export function StepRunner({
           </div>
         </div>
 
-        {/* C1 is where a style meets this design's content. Apply composes
-            the prompt pair; Capture births a style from a reference without
+        {/* C1 is where styles meet this design's content. Apply composes the
+            candidate set; Capture births a style from a reference without
             leaving the runner (spec §9.2). Outside the step card — these are
             work surfaces, not step state. Collapsed buttons share one row. */}
         {record.workflowKey === "creative" && selected.id === "C1" ? (
@@ -210,9 +212,22 @@ export function StepRunner({
               designId={record.id}
               styles={styles ?? []}
               saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "", textureNote: "" }}
+              hasCandidates={(candidates ?? []).length > 0}
             />
             <StyleCapture compact />
           </div>
+        ) : null}
+
+        {/* the candidate set follows the design to C2 — generate each image
+            prompt there, then crown the winner */}
+        {record.workflowKey === "creative" &&
+        (selected.id === "C1" || selected.id === "C2") &&
+        (candidates ?? []).length > 0 ? (
+          <CandidatesBoard
+            designId={record.id}
+            candidates={candidates!}
+            chosenImagePrompt={savedPair?.imagePrompt ?? ""}
+          />
         ) : null}
         </div>
 

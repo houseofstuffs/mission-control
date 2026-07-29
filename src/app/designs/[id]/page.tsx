@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
-import type { StyleOption, SavedPair } from "@/components/ApplyPanel";
+import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import { Kicker } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,12 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
           </div>
         </div>
       ) : null}
-      <StepRunner record={runnerRecord(rec)} styles={styleOptions()} savedPair={savedPair(rec)} />
+      <StepRunner
+        record={runnerRecord(rec)}
+        styles={styleOptions()}
+        savedPair={savedPair(rec)}
+        candidates={parseCandidates(rec)}
+      />
     </div>
   );
 }
@@ -47,6 +52,17 @@ function styleOptions(): StyleOption[] {
     category: String(s.props["Category"] ?? ""),
     slots: String(s.props["Slots"] ?? ""),
   }));
+}
+
+function parseCandidates(rec: NonNullable<ReturnType<typeof cachedRecord>>): CandidateData[] {
+  const raw = rec.props["Prompt Candidates (JSON)"];
+  if (typeof raw !== "string" || !raw.trim()) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as CandidateData[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function savedPair(rec: NonNullable<ReturnType<typeof cachedRecord>>): SavedPair {

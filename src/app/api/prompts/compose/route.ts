@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
-import { composePair } from "@/server/anthropic/apply";
+import { composeCandidates, type Candidate } from "@/server/anthropic/apply";
 import { anthropicConfigured } from "@/server/anthropic/client";
+import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 180;
@@ -17,54 +18,63 @@ const STYLE_FIELDS = [
   "Rule of Thumb",
 ];
 
+/** A stored candidate: what the composer returned plus its library id. */
+export interface StoredCandidate extends Candidate {
+  styleId: string | null;
+}
+
 /**
- * Apply mode: style + fills + copy → prompt pair. `save: true` writes the
- * pair and the Style relation to the design; without it this is a dry run —
- * regenerate freely, nothing touches Notion.
+ * Apply mode. Two operations:
+ *
+ * compose — 1-5 library styles + optional suggested directions → candidates.
+ * The full set writes to the design's Prompt Candidates (JSON) immediately:
+ * the winner is picked at C2 after real generations, so the candidates must
+ * survive the trip to Kittl and back.
+ *
+ * commit — one candidate wins: its pair lands in Image/Text Prompt and
+ * Texture Note, and the Style relation is set when it's a library style.
  */
 export async function POST(req: Request) {
   try {
+    const body = await req.json();
+    const design = cachedRecord(String(body.designId ?? ""));
+    if (!design || design.dbKey !== "designs") {
+      return NextResponse.json({ error: "Design not found in cache — refresh first" }, { status: 404 });
+    }
+
+    // ---- commit the winner ----
+    if (body.commit) {
+      const c = body.commit as Partial<StoredCandidate>;
+      const values: Record<string, SimpleValue> = {
+        "Image Prompt": c.imagePrompt ?? "",
+        "Text Prompt": c.textPrompt ?? "",
+        "Texture Note": c.textureNote ?? "",
+      };
+      if (c.styleId) values["Style"] = [c.styleId];
+      const record = await updateRecord("designs", design.id, values);
+      return NextResponse.json({ record });
+    }
+
+    // ---- compose candidates ----
     if (!anthropicConfigured()) {
       return NextResponse.json(
         { error: "ANTHROPIC_API_KEY is not set. Add it in your host's environment variables." },
         { status: 400 }
       );
     }
-    const body = await req.json();
-    const { designId, styleId, fills, copy, save, imagePrompt, textPrompt, textureNote } = body as {
-      designId: string;
-      styleId: string;
-      fills?: Record<string, string>;
-      copy?: string;
-      save?: boolean;
-      imagePrompt?: string;
-      textPrompt?: string;
-      textureNote?: string;
-    };
-
-    const design = cachedRecord(designId);
-    if (!design || design.dbKey !== "designs") {
-      return NextResponse.json({ error: "Design not found in cache — refresh first" }, { status: 404 });
+    const styleIds = (body.styleIds as string[] | undefined) ?? [];
+    if (styleIds.length < 1 || styleIds.length > 5) {
+      return NextResponse.json({ error: "Pick 1-5 styles." }, { status: 400 });
     }
+    const suggest = Math.min(2, Math.max(0, Number(body.suggest ?? 0)));
 
-    // Save path: write the (possibly hand-edited) pair through to Notion.
-    if (save) {
-      const record = await updateRecord("designs", designId, {
-        "Image Prompt": imagePrompt ?? "",
-        "Text Prompt": textPrompt ?? "",
-        "Texture Note": textureNote ?? "",
-        ...(styleId ? { Style: [styleId] } : {}),
-      });
-      return NextResponse.json({ record });
-    }
-
-    const style = cachedRecord(styleId);
-    if (!style || style.dbKey !== "styles") {
-      return NextResponse.json({ error: "Style not found in cache — refresh first" }, { status: 404 });
-    }
-
-    const styleBlock: Record<string, string> = { Name: style.title };
-    for (const f of STYLE_FIELDS) styleBlock[f] = String(style.props[f] ?? "");
+    const styles = styleIds.map((id) => {
+      const s = cachedRecord(id);
+      if (!s || s.dbKey !== "styles") throw new Error("A selected style is missing from the cache — refresh first.");
+      const fields: Record<string, string> = {};
+      for (const f of STYLE_FIELDS) fields[f] = String(s.props[f] ?? "");
+      return { id, name: s.title, fields };
+    });
 
     // Context the composer should know: niche, product, occasion.
     const parts: string[] = [];
@@ -80,13 +90,27 @@ export async function POST(req: Request) {
     }
     if (design.props["Occasion"]) parts.push(`occasion ${String(design.props["Occasion"])}`);
 
-    const pair = await composePair({
-      style: styleBlock,
-      fills: fills ?? {},
-      copy: copy ?? "",
+    const raw = await composeCandidates({
+      styles: styles.map((s) => ({ name: s.name, fields: s.fields })),
+      fills: (body.fills as Record<string, string>) ?? {},
+      copy: String(body.copy ?? ""),
       context: parts.length ? parts.join(", ") : undefined,
+      suggestCount: suggest,
     });
-    return NextResponse.json({ pair });
+
+    // Library candidates come back in input order; suggested ones follow.
+    const library = raw.filter((c) => !c.suggested);
+    const candidates: StoredCandidate[] = raw.map((c) => {
+      if (c.suggested) return { ...c, styleId: null };
+      const idx = library.indexOf(c);
+      return { ...c, styleId: styles[idx]?.id ?? styles.find((s) => s.name === c.styleName)?.id ?? null };
+    });
+
+    // Persist immediately — these must survive the trip to Kittl and back.
+    await updateRecord("designs", design.id, {
+      "Prompt Candidates (JSON)": JSON.stringify(candidates),
+    });
+    return NextResponse.json({ candidates });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

@@ -320,6 +320,9 @@ export const SCHEMA: DbSpec[] = [
       // The C5 instruction: which texture, mask vs overlay, strength.
       // Generation stays flat; texture is a layer, never baked in.
       "Texture Note": { type: "rich_text" },
+      // All composed style candidates (3-5 + suggested directions) — the
+      // winner is chosen at C2 after real generations, not at C1.
+      "Prompt Candidates (JSON)": { type: "rich_text" },
       "Artwork Link": { type: "url" },
       "PSD Master Link": { type: "url" },
       "PSD Saved At": { type: "date" },

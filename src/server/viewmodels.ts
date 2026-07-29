@@ -392,18 +392,53 @@ export function todaySummary(): TodaySummary {
     .filter((n) => str(n.props["Gate"]) === "Greenlit" && !usedNicheIds.has(n.id))
     .map((n) => n.title);
 
+  // Step ids are unique across workflows (C*/L*) — resolve to runner titles.
+  const stepTitle = (id: string): string => {
+    for (const wf of [WORKFLOWS.creative, WORKFLOWS.listing]) {
+      const s = wf.steps.find((x) => x.id === id);
+      if (s) return s.title;
+    }
+    return id;
+  };
   const recentMoves = logs
     .slice()
     .sort((a, b) => str(b.props["At"]).localeCompare(str(a.props["At"])))
     .slice(0, 8)
-    .map((l) => ({
-      id: l.id,
-      name: l.title,
-      // older rows wrote "Created"; read them as the current label
-      event: str(l.props["Event"]) === "Created" ? "Created new" : str(l.props["Event"]),
-      detail: [str(l.props["From Step"]), str(l.props["To Step"])].filter(Boolean).join(" → "),
-      at: str(l.props["At"]),
-    }));
+    .map((l) => {
+      const rawEvent = str(l.props["Event"]) === "Created" ? "Created new" : str(l.props["Event"]);
+      const from = str(l.props["From Step"]);
+      const to = str(l.props["To Step"]);
+      // speak in step names, as the runner does — "Input branch done",
+      // not "Step done (C1 → C2)"
+      let event = rawEvent;
+      switch (rawEvent) {
+        case "Step done":
+          event = from ? `${stepTitle(from)} done` : "Step done";
+          break;
+        case "Backtrack":
+          event = to ? `Backtracked to ${stepTitle(to)}` : "Backtrack";
+          break;
+        case "Still valid":
+          event = to ? `${stepTitle(to)} still valid` : "Still valid";
+          break;
+        case "Blocked":
+          event = to ? `Blocked at ${stepTitle(to)}` : "Blocked";
+          break;
+        case "Unblocked":
+          event = to ? `Unblocked at ${stepTitle(to)}` : "Unblocked";
+          break;
+        case "Moved":
+          event = to ? `Moved to ${stepTitle(to)}` : "Moved";
+          break;
+        case "Created new":
+          event = to ? `Created new at ${stepTitle(to)}` : "Created new";
+          break;
+      }
+      // page titles carry an " — event" suffix; show the record name alone
+      const cut = l.title.lastIndexOf(" — ");
+      const name = cut > 0 ? l.title.slice(0, cut) : l.title;
+      return { id: l.id, name, event, detail: "", at: str(l.props["At"]) };
+    });
 
   // ---- Next up: what to work on, in priority order, three items max ----
   // Rule-based on workflow state — no model call, no guessing. Order:

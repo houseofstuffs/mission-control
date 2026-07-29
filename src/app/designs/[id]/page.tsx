@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { cachedRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
+import type { StyleOption, SavedPair } from "@/components/ApplyPanel";
 import { Kicker } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,24 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
           </div>
         </div>
       ) : null}
-      <StepRunner record={runnerRecord(rec)} />
+      <StepRunner record={runnerRecord(rec)} styles={styleOptions()} savedPair={savedPair(rec)} />
     </div>
   );
+}
+
+function styleOptions(): StyleOption[] {
+  return cachedRecords("styles").map((s) => ({
+    id: s.id,
+    name: s.title,
+    category: String(s.props["Category"] ?? ""),
+    slots: String(s.props["Slots"] ?? ""),
+  }));
+}
+
+function savedPair(rec: NonNullable<ReturnType<typeof cachedRecord>>): SavedPair {
+  return {
+    styleId: (rec.props["Style"] as string[] | null)?.[0] ?? null,
+    imagePrompt: String(rec.props["Image Prompt"] ?? ""),
+    textPrompt: String(rec.props["Text Prompt"] ?? ""),
+  };
 }

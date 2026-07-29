@@ -313,6 +313,10 @@ export const SCHEMA: DbSpec[] = [
       "Target Publish Date": { type: "date" },
       "Actual Publish Date": { type: "date" },
       "Master Canvas (JSON)": { type: "rich_text" },
+      // C1's output — the composed pair from Apply mode (style × subject).
+      // Stored on the design so C2/C3 read from the record, not a chat log.
+      "Image Prompt": { type: "rich_text" },
+      "Text Prompt": { type: "rich_text" },
       "Artwork Link": { type: "url" },
       "PSD Master Link": { type: "url" },
       "PSD Saved At": { type: "date" },

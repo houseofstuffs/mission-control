@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
+import { ApplyPanel, type StyleOption, type SavedPair } from "./ApplyPanel";
 
 export interface RunnerRecord {
   id: string;
@@ -31,7 +32,15 @@ async function stepAction(body: Record<string, unknown>): Promise<string | null>
   return res.ok ? null : (json.error as string) ?? "Action failed";
 }
 
-export function StepRunner({ record }: { record: RunnerRecord }) {
+export function StepRunner({
+  record,
+  styles,
+  savedPair,
+}: {
+  record: RunnerRecord;
+  styles?: StyleOption[];
+  savedPair?: SavedPair;
+}) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
   const terminal = record.workflowKey === "creative" ? "Done" : "Pushed";
@@ -189,10 +198,18 @@ export function StepRunner({ record }: { record: RunnerRecord }) {
             )}
           </div>
 
-          {/* C1 is where a style is chosen or born — capture one from a
-              reference without leaving the runner (spec §9.2 Capture mode). */}
+          {/* C1 is where a style meets this design's content. Apply composes
+              the prompt pair; Capture births a style from a reference without
+              leaving the runner (spec §9.2). */}
           {record.workflowKey === "creative" && selected.id === "C1" ? (
-            <StyleCapture compact />
+            <>
+              <ApplyPanel
+                designId={record.id}
+                styles={styles ?? []}
+                saved={savedPair ?? { styleId: null, imagePrompt: "", textPrompt: "" }}
+              />
+              <StyleCapture compact />
+            </>
           ) : null}
         </div>
 

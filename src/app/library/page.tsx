@@ -1,30 +1,27 @@
 /**
- * Library — the inbox-grid archetype serving three collections: Styles,
- * Textures, Mockup Templates (spec §12 archetype 3). Read-only in Phase 1;
- * records are created by prompts (Phase 2) and the browser clipper (Phase 3).
+ * Library — the inbox-grid archetype serving the clipper-fed collections:
+ * Textures and Mockup Templates (spec §12 archetype 3). Both arrive via the
+ * browser extension in Phase 3. Styles moved to their own page — they're
+ * AI-captured and hand-edited, a different lifecycle entirely.
  */
 import { cachedRecords } from "@/server/notion/store";
 import { syncState } from "@/server/cache/db";
 import { RefreshButton } from "@/components/RefreshButton";
-import { StyleCapture } from "@/components/StyleCapture";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
 export default function LibraryPage() {
-  const styles = cachedRecords("styles");
   const textures = cachedRecords("textures");
   const mockups = cachedRecords("mockup_templates");
   const designs = cachedRecords("designs");
-  const sync = syncState()["styles"];
+  const sync = syncState()["textures"];
 
-  const empty = styles.length === 0 && textures.length === 0 && mockups.length === 0;
+  const empty = textures.length === 0 && mockups.length === 0;
 
   const textureUsage = (textureId: string) =>
     designs.filter((d) => (d.props["Texture"] as string[] | null)?.includes(textureId)).length;
-  const styleUsage = (styleId: string) =>
-    designs.filter((d) => (d.props["Style"] as string[] | null)?.includes(styleId)).length;
 
   return (
     <div className="content-inner">
@@ -33,53 +30,16 @@ export default function LibraryPage() {
         <RefreshButton lastSyncedAt={sync?.lastSyncedAt ?? null} />
       </div>
 
-      <StyleCapture />
-
       {empty ? (
         <EmptyState
           title="Your library builds itself"
-          copy="Styles come from Capture mode above — drop a reference and review the draft. Textures and mockup templates arrive with the clipper. Favorites derive from usage, not a hand-maintained list."
+          copy="Textures and mockup templates arrive with the browser clipper. Favorites derive from usage, not a hand-maintained list. Styles live on their own page now."
           hint="The browser extension arrives in Phase 3."
           patternUrl={assetUrl("pattern")}
           figureUrl={assetUrl("figure")}
         />
       ) : (
         <div className="stack-22">
-          <section className="stack-12">
-            <Kicker>STYLES · {styles.length}</Kicker>
-            <div className="inbox-grid">
-              {styles.map((s) => (
-                <div key={s.id} className="idea-card">
-                  {(() => {
-                    const img = s.props["Source Image"];
-                    const first = Array.isArray(img) && img.length > 0 ? (img[0] as { url?: string }) : null;
-                    return first?.url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={first.url} alt="" className="idea-thumb" />
-                    ) : null;
-                  })()}
-                  <div className="title">{s.title}</div>
-                  <div className="body-sm">{String(s.props["Description"] ?? "").slice(0, 140)}</div>
-                  {s.props["Rule of Thumb"] ? (
-                    <div className="hint">{String(s.props["Rule of Thumb"])}</div>
-                  ) : null}
-                  <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                    {s.props["Category"] ? (
-                      <span className="chip neutral">{String(s.props["Category"])}</span>
-                    ) : null}
-                    {s.props["Print Suitability"] ? (
-                      <span className={`chip ${s.props["Print Suitability"] === "Avoid" ? "blocked" : "done"}`}>
-                        {String(s.props["Print Suitability"])}
-                      </span>
-                    ) : null}
-                    <span className="chip count">used in {styleUsage(s.id)}</span>
-                  </div>
-                </div>
-              ))}
-              {styles.length === 0 ? <div className="hint">No styles captured yet.</div> : null}
-            </div>
-          </section>
-
           <section className="stack-12">
             <Kicker>TEXTURES · {textures.length}</Kicker>
             <div className="inbox-grid">

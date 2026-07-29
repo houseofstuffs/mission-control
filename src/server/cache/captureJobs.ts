@@ -52,6 +52,14 @@ export function createCaptureJob(imageB64: string, mediaType: string, fileName: 
 
 export function getCaptureJob(id: string): CaptureJob | null {
   ensureTable();
+  // A job "running" longer than any request could survive means the server
+  // restarted (deploy) mid-capture — the work died with the old process.
+  // Fail it so the client stops waiting and the operator can just retry.
+  cacheDb()
+    .prepare(
+      "UPDATE capture_jobs SET status = 'error', error = 'Capture was interrupted by a deploy — drop the reference and try again.' WHERE id = ? AND status = 'running' AND created_at < datetime('now', '-5 minutes')"
+    )
+    .run(id);
   const row = cacheDb().prepare("SELECT * FROM capture_jobs WHERE id = ?").get(id) as
     | Record<string, string | null>
     | undefined;

@@ -150,6 +150,9 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     setError(null);
     setSaved(null);
     setDraft(null);
+    // A fresh reference always resets the panel — without this, a job
+    // orphaned by a deploy kept "generating" forever and bricked the button.
+    clearJob();
     setFile(f);
   }
 
@@ -249,6 +252,11 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
                 {file && !generating ? (
                   <button className="btn btn-tertiary" onClick={() => setFile(null)}>
                     Remove
+                  </button>
+                ) : null}
+                {generating ? (
+                  <button className="btn btn-tertiary" onClick={clearJob}>
+                    Cancel
                   </button>
                 ) : null}
               </div>

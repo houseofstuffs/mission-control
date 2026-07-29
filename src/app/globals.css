@@ -589,15 +589,31 @@ a:hover { color: var(--candy); }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease, transform 0.12s ease;
+  position: relative;
+  isolation: isolate;
+  transition: border-color 0.12s ease, transform 0.12s ease;
 }
-/* hover = border + lift with the offset shadow. On photo cards a border
-   change alone drowns under the image; the lift reads at any card size,
-   so every idea-card (photos, copy, niches, styles) responds identically. */
+/* hover = border + lift with the offset shadow. The shadow lives on a
+   pseudo-element and fades via opacity — transitioning box-shadow repaints
+   the whole card, which stutters on photo cards; opacity is GPU-cheap, so
+   photos, copy, niches and styles all animate identically. */
+.idea-card::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--radius-card);
+  box-shadow: 4px 4px 0 var(--shadow-offset-mint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  z-index: -1;
+  pointer-events: none;
+}
 .idea-card:hover {
   border-color: var(--blueberry);
-  box-shadow: 4px 4px 0 var(--shadow-offset-mint);
   transform: translate(-1px, -1px);
+}
+.idea-card:hover::after {
+  opacity: 1;
 }
 /* uniform square thumbnails — whole image visible, letterboxed on the well
    background (cover-cropping guillotined tall designs) */

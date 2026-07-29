@@ -62,7 +62,37 @@ export function NichesPanel({ niches }: { niches: NicheCardData[] }) {
           const reasonValue = drafts[n.id] ?? n.gateReason;
           return (
             <div key={n.id} className="idea-card">
-              <div className={`title${n.gate === "Killed" ? " killed-title" : ""}`}>{n.name}</div>
+              <div className="row-gap-8" style={{ alignItems: "center" }}>
+                <div
+                  className={`title${n.gate === "Killed" ? " killed-title" : ""}`}
+                  style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                  title={n.name}
+                >
+                  {n.name}
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Delete ${n.name}`}
+                  title="Delete"
+                  disabled={busyId === n.id}
+                  onClick={async () => {
+                    if (!window.confirm(`Delete "${n.name}"? It moves to Notion's trash, recoverable for 30 days.`)) return;
+                    const res = await fetch(`/api/niches/${n.id}`, { method: "DELETE" });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok) setError((json as { error?: string }).error ?? "Delete failed");
+                    else router.refresh();
+                  }}
+                  style={{
+                    flexShrink: 0, width: 22, height: 22, display: "inline-flex", alignItems: "center",
+                    justifyContent: "center", padding: 0, border: "none", background: "transparent",
+                    cursor: "pointer", color: "var(--text-secondary, #8a7a5c)",
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
               <div className="row-gap-8">
                 <span className={`chip ${chip.cls}`}>{chip.label}</span>
                 <span className="hint">

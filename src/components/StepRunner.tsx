@@ -13,6 +13,7 @@ import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
+import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 
 export interface RunnerRecord {
   id: string;
@@ -39,12 +40,14 @@ export function StepRunner({
   savedPair,
   candidates,
   seo,
+  slots,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
   savedPair?: SavedPair;
   candidates?: CandidateData[];
   seo?: SeoData;
+  slots?: SlotsData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -226,6 +229,11 @@ export function StepRunner({
             same as the C1 tools. */}
         {record.workflowKey === "listing" && selected.id === "L2" && seo ? (
           <KeywordSeoPanel seo={seo} />
+        ) : null}
+
+        {/* L5 is the slot plan — assemble the ordered image set */}
+        {record.workflowKey === "listing" && selected.id === "L5" && slots ? (
+          <ImageSlotsPanel data={slots} />
         ) : null}
 
         {/* the candidate set follows the design to C2 — generate each image

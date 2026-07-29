@@ -1,0 +1,93 @@
+/**
+ * Image-slot tunables. Etsy raised the photo cap from 10 to 20 in Aug 2025
+ * (plus one video slot) — MAX_IMAGES stays config, not hardcode, in case it
+ * moves again. 20 is a ceiling, not a quota: MIN_RECOMMENDED_IMAGES is the
+ * advisory floor.
+ */
+
+export const MAX_IMAGES = 20;
+export const MIN_RECOMMENDED_IMAGES = 7;
+
+/** The JOB a slot does. Orthogonal to shot type — never nested. */
+export const BUCKETS = ["Sell Design", "Sell Belief", "Sell Specifics"] as const;
+export type ImageBucket = (typeof BUCKETS)[number];
+
+/**
+ * HOW a slot is rendered. Independent of bucket: a closeup print can sell
+ * the design (artwork detail) or sell belief (print quality).
+ */
+export const SHOT_TYPES = [
+  "Artwork Only",      // design on flat/transparent bg, no garment
+  "Flat Lay",          // garment laid flat, whole, no props
+  "Flat Lay Styled",   // flat lay with props/scene
+  "On Model",          // worn by a person
+  "Ghost Mannequin",   // invisible-mannequin form shot
+  "Hanging",           // on hanger
+  "Folded",            // folded/stacked
+  "Closeup Print",     // macro of print detail, texture, ink
+  "Closeup Fabric",    // macro of material/weave/stitching
+  "Lifestyle Scene",   // garment in context, not necessarily worn
+  "Grid Composite",    // multiple variants/colors in one image
+  "Graphic Card",      // text-based: size chart, care, color chart, personalisation howto
+  "Video",             // the single video slot
+] as const;
+export type ShotType = (typeof SHOT_TYPES)[number];
+
+export const SLOT_STATUSES = ["Planned", "Made", "Placed"] as const;
+export type SlotStatus = (typeof SLOT_STATUSES)[number];
+
+export interface SeedSlot {
+  position: number;
+  label: string;
+  bucket: ImageBucket;
+  shotType: ShotType;
+}
+
+/**
+ * Single-variant seed — slots 1-17; 18-20 stay empty by default, never
+ * force-filled. Position 1 is the search thumbnail.
+ */
+export const SINGLE_SEED: SeedSlot[] = [
+  { position: 1, label: "hero — best-selling color", bucket: "Sell Design", shotType: "On Model" },
+  { position: 2, label: "artwork detail", bucket: "Sell Design", shotType: "Artwork Only" },
+  { position: 3, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 4, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 5, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 6, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 7, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 8, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 9, label: "lifestyle", bucket: "Sell Belief", shotType: "Lifestyle Scene" },
+  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 11, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 12, label: "print detail", bucket: "Sell Belief", shotType: "Closeup Print" },
+  { position: 13, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
+  { position: 14, label: "objection", bucket: "Sell Belief", shotType: "Closeup Fabric" },
+  { position: 15, label: "color grid", bucket: "Sell Design", shotType: "Grid Composite" },
+  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card" },
+  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card" },
+];
+
+/**
+ * Multi-variant seed — the hero sells the CONCEPT, never one name. Guidance
+ * rule: show the SYSTEM plus 2-3 examples; never spend slots on repeated
+ * name variations.
+ */
+export const MULTI_SEED: SeedSlot[] = [
+  { position: 1, label: "hero — the concept, not one name", bucket: "Sell Design", shotType: "Grid Composite" },
+  { position: 2, label: "variant range", bucket: "Sell Design", shotType: "Grid Composite" },
+  { position: 3, label: "garment compare (tee vs sweatshirt)", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 4, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 5, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 6, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 7, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 8, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
+  { position: 9, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 11, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 12, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 13, label: "print detail", bucket: "Sell Belief", shotType: "Closeup Print" },
+  { position: 14, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
+  { position: 15, label: "personalisation — how to submit custom text", bucket: "Sell Specifics", shotType: "Graphic Card" },
+  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card" },
+  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card" },
+];

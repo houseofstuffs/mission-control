@@ -234,6 +234,16 @@ export const SCHEMA: DbSpec[] = [
       License: { type: "rich_text" },
       "File Link": { type: "url" },
       "Product Types": { type: "rich_text" },
+      // How this template renders — auto-fills the slot's shot type when the
+      // template is chosen (slot value set beforehand = the plan).
+      "Shot Type": {
+        type: "select",
+        options: [
+          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
+          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
+          "Grid Composite", "Graphic Card", "Video",
+        ],
+      },
       Notes: { type: "rich_text" },
     },
   },
@@ -355,6 +365,9 @@ export const SCHEMA: DbSpec[] = [
       "Etsy State": { type: "select", options: ["Not pushed", "Draft", "Active", "Inactive", "Expired"] },
       Designs: { type: "relation", relation: "designs" },
       "Variant Design Map (JSON)": { type: "rich_text" },
+      // Customizable text (dad/mom/kid) or multiple garment types in one
+      // listing — switches the image-slot seed and adds two publish gates.
+      "Is Multi Variant": { type: "checkbox" },
       Product: { type: "relation", relation: "products" },
       "Shop Section": { type: "relation", relation: "shop_sections" },
       "Origin Type": {
@@ -444,6 +457,31 @@ export const SCHEMA: DbSpec[] = [
       Designs: { type: "relation", relation: "designs" },
       Collections: { type: "relation", relation: "collections" },
       "Etsy Listings": { type: "relation", relation: "etsy_listings" },
+    },
+  },
+  {
+    key: "image_slots",
+    title: "Image Slots",
+    description:
+      "Per-listing image plan — up to 20 ordered slots (Etsy's cap since Aug 2025, +1 video; MAX_IMAGES in src/config/images.ts). Bucket is the slot's JOB, Shot Type is HOW it renders — orthogonal, never nested. Position 1 is the search thumbnail. Seeded on listing creation; slots 18-20 stay empty by default.",
+    properties: {
+      Name: { type: "title" }, // the slot's label/purpose: hero, colorway, objection...
+      Listing: { type: "relation", relation: "etsy_listings" },
+      Position: { type: "number" },
+      Bucket: { type: "select", options: ["Sell Design", "Sell Belief", "Sell Specifics"] },
+      "Shot Type": {
+        type: "select",
+        options: [
+          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
+          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
+          "Grid Composite", "Graphic Card", "Video",
+        ],
+      },
+      Status: { type: "select", options: ["Planned", "Made", "Placed"] },
+      // link to the mockup/image file; empty = planned-not-yet-made
+      "Asset Ref": { type: "url" },
+      "Mockup Template": { type: "relation", relation: "mockup_templates" },
+      Notes: { type: "rich_text" },
     },
   },
 ];

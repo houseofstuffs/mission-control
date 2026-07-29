@@ -45,7 +45,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           Name: body.nicheName || idea.title || "New niche",
           Gate: "Unevaluated",
         });
-        values = { Niche: [niche.id], Status: "Promoted" };
+        // Triaged and Promoted mean the same thing operationally — only the
+        // niche's origin differed, so both paths now land on Triaged.
+        values = { Niche: [niche.id], Status: "Triaged" };
         break;
       }
       case "update": {

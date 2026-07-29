@@ -4,6 +4,7 @@ import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
+import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
 import { isStaleKeyword } from "@/config/keywords";
 import { Kicker } from "@/components/ui";
 
@@ -22,9 +23,35 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
           <h1 className="page-title" style={{ textTransform: "none", letterSpacing: 0 }}>{rec.title || "Untitled listing"}</h1>
         </div>
       </div>
-      <StepRunner record={runnerRecord(rec)} seo={seoData(rec.id, String(rec.props["Tags"] ?? ""))} />
+      <StepRunner
+        record={runnerRecord(rec)}
+        seo={seoData(rec.id, String(rec.props["Tags"] ?? ""))}
+        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]))}
+      />
     </div>
   );
+}
+
+function slotsData(listingId: string, isMultiVariant: boolean): SlotsData {
+  const slots: SlotRow[] = cachedRecords("image_slots")
+    .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(listingId))
+    .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))
+    .map((s) => ({
+      id: s.id,
+      position: Number(s.props["Position"]) || 0,
+      label: s.title,
+      bucket: String(s.props["Bucket"] ?? "Sell Design"),
+      shotType: String(s.props["Shot Type"] ?? ""),
+      status: String(s.props["Status"] ?? "Planned"),
+      assetRef: String(s.props["Asset Ref"] ?? ""),
+      templateId: ((s.props["Mockup Template"] as string[] | null) ?? [])[0] ?? null,
+    }));
+  const templates = cachedRecords("mockup_templates").map((t) => ({
+    id: t.id,
+    name: t.title,
+    shotType: String(t.props["Shot Type"] ?? ""),
+  }));
+  return { listingId, isMultiVariant, slots, templates };
 }
 
 function seoData(listingId: string, tags: string): SeoData {

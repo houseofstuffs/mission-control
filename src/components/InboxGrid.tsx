@@ -415,18 +415,21 @@ export function InboxGrid({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={idea.imageUrl} alt="" className="idea-thumb" />
             ) : null}
-            <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
-              <div className="title">{idea.title}</div>
+            <div className="row-gap-8" style={{ alignItems: "center" }}>
+              {/* one line, always — long titles ellipsize, keeping the
+                  dropdowns at a fixed height across every card */}
+              <div
+                className="title"
+                style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                title={idea.title}
+              >
+                {idea.title}
+              </div>
               {trash(idea)}
             </div>
-            {/* one hint format everywhere: occasion · due Mon D. Capture type
-                is visible from the card itself; notes stay off copy cards. */}
-            {idea.occasion || idea.enterCreativeBy ? (
-              <div className="hint">
-                {[idea.occasion, idea.enterCreativeBy ? `due ${monthDay(idea.enterCreativeBy)}` : ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
+            {/* occasion lives in its dropdown now; only the due date earns a line */}
+            {!compact && idea.enterCreativeBy ? (
+              <div className="hint">due {monthDay(idea.enterCreativeBy)}</div>
             ) : null}
             {!compact && idea.note ? <div className="body-sm">{idea.note}</div> : null}
             {idea.sourceUrl ? (
@@ -466,7 +469,14 @@ export function InboxGrid({
                 ) : (
                   <select
                     className="select input-compact"
-                    style={{ width: "100%" }}
+                    // unset = your action: Candy border for attention, muted
+                    // placeholder text like the photo-card subtitles
+                    style={{
+                      width: "100%",
+                      ...(idea.nicheName
+                        ? {}
+                        : { borderColor: "var(--status-blocked, #d7242a)", color: "var(--text-muted, #8a7a5c)" }),
+                    }}
                     value=""
                     disabled={busyId === idea.id}
                     onChange={(e) => {
@@ -478,7 +488,7 @@ export function InboxGrid({
                       }
                     }}
                   >
-                    <option value="" disabled>Niche…</option>
+                    <option value="" disabled>Niche</option>
                     {niches.map((n) => (
                       <option key={n.id} value={n.id}>
                         {n.name} · {n.gate.toLowerCase()}
@@ -491,7 +501,12 @@ export function InboxGrid({
                     lead-time math works without a trip to Notion */}
                 <select
                   className="select input-compact"
-                  style={{ width: "100%" }}
+                  style={{
+                    width: "100%",
+                    ...(idea.occasion
+                      ? {}
+                      : { borderColor: "var(--status-blocked, #d7242a)", color: "var(--text-muted, #8a7a5c)" }),
+                  }}
                   value={idea.occasion ?? ""}
                   disabled={busyId === idea.id}
                   onChange={(e) => {
@@ -504,7 +519,7 @@ export function InboxGrid({
                     });
                   }}
                 >
-                  <option value="">Occasion…</option>
+                  <option value="">Occasion</option>
                   {OCCASIONS.filter(Boolean).map((o) => (
                     <option key={o} value={o}>{o}</option>
                   ))}
@@ -512,7 +527,10 @@ export function InboxGrid({
               </div>
             ) : (
               <div className="row-gap-8">
-                <span className={`chip ${idea.status === "Discarded" ? "neutral" : "done"}`}>{idea.status}</span>
+                {/* legacy Promoted rows read as Triaged — one status, one meaning */}
+                <span className={`chip ${idea.status === "Discarded" ? "neutral" : "done"}`}>
+                  {idea.status === "Promoted" ? "Triaged" : idea.status}
+                </span>
                 {idea.status === "Discarded" ? (
                   <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "5px 10px" }}
                     disabled={busyId === idea.id}

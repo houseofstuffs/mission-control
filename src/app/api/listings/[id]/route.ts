@@ -17,6 +17,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const values: Record<string, SimpleValue> = {};
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
+    if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
 
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

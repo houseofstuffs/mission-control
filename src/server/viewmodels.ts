@@ -276,6 +276,42 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]) },
       { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null }
     );
+    // Image-slot hard gates. Belief-bucket coverage stays advisory — only
+    // the thumbnail, size/care, and the multi-variant pair block.
+    const slots = cachedRecords("image_slots")
+      .filter((s) => rel(s.props["Listing"]).includes(rec.id))
+      .sort((a, b) => (num(a.props["Position"]) ?? 0) - (num(b.props["Position"]) ?? 0));
+    if (slots.length > 0) {
+      const filled = (s: SimpleRecord) => ["Made", "Placed"].includes(str(s.props["Status"]));
+      const thumb = slots.find((s) => num(s.props["Position"]) === 1);
+      gates.push({
+        label: thumb && filled(thumb) ? "Thumbnail set (slot 1)" : "No thumbnail set.",
+        ok: Boolean(thumb && filled(thumb)),
+      });
+      const specificsOk = slots.some((s) => str(s.props["Bucket"]) === "Sell Specifics" && filled(s));
+      gates.push({
+        label: specificsOk ? "Size/care image filled" : "No size/care image.",
+        ok: specificsOk,
+      });
+      if (rec.props["Is Multi Variant"]) {
+        const gridOk = slots.some((s) => str(s.props["Shot Type"]) === "Grid Composite" && filled(s));
+        gates.push({
+          label: gridOk ? "Range/grid image filled" : "Multi-variant listing has no range/grid image.",
+          ok: gridOk,
+        });
+        const persOk = slots.some(
+          (s) =>
+            str(s.props["Shot Type"]) === "Graphic Card" &&
+            filled(s) &&
+            /personali[sz]/i.test(`${s.title} ${str(s.props["Notes"])}`)
+        );
+        gates.push({
+          label: persOk ? "Personalisation instructions image filled" : "No personalisation instructions image.",
+          ok: persOk,
+        });
+      }
+    }
+
     // SEO hard gate: no visibility keyword attached = blocked. The bucket
     // mix ratios are advisory; this is the only hard keyword rule.
     const attachedKws = cachedRecords("keywords").filter((k) =>

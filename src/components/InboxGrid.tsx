@@ -402,14 +402,10 @@ export function InboxGrid({
               color: "var(--text-secondary, #8a7a5c)",
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M2.5 4h11M6.3 4V2.8c0-.4.34-.8.75-.8h1.9c.41 0 .75.4.75.8V4M4 4l.65 9.25c.05.7.63 1.25 1.33 1.25h4.04c.7 0 1.28-.55 1.33-1.25L12 4M6.6 7v5M9.4 7v5"
-                stroke="currentColor"
-                strokeWidth="1.3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
+            {/* option G — tiny ×: quietest affordance; confirm dialog carries
+                the "this deletes" meaning */}
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           </button>
         );

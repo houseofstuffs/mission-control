@@ -26,7 +26,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
       const link = form.get("artworkLink");
-      if (typeof link === "string") values["Artwork Link"] = link || null;
+      if (typeof link === "string") values["Master PNG Link"] = link || null;
+      const winningModel = form.get("winningModel");
+      if (typeof winningModel === "string") values["Winning Model"] = winningModel || null;
       const snapshot = form.get("snapshot");
       if (snapshot && typeof snapshot !== "string" && snapshot.size > 0) {
         if (!snapshot.type.startsWith("image/")) {
@@ -40,7 +42,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     } else {
       const body = await req.json();
-      if (body.artworkLink !== undefined) values["Artwork Link"] = body.artworkLink ? String(body.artworkLink) : null;
+      if (body.artworkLink !== undefined) values["Master PNG Link"] = body.artworkLink ? String(body.artworkLink) : null;
       // primary product assignable from the runner — master canvas rides along,
       // same as at creation (§5.1: canvas comes from the product's print areas)
       if (body.productId !== undefined) {

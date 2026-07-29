@@ -68,7 +68,8 @@ function artworkData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Artwork
   return {
     designId: rec.id,
     snapshotUrl: first?.url || null,
-    artworkLink: String(rec.props["Artwork Link"] ?? ""),
+    artworkLink: String(rec.props["Master PNG Link"] ?? ""),
+    winningModel: String(rec.props["Winning Model"] ?? ""),
   };
 }
 

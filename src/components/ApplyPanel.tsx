@@ -304,17 +304,97 @@ export function ApplyPanel({
  * Copy each image prompt into Kittl at C2; whichever generation wins,
  * "This one won" commits that candidate's pair to the design.
  */
+/** The winner at C2 — full width, every field editable, saves via commit. */
+function WinnerEditor({
+  designId,
+  winner,
+  saved,
+}: {
+  designId: string;
+  winner: CandidateData;
+  saved: SavedPair;
+}) {
+  const router = useRouter();
+  const [imagePrompt, setImagePrompt] = useState(saved.imagePrompt);
+  const [textPrompt, setTextPrompt] = useState(saved.textPrompt);
+  const [textureNote, setTextureNote] = useState(saved.textureNote);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dirty =
+    imagePrompt !== saved.imagePrompt || textPrompt !== saved.textPrompt || textureNote !== saved.textureNote;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/prompts/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        designId,
+        commit: { styleId: winner.styleId, styleName: winner.styleName, imagePrompt, textPrompt, textureNote },
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) setError(json.error ?? "Save failed");
+    else router.refresh();
+    setBusy(false);
+  }
+
+  return (
+    <div className="card supporting stack-12">
+      <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        <Kicker>WINNER — {winner.styleName}</Kicker>
+        {winner.suggested ? <span className="chip stale">new direction</span> : null}
+        <span className="chip done">✓ winner</span>
+      </div>
+      {error ? <div className="callout blocked">{error}</div> : null}
+      <div className="field">
+        <div className="row-gap-8" style={{ alignItems: "center" }}>
+          <label className="kicker" htmlFor="win-img">IMAGE PROMPT — FOR C2 (EDIT FREELY)</label>
+          <CopyIconButton text={imagePrompt} label="image prompt" />
+        </div>
+        <AutoTextarea id="win-img" value={imagePrompt} onChange={setImagePrompt} />
+      </div>
+      <div className="field">
+        <div className="row-gap-8" style={{ alignItems: "center" }}>
+          <label className="kicker" htmlFor="win-txt">TEXT PROMPT — KITTL LAYER</label>
+          <CopyIconButton text={textPrompt} label="text prompt" />
+        </div>
+        <AutoTextarea id="win-txt" value={textPrompt} onChange={setTextPrompt} />
+      </div>
+      <div className="field">
+        <div className="row-gap-8" style={{ alignItems: "center" }}>
+          <label className="kicker" htmlFor="win-tex">TEXTURE NOTE — FOR C5</label>
+          <CopyIconButton text={textureNote} label="texture note" />
+        </div>
+        <AutoTextarea id="win-tex" placeholder="no texture — clean style" value={textureNote} onChange={setTextureNote} />
+      </div>
+      {winner.screeningPhrases ? <div className="hint">Screen: {winner.screeningPhrases}</div> : null}
+      <div className="row-gap-12">
+        <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
+          {busy ? <span className="spinner" /> : null}
+          Save revised prompts
+        </button>
+        {dirty ? <span className="hint">Unsaved changes — the revised version becomes the record</span> : null}
+      </div>
+    </div>
+  );
+}
+
 export function CandidatesBoard({
   designId,
   candidates,
   chosenImagePrompt,
   focusWinner = false,
+  saved,
 }: {
   designId: string;
   candidates: CandidateData[];
   chosenImagePrompt: string;
   /** once a winner is committed, show only it (C2 view) */
   focusWinner?: boolean;
+  /** the committed pair — the editable source of truth in winner view */
+  saved?: SavedPair;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<number | null>(null);
@@ -355,6 +435,18 @@ export function CandidatesBoard({
 
   const winnerChosen = Boolean(chosenImagePrompt) && candidates.some((c) => c.imagePrompt === chosenImagePrompt);
   const shown = focusWinner && winnerChosen ? candidates.filter((c) => c.imagePrompt === chosenImagePrompt) : candidates;
+
+  // Winner view: the committed pair on the design is the working copy —
+  // fully editable, so a hand-revised prompt drops straight in.
+  if (focusWinner && winnerChosen && saved) {
+    return (
+      <WinnerEditor
+        designId={designId}
+        winner={shown[0]}
+        saved={saved}
+      />
+    );
+  }
 
   return (
     <div className="stack-12">

@@ -344,7 +344,7 @@ export const SCHEMA: DbSpec[] = [
       // All composed style candidates (3-5 + suggested directions) — the
       // winner is chosen at C2 after real generations, not at C1.
       "Prompt Candidates (JSON)": { type: "rich_text" },
-      "Artwork Link": { type: "url" },
+      "Master PNG Link": { type: "url" },
       "PSD Master Link": { type: "url" },
       "PSD Saved At": { type: "date" },
       "Sample Ordered": { type: "checkbox" },
@@ -514,6 +514,9 @@ export const SECOND_PASS_RELATIONS: Array<{
 /** Property renames applied during provisioning — content is preserved. */
 export const RENAMED_PROPERTIES: Array<{ dbKey: string; from: string; to: string }> = [
   { dbKey: "niches", from: "Product Line Fit", to: "Other Products" },
+  // Tool-agnostic naming: the artifact (a transparent master PNG), not the
+  // tool it happens to live in today.
+  { dbKey: "designs", from: "Artwork Link", to: "Master PNG Link" },
 ];
 
 export const DB_KEYS = SCHEMA.map((d) => d.key);

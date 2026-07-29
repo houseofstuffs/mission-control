@@ -42,7 +42,7 @@ export function designKanbanCards(): KanbanCardData[] {
     const snap = d.props["Artwork Snapshot"];
     const snapUrl =
       Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }).url || null : null;
-    const files = snapUrl ?? d.props["Artwork Link"];
+    const files = snapUrl ?? d.props["Master PNG Link"];
     return {
       id: d.id,
       title: d.title || "Untitled design",

@@ -254,6 +254,7 @@ export function StepRunner({
             candidates={candidates!}
             chosenImagePrompt={savedPair?.imagePrompt ?? ""}
             focusWinner={selected.id === "C2"}
+            saved={savedPair}
           />
         ) : null}
         </div>

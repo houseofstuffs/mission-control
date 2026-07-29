@@ -14,6 +14,7 @@ export interface ArtworkData {
   designId: string;
   snapshotUrl: string | null;
   artworkLink: string;
+  winningModel: string;
 }
 
 export function ArtworkCapture({ data }: { data: ArtworkData }) {
@@ -21,6 +22,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [link, setLink] = useState(data.artworkLink);
+  const [model, setModel] = useState(data.winningModel);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -49,13 +51,14 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  const dirty = file !== null || link !== data.artworkLink;
+  const dirty = file !== null || link !== data.artworkLink || model !== data.winningModel;
 
   async function save() {
     setBusy(true);
     setError(null);
     const form = new FormData();
     form.append("artworkLink", link);
+    form.append("winningModel", model);
     if (file) form.append("snapshot", file, file.name);
     const res = await fetch(`/api/designs/${data.designId}`, { method: "PATCH", body: form });
     const json = await res.json();
@@ -76,14 +79,36 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
-            <label className="kicker" htmlFor="art-link">MASTER FILE LINK (DRIVE / KITTL)</label>
+            <label className="kicker" htmlFor="art-link">MASTER PNG LINK — TRANSPARENT BACKGROUND</label>
             <input
               id="art-link"
               className="input"
-              placeholder="https://… — the full-res file lives in Drive, not here"
+              placeholder="https://… — wherever the master file lives, tool-agnostic"
               value={link}
               onChange={(e) => setLink(e.target.value)}
             />
+          </div>
+          <div className="field">
+            <label className="kicker" htmlFor="art-model">GENERATION MODEL — WHICH ONE WON</label>
+            <input
+              id="art-model"
+              className="input"
+              list="gen-models"
+              placeholder="e.g. Ideogram, Flux, DALL·E, Midjourney…"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+            />
+            <datalist id="gen-models">
+              <option value="Kittl — Ideogram" />
+              <option value="Kittl — Flux" />
+              <option value="Kittl — DALL·E" />
+              <option value="Kittl — Stable Diffusion" />
+              <option value="Midjourney" />
+              <option value="ChatGPT / GPT Image" />
+              <option value="Ideogram" />
+              <option value="Flux" />
+            </datalist>
+            <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
           </div>
           <div className="row-gap-12">
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>

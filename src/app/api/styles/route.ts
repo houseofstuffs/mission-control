@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
+import { getCaptureJob, deleteCaptureJob } from "@/server/cache/captureJobs";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -47,12 +48,23 @@ export async function POST(req: Request) {
     };
     if (body.category) values["Category"] = body.category;
 
+    // The reference image: fresh from the browser, or recovered from the
+    // capture job when the page was left mid-generation.
+    if (!image && body.jobId) {
+      const job = getCaptureJob(body.jobId);
+      if (job) {
+        image = new File([Buffer.from(job.imageB64, "base64")], job.fileName || "reference", {
+          type: job.mediaType,
+        });
+      }
+    }
     if (image) {
       const upload = await uploadFileToNotion(image);
       values["Source Image"] = [{ name: image.name, uploadId: upload.id }];
     }
 
     const record = await createRecord("styles", values);
+    if (body.jobId) deleteCaptureJob(body.jobId);
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

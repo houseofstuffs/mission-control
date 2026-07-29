@@ -41,18 +41,75 @@ const FIELDS: Array<{ key: keyof Draft; label: string; rows?: number }> = [
   { key: "ruleOfThumb", label: "RULE OF THUMB", rows: 2 },
 ];
 
+const JOB_KEY = "stuffs-capture-job";
+
 export function StyleCapture({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [serverPreview, setServerPreview] = useState<string | null>(null);
   const [hint, setHint] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [busy, setBusy] = useState<"generate" | "save" | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"save" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [open, setOpen] = useState(!compact);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const generating = jobId !== null && !draft;
+
+  function clearJob() {
+    setJobId(null);
+    setServerPreview(null);
+    try {
+      localStorage.removeItem(JOB_KEY);
+    } catch {}
+  }
+
+  // Resume a capture started before navigating away — the job kept running
+  // server-side; pick its result back up.
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(JOB_KEY);
+    } catch {}
+    if (stored) {
+      setJobId(stored);
+      setOpen(true);
+    }
+  }, []);
+
+  // Poll the job until the draft arrives.
+  useEffect(() => {
+    if (!jobId || draft) return;
+    let cancelled = false;
+    async function check() {
+      const res = await fetch(`/api/styles/capture?job=${jobId}`);
+      if (cancelled) return;
+      if (!res.ok) {
+        setError(res.status === 404 ? "That capture expired — drop the reference again." : "Couldn't check the capture job.");
+        clearJob();
+        return;
+      }
+      const json = await res.json();
+      if (json.status === "done") {
+        setDraft(json.style as Draft);
+        if (json.imageDataUrl) setServerPreview(json.imageDataUrl as string);
+      } else if (json.status === "error") {
+        setError(json.error ?? "Capture failed");
+        clearJob();
+      }
+    }
+    check();
+    const t = setInterval(check, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, draft]);
 
   useEffect(() => {
     if (!file) {
@@ -94,7 +151,6 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
 
   async function generate() {
     if (!file) return;
-    setBusy("generate");
     setError(null);
     const form = new FormData();
     form.append("image", file, file.name);
@@ -102,8 +158,12 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     const res = await fetch("/api/styles/capture", { method: "POST", body: form });
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Capture failed");
-    else setDraft(json.style as Draft);
-    setBusy(null);
+    else {
+      setJobId(json.jobId as string);
+      try {
+        localStorage.setItem(JOB_KEY, json.jobId as string);
+      } catch {}
+    }
   }
 
   async function save() {
@@ -113,6 +173,7 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     const form = new FormData();
     for (const [k, v] of Object.entries(draft)) form.append(k, String(v ?? ""));
     if (file) form.append("image", file, file.name);
+    if (jobId) form.append("jobId", jobId);
     const res = await fetch("/api/styles", { method: "POST", body: form });
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Save failed");
@@ -121,9 +182,17 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
       setDraft(null);
       setFile(null);
       setHint("");
+      clearJob();
       router.refresh();
     }
     setBusy(null);
+  }
+
+  function discard() {
+    setDraft(null);
+    // No local file means the image only exists in the finished job —
+    // clear it so the tile is genuinely empty rather than half-resumed.
+    if (!file) clearJob();
   }
 
   if (compact && !open) {
@@ -172,9 +241,13 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
               take(e.dataTransfer.files?.[0]);
             }}
           >
-            {previewUrl ? (
+            {previewUrl || serverPreview ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="" style={{ maxHeight: 160, maxWidth: "100%", objectFit: "contain" }} />
+              <img
+                src={(previewUrl || serverPreview)!}
+                alt=""
+                style={{ width: "100%", height: 220, objectFit: "cover", objectPosition: "center", borderRadius: 8 }}
+              />
             ) : (
               <>
                 <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
@@ -202,14 +275,17 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
             />
           </div>
           <div className="row-gap-12">
-            <button className="btn btn-primary" onClick={generate} disabled={!file || busy !== null}>
-              {busy === "generate" ? <span className="spinner" /> : null}
-              {busy === "generate" ? "Reading the reference" : "Capture style"}
+            <button className="btn btn-primary" onClick={generate} disabled={!file || generating}>
+              {generating ? <span className="spinner" /> : null}
+              {generating ? "Reading the reference" : "Capture style"}
             </button>
-            {file ? (
-              <button className="btn btn-tertiary" onClick={() => setFile(null)} disabled={busy !== null}>
+            {file && !generating ? (
+              <button className="btn btn-tertiary" onClick={() => setFile(null)}>
                 Remove
               </button>
+            ) : null}
+            {generating ? (
+              <span className="hint">Runs on the server — safe to leave this page and come back.</span>
             ) : null}
           </div>
         </>
@@ -261,7 +337,7 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
               {busy === "save" ? <span className="spinner" /> : null}
               Save to Styles
             </button>
-            <button className="btn btn-tertiary" onClick={() => setDraft(null)} disabled={busy !== null}>
+            <button className="btn btn-tertiary" onClick={discard} disabled={busy !== null}>
               Discard
             </button>
           </div>

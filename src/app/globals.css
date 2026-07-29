@@ -564,9 +564,12 @@ a:hover { color: var(--candy); }
 
 /* copy-only ideas: denser grid, smaller cards — the missing thumbnail is
    itself the "this is a copy idea" signal */
-.inbox-grid-compact { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
-.inbox-grid-compact .idea-card { padding: 10px 12px; gap: 6px; }
+/* align-items start: each card hugs its content instead of stretching to
+   the row's tallest — copy cards stay as short as possible */
+.inbox-grid-compact { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; align-items: start; }
+.inbox-grid-compact .idea-card { padding: 8px 12px; gap: 4px; }
 .inbox-grid-compact .idea-card .title { font-size: 13px; }
+.inbox-grid-compact .idea-actions { gap: 4px; }
 
 .idea-card {
   background: #fff;

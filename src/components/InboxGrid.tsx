@@ -369,19 +369,67 @@ export function InboxGrid({
       {/* photo ideas up top; copy-only ideas in a compact strip below — no
           thumbnail IS the signal that it's a copy idea */}
       {(() => {
-        const renderIdea = (idea: (typeof ideas)[number]) => (
+        const deleteIdea = (idea: (typeof ideas)[number]) => {
+          if (!window.confirm(`Delete "${idea.title}"? It moves to Notion's trash, recoverable for 30 days.`)) return;
+          triage(idea.id, { action: "delete" });
+        };
+        const trash = (idea: (typeof ideas)[number]) => (
+          <button
+            type="button"
+            aria-label={`Delete ${idea.title}`}
+            title="Delete"
+            disabled={busyId === idea.id}
+            onClick={() => deleteIdea(idea)}
+            style={{
+              marginLeft: "auto",
+              flexShrink: 0,
+              width: 22,
+              height: 22,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              color: "var(--text-secondary, #8a7a5c)",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M2.5 4h11M6.3 4V2.8c0-.4.34-.8.75-.8h1.9c.41 0 .75.4.75.8V4M4 4l.65 9.25c.05.7.63 1.25 1.33 1.25h4.04c.7 0 1.28-.55 1.33-1.25L12 4M6.6 7v5M9.4 7v5"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        );
+        const renderIdea = (idea: (typeof ideas)[number], compact: boolean) => (
           <div key={idea.id} className="idea-card">
             {idea.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={idea.imageUrl} alt="" className="idea-thumb" />
             ) : null}
-            <div className="title">{idea.title}</div>
-            <div className="hint">
-              {idea.captureType}
-              {idea.occasion ? ` · ${idea.occasion}` : ""}
-              {idea.enterCreativeBy ? ` · creative by ${idea.enterCreativeBy}` : ""}
+            <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
+              <div className="title">{idea.title}</div>
+              {trash(idea)}
             </div>
-            {idea.note ? <div className="body-sm">{idea.note}</div> : null}
+            {/* compact (copy) cards: no capture-type line, no note — the
+                section header already says what they are */}
+            {!compact || idea.occasion || idea.enterCreativeBy ? (
+              <div className="hint">
+                {compact
+                  ? [idea.occasion, idea.enterCreativeBy ? `creative by ${idea.enterCreativeBy}` : ""]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : `${idea.captureType}${idea.occasion ? ` · ${idea.occasion}` : ""}${
+                      idea.enterCreativeBy ? ` · creative by ${idea.enterCreativeBy}` : ""
+                    }`}
+              </div>
+            ) : null}
+            {!compact && idea.note ? <div className="body-sm">{idea.note}</div> : null}
             {idea.sourceUrl ? (
               <a className="body-sm" href={idea.sourceUrl} target="_blank" rel="noreferrer">source ↗</a>
             ) : null}
@@ -440,10 +488,28 @@ export function InboxGrid({
                     <option value="__new__">＋ New niche…</option>
                   </select>
                 )}
-                <button className="btn btn-tertiary" disabled={busyId === idea.id}
-                  onClick={() => triage(idea.id, { action: "discard" })}>
-                  Discard
-                </button>
+                {/* assign an occasion in place — auto-fills the next date so
+                    lead-time math works without a trip to Notion */}
+                <select
+                  className="select input-compact"
+                  style={{ width: 140, height: 32 }}
+                  value={idea.occasion ?? ""}
+                  disabled={busyId === idea.id}
+                  onChange={(e) => {
+                    const chosen = e.target.value;
+                    const auto = chosen ? occasionDateFor(chosen, new Date()) : null;
+                    triage(idea.id, {
+                      action: "update",
+                      occasion: chosen,
+                      ...(auto ? { occasionDate: auto } : {}),
+                    });
+                  }}
+                >
+                  <option value="">Occasion…</option>
+                  {OCCASIONS.filter(Boolean).map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
               </div>
             ) : (
               <div className="row-gap-8">
@@ -463,11 +529,13 @@ export function InboxGrid({
         const copyOnly = ideas.filter((i) => !i.imageUrl);
         return (
           <>
-            {photo.length > 0 ? <div className="inbox-grid">{photo.map(renderIdea)}</div> : null}
+            {photo.length > 0 ? (
+              <div className="inbox-grid">{photo.map((i) => renderIdea(i, false))}</div>
+            ) : null}
             {copyOnly.length > 0 ? (
               <div className="stack-12">
-                <span className="kicker">COPY-ONLY · {copyOnly.length}</span>
-                <div className="inbox-grid inbox-grid-compact">{copyOnly.map(renderIdea)}</div>
+                <span className="kicker">COPY IDEAS · {copyOnly.length}</span>
+                <div className="inbox-grid inbox-grid-compact">{copyOnly.map((i) => renderIdea(i, true))}</div>
               </div>
             ) : null}
           </>

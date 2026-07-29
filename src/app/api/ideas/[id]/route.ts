@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cachedRecord, createRecord, updateRecord } from "@/server/notion/store";
+import { cachedRecord, createRecord, updateRecord, archiveRecord } from "@/server/notion/store";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "Idea not found in cache — refresh first" }, { status: 404 });
     }
 
-    const action = body.action as "discard" | "restore" | "attach" | "promote" | "update";
+    const action = body.action as "discard" | "restore" | "attach" | "promote" | "update" | "delete";
+
+    // Delete is archive — Notion's trash keeps it recoverable for 30 days.
+    if (action === "delete") {
+      await archiveRecord("ideas", id);
+      return NextResponse.json({ ok: true });
+    }
+
     let values: Record<string, SimpleValue> = {};
 
     switch (action) {

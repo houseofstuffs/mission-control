@@ -410,28 +410,31 @@ export function todaySummary(): TodaySummary {
       const to = str(l.props["To Step"]);
       // speak in step names, as the runner does — "Input branch done",
       // not "Step done (C1 → C2)"
+      // step id kept alongside the title — "✓ C1 Input branch done" reads
+      // as the rail does, and the ✓ matches the greenlit/done chip glyph
+      const label = (id: string) => (id ? `${id} ${titleOfStep(id)}` : "");
       let event = rawEvent;
       switch (rawEvent) {
         case "Step done":
-          event = from ? `${titleOfStep(from)} done` : "Step done";
+          event = from ? `✓ ${label(from)} done` : "✓ Step done";
           break;
         case "Backtrack":
-          event = to ? `Backtracked to ${titleOfStep(to)}` : "Backtrack";
+          event = to ? `Backtracked to ${label(to)}` : "Backtrack";
           break;
         case "Still valid":
-          event = to ? `${titleOfStep(to)} still valid` : "Still valid";
+          event = to ? `✓ ${label(to)} still valid` : "✓ Still valid";
           break;
         case "Blocked":
-          event = to ? `Blocked at ${titleOfStep(to)}` : "Blocked";
+          event = to ? `Blocked at ${label(to)}` : "Blocked";
           break;
         case "Unblocked":
-          event = to ? `Unblocked at ${titleOfStep(to)}` : "Unblocked";
+          event = to ? `Unblocked at ${label(to)}` : "Unblocked";
           break;
         case "Moved":
-          event = to ? `Moved to ${titleOfStep(to)}` : "Moved";
+          event = to ? `Moved to ${label(to)}` : "Moved";
           break;
         case "Created new":
-          event = to ? `Created new at ${titleOfStep(to)}` : "Created new";
+          event = to ? `Created new at ${label(to)}` : "Created new";
           break;
       }
       // page titles carry an " — event" suffix; show the record name alone

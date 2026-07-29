@@ -316,6 +316,7 @@ export function CandidatesBoard({
   const router = useRouter();
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [spunOff, setSpunOff] = useState<Record<number, { id: string; title: string }>>({});
 
   async function commit(c: CandidateData, i: number) {
     setBusy(i);
@@ -328,6 +329,24 @@ export function CandidatesBoard({
     const json = await res.json();
     if (!res.ok) setError(json.error ?? "Commit failed");
     else router.refresh();
+    setBusy(null);
+  }
+
+  // a second winner is a second design — same niche/product, its own run
+  async function spinOff(c: CandidateData, i: number) {
+    setBusy(i);
+    setError(null);
+    const res = await fetch("/api/prompts/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designId, spinOff: c }),
+    });
+    const json = await res.json();
+    if (!res.ok) setError(json.error ?? "Spin-off failed");
+    else {
+      setSpunOff((cur) => ({ ...cur, [i]: { id: json.record.id as string, title: json.record.title as string } }));
+      router.refresh();
+    }
     setBusy(null);
   }
 
@@ -372,11 +391,26 @@ export function CandidatesBoard({
               {c.screeningPhrases ? (
                 <div className="hint">Screen: {c.screeningPhrases}</div>
               ) : null}
-              <div className="row-gap-12">
+              <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
                 <button className="btn btn-secondary" disabled={busy !== null} onClick={() => commit(c, i)}>
                   {busy === i ? <span className="spinner" /> : null}
                   This one won
                 </button>
+                {spunOff[i] ? (
+                  <a className="chip done" href={`/designs/${spunOff[i].id}`}>
+                    → {spunOff[i].title}
+                  </a>
+                ) : (
+                  <button
+                    className="btn btn-tertiary"
+                    style={{ fontSize: 12, padding: "5px 10px" }}
+                    disabled={busy !== null}
+                    onClick={() => spinOff(c, i)}
+                    title="Two winners = two designs — this one gets its own record, starting at C2"
+                  >
+                    Spin off as its own design
+                  </button>
+                )}
                 {c.suggested && chosen ? (
                   <span className="hint">Won as a new direction — capture it as a Style so it joins the library.</span>
                 ) : null}

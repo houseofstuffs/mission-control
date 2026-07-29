@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
 import { composeCandidates, type Candidate } from "@/server/anthropic/apply";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import {
@@ -46,6 +46,51 @@ export async function POST(req: Request) {
     const design = cachedRecord(String(body.designId ?? ""));
     if (!design || design.dbKey !== "designs") {
       return NextResponse.json({ error: "Design not found in cache — refresh first" }, { status: 404 });
+    }
+
+    // ---- spin a candidate off as its own design ----
+    // Two winners on one design would make C4-C11 ambiguous about which
+    // composition they mean; a second winner is a second design. It clones
+    // the source's context, carries the candidate's pair, and starts at C2
+    // with C1 done — its artwork direction is already chosen.
+    if (body.spinOff) {
+      const c = body.spinOff as Partial<StoredCandidate>;
+      const values: Record<string, SimpleValue> = {
+        Name: `${design.title || "Untitled"} — ${c.styleName ?? "variant"}`,
+        "Current Step": "C2",
+        "Step State (JSON)": JSON.stringify({
+          steps: { C1: { status: "done", at: new Date().toISOString() } },
+          current: "C2",
+        }),
+        "Physical/Digital": String(design.props["Physical/Digital"] ?? "Physical"),
+        Shop: "STUFFS",
+        Channel: "Etsy",
+        "External IDs (JSON)": "{}",
+        "Image Prompt": c.imagePrompt ?? "",
+        "Text Prompt": c.textPrompt ?? "",
+        "Texture Note": c.textureNote ?? "",
+      };
+      for (const rel of ["Niche", "Collection", "Primary Product"] as const) {
+        const ids = design.props[rel] as string[] | null;
+        if (ids?.length) values[rel] = ids;
+      }
+      if (design.props["Master Canvas (JSON)"]) {
+        values["Master Canvas (JSON)"] = String(design.props["Master Canvas (JSON)"]);
+      }
+      if (design.props["Occasion"]) values["Occasion"] = String(design.props["Occasion"]);
+      if (design.props["Occasion Date"]) values["Occasion Date"] = String(design.props["Occasion Date"]);
+      if (c.styleId) values["Style"] = [c.styleId];
+
+      const record = await createRecord("designs", values);
+      await createRecord("workflow_log", {
+        Name: `${record.title} — Created new`,
+        Event: "Created new",
+        Design: [record.id],
+        "To Step": "C2",
+        Reason: `Spun off from "${design.title}" — candidate "${c.styleName}"`,
+        At: new Date().toISOString(),
+      });
+      return NextResponse.json({ record });
     }
 
     // ---- commit the winner ----

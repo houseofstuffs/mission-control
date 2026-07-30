@@ -41,6 +41,13 @@ async function autoBackdrop(buf: Buffer): Promise<"#ffffff" | "#111111" | null> 
  * The master lives in Drive/S3 per spec §3.6; the snapshot powers Kanban
  * thumbnails and downstream visual reference.
  */
+/** "" and undefined → null; never coerce an absent dimension to 0. */
+function toNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -90,6 +97,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       const body = await req.json();
       if (body.artworkLink !== undefined) values["Master PNG Link"] = body.artworkLink ? String(body.artworkLink) : null;
       if (body.winningModel !== undefined) values["Winning Model"] = body.winningModel ? String(body.winningModel) : null;
+      if (body.masterWidth !== undefined) values["Master Width"] = toNum(body.masterWidth);
+      if (body.masterHeight !== undefined) values["Master Height"] = toNum(body.masterHeight);
       // C8 output — saving the link stamps the date the master was saved
       if (body.psdLink !== undefined) {
         values["PSD Master Link"] = body.psdLink ? String(body.psdLink) : null;

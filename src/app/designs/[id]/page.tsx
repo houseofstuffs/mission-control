@@ -85,12 +85,31 @@ function styleOptions(): StyleOption[] {
 function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): MasterAssetsData {
   const snap = rec.props["Artwork Snapshot"];
   const first = Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }) : null;
+  // biggest print area on the primary product — the bar the master must clear
+  let requiredWidth: number | null = null;
+  let requiredHeight: number | null = null;
+  const canvasRaw = rec.props["Master Canvas (JSON)"];
+  if (typeof canvasRaw === "string" && canvasRaw.trim()) {
+    try {
+      const areas = JSON.parse(canvasRaw) as Array<{ maxWidth?: number; maxHeight?: number }>;
+      for (const a of areas) {
+        if ((a.maxWidth ?? 0) > (requiredWidth ?? 0)) requiredWidth = a.maxWidth ?? null;
+        if ((a.maxHeight ?? 0) > (requiredHeight ?? 0)) requiredHeight = a.maxHeight ?? null;
+      }
+    } catch {
+      /* unparseable canvas just means no check */
+    }
+  }
   return {
     designId: rec.id,
     psdLink: String(rec.props["PSD Master Link"] ?? ""),
     psdSavedAt: String(rec.props["PSD Saved At"] ?? "") || null,
     masterPngLink: String(rec.props["Master PNG Link"] ?? ""),
     snapshotUrl: first?.url || null,
+    masterWidth: typeof rec.props["Master Width"] === "number" ? rec.props["Master Width"] : null,
+    masterHeight: typeof rec.props["Master Height"] === "number" ? rec.props["Master Height"] : null,
+    requiredWidth,
+    requiredHeight,
   };
 }
 

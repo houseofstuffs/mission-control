@@ -263,6 +263,44 @@ export function productCards(): ProductCardData[] {
 
 /* ---------- step runner ---------- */
 
+/**
+ * Largest print area on the design's primary product — the bar the exported
+ * master has to clear. Artwork bigger than this scales down losslessly;
+ * smaller gets upscaled by Printify and prints soft.
+ */
+function requiredEdge(rec: SimpleRecord): number | null {
+  const raw = str(rec.props["Master Canvas (JSON)"]);
+  if (!raw.trim()) return null;
+  try {
+    const areas = JSON.parse(raw) as Array<{ maxWidth?: number; maxHeight?: number }>;
+    const edges = areas.flatMap((a) => [a.maxWidth ?? 0, a.maxHeight ?? 0]);
+    const max = Math.max(0, ...edges);
+    return max > 0 ? max : null;
+  } catch {
+    return null;
+  }
+}
+
+function masterResolutionOk(rec: SimpleRecord): boolean {
+  const w = num(rec.props["Master Width"]);
+  const h = num(rec.props["Master Height"]);
+  const need = requiredEdge(rec);
+  if (!w || !h) return false; // not recorded yet
+  if (!need) return true; // no canvas to check against
+  return Math.max(w, h) >= need;
+}
+
+function masterResolutionLabel(rec: SimpleRecord): string {
+  const w = num(rec.props["Master Width"]);
+  const h = num(rec.props["Master Height"]);
+  const need = requiredEdge(rec);
+  if (!w || !h) return "Master dimensions recorded";
+  if (need && Math.max(w, h) < need) {
+    return `Master ${w}×${h} is under the ${need}px print area — will upscale`;
+  }
+  return `Master resolution clears the print area (${w}×${h})`;
+}
+
 export function runnerRecord(rec: SimpleRecord): RunnerRecord {
   const state = parseStepState(rec);
   const steps: RunnerRecord["steps"] = {};
@@ -339,6 +377,10 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Niche greenlit", ok: niche ? str(niche.props["Gate"]) === "Greenlit" : false },
       { label: "Primary product chosen", ok: rel(rec.props["Primary Product"]).length > 0 },
       { label: "PSD master saved + linked", ok: str(rec.props["PSD Master Link"]).length > 0 },
+      {
+        label: masterResolutionLabel(rec),
+        ok: masterResolutionOk(rec),
+      },
       {
         label: "Trademark screening confirmed",
         ok: niche ? str(niche.props["Screening Status"]) === "Screened clear" : false,

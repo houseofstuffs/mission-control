@@ -23,12 +23,19 @@ export interface MasterAssetsData {
   psdSavedAt: string | null;
   masterPngLink: string;
   snapshotUrl: string | null;
+  masterWidth: number | null;
+  masterHeight: number | null;
+  /** largest print area on the primary product, for the shortfall warning */
+  requiredWidth: number | null;
+  requiredHeight: number | null;
 }
 
 export function MasterAssets({ data }: { data: MasterAssetsData }) {
   const router = useRouter();
   const [psd, setPsd] = useState(data.psdLink);
   const [png, setPng] = useState(data.masterPngLink);
+  const [w, setW] = useState(data.masterWidth ? String(data.masterWidth) : "");
+  const [h, setH] = useState(data.masterHeight ? String(data.masterHeight) : "");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,7 +66,23 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  const dirty = file !== null || psd !== data.psdLink || png !== data.masterPngLink;
+  const dirty =
+    file !== null ||
+    psd !== data.psdLink ||
+    png !== data.masterPngLink ||
+    w !== (data.masterWidth ? String(data.masterWidth) : "") ||
+    h !== (data.masterHeight ? String(data.masterHeight) : "");
+
+  // The one case that genuinely prints badly: artwork smaller than the print
+  // area, which Printify upscales. Bigger than the area is always fine — it
+  // scales down losslessly, and a square master in a taller area just leaves
+  // headroom.
+  const nw = Number(w) || 0;
+  const nh = Number(h) || 0;
+  const short =
+    nw > 0 && nh > 0 && data.requiredWidth && data.requiredHeight
+      ? Math.max(nw, nh) < Math.max(data.requiredWidth, data.requiredHeight)
+      : false;
 
   async function save() {
     setBusy(true);
@@ -70,12 +93,19 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
       const form = new FormData();
       form.append("psdLink", psd);
       form.append("artworkLink", png);
+      form.append("masterWidth", w);
+      form.append("masterHeight", h);
       // shrink first: a full-res generation is far too big to upload whole
       const small = await downscaleImage(file);
       form.append("snapshot", small, small.name);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
-      res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { psdLink: psd, artworkLink: png });
+      res = await apiJson(`/api/designs/${data.designId}`, "PATCH", {
+        psdLink: psd,
+        artworkLink: png,
+        masterWidth: w,
+        masterHeight: h,
+      });
     }
     if (!res.ok) setError(res.error);
     else {
@@ -111,6 +141,23 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
               onChange={(e) => setPng(e.target.value)}
             />
           </div>
+          <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div className="field" style={{ width: 110 }}>
+              <label className="kicker" htmlFor="ma-w">WIDTH PX</label>
+              <input id="ma-w" type="number" className="input" placeholder="4843" value={w} onChange={(e) => setW(e.target.value)} />
+            </div>
+            <div className="field" style={{ width: 110 }}>
+              <label className="kicker" htmlFor="ma-h">HEIGHT PX</label>
+              <input id="ma-h" type="number" className="input" placeholder="4843" value={h} onChange={(e) => setH(e.target.value)} />
+            </div>
+          </div>
+          {short ? (
+            <div className="callout blocked">
+              {nw}×{nh} is smaller than this product&apos;s print area
+              ({data.requiredWidth}×{data.requiredHeight}) — Printify will upscale it and the print
+              goes soft. Re-export larger.
+            </div>
+          ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               <Spinner active={busy} />

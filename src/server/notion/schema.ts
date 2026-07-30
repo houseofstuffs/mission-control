@@ -365,6 +365,11 @@ export const SCHEMA: DbSpec[] = [
       "Master PNG Link": { type: "url" },
       "PSD Master Link": { type: "url" },
       "PSD Saved At": { type: "date" },
+      // What the master was actually exported at — checked against the
+      // product's print areas at C8. Artwork smaller than its print area
+      // gets upscaled by Printify and prints soft.
+      "Master Width": { type: "number" },
+      "Master Height": { type: "number" },
       "Sample Ordered": { type: "checkbox" },
       "Sample ETA": { type: "date" },
       // VA workflow — nullable and invisible in v1 (§3.4)

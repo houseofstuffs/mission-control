@@ -63,6 +63,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       values["PSD Saved At"] = psd ? new Date().toISOString().slice(0, 10) : null;
     }
 
+    for (const [field, prop] of [["masterWidth", "Master Width"], ["masterHeight", "Master Height"]] as const) {
+      const v = form.get(field);
+      if (typeof v === "string") {
+        const n = Number(v);
+        values[prop] = v && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+      }
+    }
+
     const textureId = form.get("textureId");
     if (typeof textureId === "string") values["Texture"] = textureId ? [textureId] : [];
     const textureDetail = form.get("textureDetail");

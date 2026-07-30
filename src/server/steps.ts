@@ -110,11 +110,11 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
     return Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim().length > 0 : Boolean(v);
   };
   if (stepId === "C2" && !has("Artwork Snapshot")) {
-    return "Drop a snapshot of the selected generation first — it's what this step produces.";
+    return "Drop a snapshot of the selected generation before moving to the next step.";
   }
   if (stepId === "C7") {
-    if (!has("PSD Master Link")) return "Save the PSD master link first — it's the master asset.";
-    if (!has("Master PNG Link")) return "Save the master PNG link first — exported from the refined PSD.";
+    if (!has("PSD Master Link")) return "Save the PSD master link before moving to the next step.";
+    if (!has("Master PNG Link")) return "Save the master PNG link before moving to the next step.";
   }
   return null;
 }

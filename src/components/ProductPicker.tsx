@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 
 export function ProductPicker({
   designId,
@@ -35,13 +36,10 @@ export function ProductPicker({
         onChange={async (e) => {
           setBusy(true);
           setError(null);
-          const res = await fetch(`/api/designs/${designId}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ productId: e.target.value || null }),
+          const res = await apiJson(`/api/designs/${designId}`, "PATCH", {
+            productId: e.target.value || null,
           });
-          const json = await res.json().catch(() => ({}));
-          if (!res.ok) setError((json as { error?: string }).error ?? "Update failed");
+          if (!res.ok) setError(res.error);
           else router.refresh();
           setBusy(false);
         }}

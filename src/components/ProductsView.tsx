@@ -8,6 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
 
 export interface ProductCardData {
@@ -98,17 +99,13 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
     const provider = providers?.find((p) => p.id === providerId);
     setSeeding(true);
     setError(null);
-    const res = await fetch("/api/printify/seed", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await apiJson<Record<string, any>>("/api/printify/seed", "POST", {
         blueprintId: chosen.id,
         providerId,
         providerName: provider?.title ?? "",
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Seed failed");
+      });
+    const json = res.data;
+    if (!res.ok) setError(res.error);
     else {
       setNotice(
         `${json.result.updated ? "Updated" : "Seeded"} ${json.result.productName} with ${json.result.variantCount} variants.`

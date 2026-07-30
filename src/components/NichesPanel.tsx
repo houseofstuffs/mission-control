@@ -10,6 +10,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiCall, apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
 
 export interface NicheCardData {
@@ -39,13 +40,8 @@ export function NichesPanel({ niches }: { niches: NicheCardData[] }) {
   async function save(id: string, body: Record<string, unknown>) {
     setBusyId(id);
     setError(null);
-    const res = await fetch(`/api/niches/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Update failed");
+    const res = await apiJson(`/api/niches/${id}`, "PATCH", body);
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusyId(null);
   }
@@ -77,9 +73,8 @@ export function NichesPanel({ niches }: { niches: NicheCardData[] }) {
                   disabled={busyId === n.id}
                   onClick={async () => {
                     if (!window.confirm(`Delete "${n.name}"? It moves to Notion's trash, recoverable for 30 days.`)) return;
-                    const res = await fetch(`/api/niches/${n.id}`, { method: "DELETE" });
-                    const json = await res.json().catch(() => ({}));
-                    if (!res.ok) setError((json as { error?: string }).error ?? "Delete failed");
+                    const res = await apiCall(`/api/niches/${n.id}`, { method: "DELETE" });
+                    if (!res.ok) setError(res.error);
                     else router.refresh();
                   }}
                   style={{

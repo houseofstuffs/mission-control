@@ -14,6 +14,8 @@ import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
+import { BusyNote } from "./BusyNote";
+import { apiCall, apiJson } from "@/lib/api";
 
 export interface StyleOption {
   id: string;
@@ -98,14 +100,19 @@ export function ApplyPanel({
     if (!jobId) return;
     let cancelled = false;
     async function check() {
-      const res = await fetch(`/api/prompts/compose?job=${jobId}`);
+      const res = await apiCall<{ status: string; error: string }>(`/api/prompts/compose?job=${jobId}`, {
+        timeoutMs: 20_000,
+      });
       if (cancelled) return;
       if (!res.ok) {
-        setError(res.status === 404 ? "That compose expired — hit Compose again." : "Couldn't check the compose job.");
-        clearJob();
+        // one failed poll isn't fatal — the job runs server-side
+        if (/expired|not found/i.test(res.error ?? "")) {
+          setError("That compose expired — hit Compose again.");
+          clearJob();
+        }
         return;
       }
-      const json = await res.json();
+      const json = res.data;
       if (json.status === "done") {
         clearJob();
         router.refresh(); // candidates are on the design now; the board picks them up
@@ -155,17 +162,14 @@ export function ApplyPanel({
   async function compose() {
     if (selected.length === 0) return;
     setError(null);
-    const res = await fetch("/api/prompts/compose", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ designId, styleIds: selected, fills, copy, suggest }),
+    const res = await apiJson<{ jobId: string }>("/api/prompts/compose", "POST", {
+      designId, styleIds: selected, fills, copy, suggest,
     });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Compose failed");
+    if (!res.ok) setError(res.error);
     else {
-      setJobId(json.jobId as string);
+      setJobId(res.data.jobId);
       try {
-        localStorage.setItem(jobKey, json.jobId as string);
+        localStorage.setItem(jobKey, res.data.jobId);
       } catch {}
     }
   }
@@ -326,16 +330,11 @@ function WinnerEditor({
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/prompts/compose", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        designId,
-        commit: { styleId: winner.styleId, styleName: winner.styleName, imagePrompt, textPrompt, textureNote },
-      }),
+    const res = await apiJson("/api/prompts/compose", "POST", {
+      designId,
+      commit: { styleId: winner.styleId, styleName: winner.styleName, imagePrompt, textPrompt, textureNote },
     });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Save failed");
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusy(false);
   }
@@ -375,7 +374,9 @@ function WinnerEditor({
           {busy ? <span className="spinner" /> : null}
           Save revised prompts
         </button>
-        {dirty ? <span className="hint">Unsaved changes — the revised version becomes the record</span> : null}
+        {busy ? <BusyNote active label="Saving" /> : dirty ? (
+          <span className="hint">Unsaved changes — the revised version becomes the record</span>
+        ) : null}
       </div>
     </div>
   );
@@ -404,13 +405,8 @@ export function CandidatesBoard({
   async function commit(c: CandidateData, i: number) {
     setBusy(i);
     setError(null);
-    const res = await fetch("/api/prompts/compose", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ designId, commit: c }),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Commit failed");
+    const res = await apiJson("/api/prompts/compose", "POST", { designId, commit: c });
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusy(null);
   }
@@ -419,15 +415,12 @@ export function CandidatesBoard({
   async function spinOff(c: CandidateData, i: number) {
     setBusy(i);
     setError(null);
-    const res = await fetch("/api/prompts/compose", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ designId, spinOff: c }),
+    const res = await apiJson<{ record: { id: string; title: string } }>("/api/prompts/compose", "POST", {
+      designId, spinOff: c,
     });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Spin-off failed");
+    if (!res.ok) setError(res.error);
     else {
-      setSpunOff((cur) => ({ ...cur, [i]: { id: json.record.id as string, title: json.record.title as string } }));
+      setSpunOff((cur) => ({ ...cur, [i]: { id: res.data.record.id, title: res.data.record.title } }));
       router.refresh();
     }
     setBusy(null);

@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
+import { apiCall, apiJson } from "@/lib/api";
 
 export interface StyleCard {
   id: string;
@@ -70,13 +71,8 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
     if (!open) return;
     setBusy("save");
     setError(null);
-    const res = await fetch(`/api/styles/${open.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(draft),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Save failed");
+    const res = await apiJson(`/api/styles/${open.id}`, "PATCH", draft);
+    if (!res.ok) setError(res.error);
     else {
       setDirty(false);
       router.refresh();
@@ -88,9 +84,8 @@ export function StylesBrowser({ styles }: { styles: StyleCard[] }) {
     if (!open) return;
     setBusy("delete");
     setError(null);
-    const res = await fetch(`/api/styles/${open.id}`, { method: "DELETE" });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Delete failed");
+    const res = await apiCall(`/api/styles/${open.id}`, { method: "DELETE" });
+    if (!res.ok) setError(res.error);
     else {
       setOpenId(null);
       router.refresh();

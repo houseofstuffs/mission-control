@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
+import { apiCall, apiJson } from "@/lib/api";
 import {
   BUCKETS,
   SHOT_TYPES,
@@ -44,13 +45,9 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   async function call(label: string, url: string, method: string, body?: unknown) {
     setBusy(label);
     setError(null);
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) setError((json as { error?: string }).error ?? "Request failed");
+    const res =
+      body === undefined ? await apiCall(url, { method }) : await apiJson(url, method, body);
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusy(null);
   }

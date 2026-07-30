@@ -8,6 +8,7 @@
  */
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
@@ -26,13 +27,8 @@ export interface RunnerRecord {
 }
 
 async function stepAction(body: Record<string, unknown>): Promise<string | null> {
-  const res = await fetch("/api/step", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = await res.json();
-  return res.ok ? null : (json.error as string) ?? "Action failed";
+  const res = await apiJson("/api/step", "POST", body);
+  return res.ok ? null : res.error;
 }
 
 export function StepRunner({

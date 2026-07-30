@@ -9,6 +9,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
+import { BusyNote } from "./BusyNote";
+import { apiCall } from "@/lib/api";
 
 export interface ArtworkData {
   designId: string;
@@ -60,14 +62,13 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
     form.append("artworkLink", link);
     form.append("winningModel", model);
     if (file) form.append("snapshot", file, file.name);
-    const res = await fetch(`/api/designs/${data.designId}`, { method: "PATCH", body: form });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Save failed");
+    const res = await apiCall(`/api/designs/${data.designId}`, { method: "PATCH", body: form });
+    if (!res.ok) setError(res.error);
     else {
       setFile(null);
       router.refresh();
     }
-    setBusy(false);
+    setBusy(false); // always runs — apiCall never rejects
   }
 
   const shownPreview = previewUrl || data.snapshotUrl;
@@ -110,16 +111,17 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             </datalist>
             <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
           </div>
-          <div className="row-gap-12">
+          <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               {busy ? <span className="spinner" /> : null}
               Save artwork
             </button>
-            {file ? (
-              <button className="btn btn-tertiary" onClick={() => setFile(null)} disabled={busy}>
+            {file && !busy ? (
+              <button className="btn btn-tertiary" onClick={() => setFile(null)}>
                 Remove snapshot
               </button>
             ) : null}
+            <BusyNote active={busy} label={file ? "Uploading snapshot" : "Saving"} />
           </div>
           <span className="hint">
             The snapshot feeds the Kanban thumbnail and downstream reference; the master stays in Drive.

@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 
 interface Option { id: string; name: string }
 
@@ -28,17 +29,13 @@ export function NewDesignButton({
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/designs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await apiJson<Record<string, any>>("/api/designs", "POST", {
         name: name.trim(),
         nicheId: nicheId || undefined,
         productId: productId || undefined,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Create failed");
+      });
+    const json = res.data;
+    if (!res.ok) setError(res.error);
     else {
       setOpen(false);
       setName("");
@@ -113,18 +110,14 @@ export function NewListingButton({
   async function create() {
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/listings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await apiJson<Record<string, any>>("/api/listings", "POST", {
         name: name.trim(),
         designIds: designId ? [designId] : [],
         productId: productId || undefined,
         originType,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Create failed");
+      });
+    const json = res.data;
+    if (!res.ok) setError(res.error);
     else {
       setOpen(false);
       setName("");

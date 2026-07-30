@@ -12,6 +12,8 @@ import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
+import { BusyNote } from "./BusyNote";
+import { apiCall } from "@/lib/api";
 
 interface Draft {
   name: string;
@@ -90,14 +92,21 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     if (!jobId || draft) return;
     let cancelled = false;
     async function check() {
-      const res = await fetch(`/api/styles/capture?job=${jobId}`);
+      const res = await apiCall<{ status: string; style: unknown; error: string; imageDataUrl: string }>(
+        `/api/styles/capture?job=${jobId}`,
+        { timeoutMs: 20_000 }
+      );
       if (cancelled) return;
       if (!res.ok) {
-        setError(res.status === 404 ? "That capture expired — drop the reference again." : "Couldn't check the capture job.");
-        clearJob();
+        // a single failed poll is not fatal — keep waiting, the job lives
+        // server-side; only a definitive 'expired' clears it
+        if (/expired|not found/i.test(res.error ?? "")) {
+          setError("That capture expired — drop the reference again.");
+          clearJob();
+        }
         return;
       }
-      const json = await res.json();
+      const json = res.data as { status: string; style: unknown; error: string; imageDataUrl: string };
       if (json.status === "done") {
         setDraft(json.style as Draft);
         if (json.imageDataUrl) setServerPreview(json.imageDataUrl as string);
@@ -162,13 +171,12 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     const form = new FormData();
     form.append("image", file, file.name);
     if (hint.trim()) form.append("hint", hint.trim());
-    const res = await fetch("/api/styles/capture", { method: "POST", body: form });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Capture failed");
+    const res = await apiCall<{ jobId: string }>("/api/styles/capture", { method: "POST", body: form });
+    if (!res.ok) setError(res.error);
     else {
-      setJobId(json.jobId as string);
+      setJobId(res.data.jobId);
       try {
-        localStorage.setItem(JOB_KEY, json.jobId as string);
+        localStorage.setItem(JOB_KEY, res.data.jobId);
       } catch {}
     }
   }
@@ -181,9 +189,8 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
     for (const [k, v] of Object.entries(draft)) form.append(k, String(v ?? ""));
     if (file) form.append("image", file, file.name);
     if (jobId) form.append("jobId", jobId);
-    const res = await fetch("/api/styles", { method: "POST", body: form });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Save failed");
+    const res = await apiCall("/api/styles", { method: "POST", body: form });
+    if (!res.ok) setError(res.error);
     else {
       setSaved(draft.name);
       setDraft(null);
@@ -263,6 +270,7 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
               {generating ? (
                 <span className="hint">Runs on the server — safe to leave this page and come back.</span>
               ) : null}
+              <BusyNote active={busy === "save"} label="Saving to Notion" />
             </div>
 
             <button

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import type { SimpleValue } from "@/server/notion/props";
@@ -34,11 +35,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         if (!snapshot.type.startsWith("image/")) {
           return NextResponse.json({ error: "The snapshot must be an image." }, { status: 400 });
         }
-        if (snapshot.size > 5 * 1024 * 1024) {
-          return NextResponse.json({ error: "Snapshots should be under 5MB — it's a preview, not the master." }, { status: 400 });
-        }
-        const upload = await uploadFileToNotion(snapshot);
-        values["Artwork Snapshot"] = [{ name: snapshot.name, uploadId: upload.id }];
+        // Downscale before Notion: a full-res generation is many MB, and this
+        // is a thumbnail. PNG in, PNG out — transparency survives.
+        const raw = Buffer.from(await snapshot.arrayBuffer());
+        const resized = await sharp(raw)
+          .resize(1400, 1400, { fit: "inside", withoutEnlargement: true })
+          .png({ compressionLevel: 9 })
+          .toBuffer();
+        const thumb = new File([resized], snapshot.name.replace(/\.[^.]+$/, "") + ".png", {
+          type: "image/png",
+        });
+        const upload = await uploadFileToNotion(thumb);
+        values["Artwork Snapshot"] = [{ name: thumb.name, uploadId: upload.id }];
       }
     } else {
       const body = await req.json();

@@ -8,6 +8,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 import { KANBAN_STAGES } from "@/lib/workflows";
 import { StatusChip } from "./ui";
 
@@ -52,26 +53,17 @@ export function Kanban({ cards }: { cards: KanbanCardData[] }) {
       reason = answer.trim();
     }
 
-    const res = await fetch("/api/step", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const res = await apiJson("/api/step", "POST", ({
         pageId: card.id,
         action: backward ? "back" : "move",
         step: toStep === "Done" ? "C11" : toStep,
         reason,
-      }),
-    });
+      }));
     if (toStep === "Done" && res.ok) {
       // moving to Done = marking the final step complete
-      await fetch("/api/step", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageId: card.id, action: "done", step: "C11" }),
-      });
+      await apiJson("/api/step", "POST", { pageId: card.id, action: "done", step: "C11" });
     }
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) setError(json.error ?? "Move failed");
+    if (!res.ok) setError(res.error);
     else setError(null);
     router.refresh();
   }

@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiCall, apiJson } from "@/lib/api";
 
 /** Single-part Notion upload cap; free-plan workspaces enforce ~5MB server-side. */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -157,7 +158,7 @@ export function InboxGrid({
     setSaving(true);
     setError(null);
     // multipart when an image rides along; plain JSON otherwise
-    let res: Response;
+    let res;
     if (pendingFile) {
       const form = new FormData();
       form.append("name", name.trim());
@@ -168,24 +169,19 @@ export function InboxGrid({
       if (occasionDate) form.append("occasionDate", occasionDate);
       if (leadTime) form.append("leadTimeDays", leadTime);
       form.append("image", pendingFile, pendingFile.name);
-      res = await fetch("/api/ideas", { method: "POST", body: form });
+      res = await apiCall("/api/ideas", { method: "POST", body: form });
     } else {
-      res = await fetch("/api/ideas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          captureType,
-          sourceUrl: sourceUrl || undefined,
-          note: note || undefined,
-          occasion: occasion || undefined,
-          occasionDate: occasionDate || undefined,
-          leadTimeDays: leadTime || undefined,
-        }),
+      res = await apiJson("/api/ideas", "POST", {
+        name: name.trim(),
+        captureType,
+        sourceUrl: sourceUrl || undefined,
+        note: note || undefined,
+        occasion: occasion || undefined,
+        occasionDate: occasionDate || undefined,
+        leadTimeDays: leadTime || undefined,
       });
     }
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Capture failed");
+    if (!res.ok) setError(res.error);
     else {
       setName(""); setSourceUrl(""); setNote(""); setOccasion(""); setOccasionDate(""); setLeadTime("");
       setPendingFile(null);
@@ -198,13 +194,8 @@ export function InboxGrid({
   async function triage(id: string, body: Record<string, unknown>) {
     setBusyId(id);
     setError(null);
-    const res = await fetch(`/api/ideas/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (!res.ok) setError(json.error ?? "Action failed");
+    const res = await apiJson(`/api/ideas/${id}`, "PATCH", body);
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusyId(null);
   }

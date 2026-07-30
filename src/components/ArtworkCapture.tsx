@@ -107,7 +107,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
               <option value="Ideogram" />
               <option value="Flux" />
             </datalist>
-            <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
           </div>
           {file ? (
             <div className="field">
@@ -138,10 +137,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             ) : null}
           </div>
           {error ? <div className="callout blocked">{error}</div> : null}
-          <span className="hint">
-            Gives the board a picture from the moment artwork exists. The finished master PNG and
-            PSD are captured at C7, and the final preview replaces this thumbnail then.
-          </span>
+          <span className="hint">For card preview only.</span>
         </div>
 
         <button

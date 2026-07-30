@@ -89,6 +89,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     } else {
       const body = await req.json();
       if (body.artworkLink !== undefined) values["Master PNG Link"] = body.artworkLink ? String(body.artworkLink) : null;
+      if (body.winningModel !== undefined) values["Winning Model"] = body.winningModel ? String(body.winningModel) : null;
       // C8 output — saving the link stamps the date the master was saved
       if (body.psdLink !== undefined) {
         values["PSD Master Link"] = body.psdLink ? String(body.psdLink) : null;

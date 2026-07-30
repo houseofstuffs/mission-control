@@ -33,6 +33,8 @@ export interface SlotRow {
 export interface SlotsData {
   listingId: string;
   isMultiVariant: boolean;
+  /** tightest garment compatibility across this listing's designs */
+  compatibility: string;
   slots: SlotRow[];
   templates: Array<{ id: string; name: string; shotType: string }>;
 }
@@ -91,6 +93,15 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
       </div>
 
       {error ? <div className="callout blocked">{error}</div> : null}
+
+      {/* the colourway count in this plan is only as good as the garment call
+          behind it — seeding while it's Unset assumes five, which may be wrong */}
+      {data.compatibility === "Unset" ? (
+        <div className="callout stale">
+          Garment compatibility isn&apos;t set on this listing&apos;s designs, so the plan assumes
+          five colourways. Set it at C8 and reseed if it turns out to be fewer.
+        </div>
+      ) : null}
 
       {data.isMultiVariant ? (
         <div className="hint">

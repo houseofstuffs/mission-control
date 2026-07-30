@@ -5,6 +5,7 @@ import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
+import { compatForListing } from "@/server/imageSlots";
 import { isStaleKeyword } from "@/config/keywords";
 import { Kicker } from "@/components/ui";
 
@@ -26,13 +27,13 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       <StepRunner
         record={runnerRecord(rec)}
         seo={seoData(rec.id, String(rec.props["Tags"] ?? ""))}
-        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]))}
+        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec))}
       />
     </div>
   );
 }
 
-function slotsData(listingId: string, isMultiVariant: boolean): SlotsData {
+function slotsData(listingId: string, isMultiVariant: boolean, compatibility: string): SlotsData {
   const slots: SlotRow[] = cachedRecords("image_slots")
     .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(listingId))
     .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))
@@ -51,7 +52,7 @@ function slotsData(listingId: string, isMultiVariant: boolean): SlotsData {
     name: t.title,
     shotType: String(t.props["Shot Type"] ?? ""),
   }));
-  return { listingId, isMultiVariant, slots, templates };
+  return { listingId, isMultiVariant, compatibility, slots, templates };
 }
 
 function seoData(listingId: string, tags: string): SeoData {

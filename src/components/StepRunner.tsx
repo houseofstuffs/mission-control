@@ -19,6 +19,8 @@ import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
 import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
 import { TexturePick, type TextureData } from "./TexturePick";
+import { StandingConstraints } from "./StandingConstraints";
+import { PrintCheck, type PrintCheckData } from "./PrintCheck";
 
 export interface RunnerRecord {
   id: string;
@@ -47,6 +49,7 @@ export function StepRunner({
   masterAssets,
   textTreatment,
   texture,
+  printCheck,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -58,6 +61,7 @@ export function StepRunner({
   masterAssets?: MasterAssetsData;
   textTreatment?: TextTreatmentData;
   texture?: TextureData;
+  printCheck?: PrintCheckData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -250,7 +254,10 @@ export function StepRunner({
           <ImageSlotsPanel data={slots} />
         ) : null}
 
-        {/* C2's output: which generation won, and the board's first thumbnail */}
+        {/* C2's output: which generation won, and the board's first thumbnail.
+            The standing constraints sit above it — they belong to the prompt
+            you're about to paste into Kittl, not to the result. */}
+        {record.workflowKey === "creative" && selected.id === "C2" ? <StandingConstraints /> : null}
         {record.workflowKey === "creative" && selected.id === "C2" && artwork ? (
           <ArtworkCapture data={artwork} />
         ) : null}
@@ -271,7 +278,12 @@ export function StepRunner({
           <MasterAssets data={masterAssets} />
         ) : null}
 
-        {/* the candidate set follows the design to C2 — generate each image
+        {/* C8: the garment call, and the pixels the eye can't audit */}
+        {record.workflowKey === "creative" && selected.id === "C8" && printCheck ? (
+          <PrintCheck data={printCheck} />
+        ) : null}
+
+        {/* the candidate set follows the design to C2— generate each image
             prompt there, then crown the winner */}
         {record.workflowKey === "creative" &&
         (selected.id === "C1" || selected.id === "C2") &&

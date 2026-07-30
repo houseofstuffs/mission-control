@@ -4,6 +4,7 @@
  */
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState, unmetRequirement } from "@/server/steps";
+import { compatForListing } from "@/server/imageSlots";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
@@ -322,6 +323,12 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]) },
       { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null }
     );
+    // Hard block, not advice: this decides which garment colours ship.
+    const compat = compatForListing(rec);
+    gates.push({
+      label: compat === "Unset" ? "Garment compatibility not set." : `Garment compatibility: ${compat}`,
+      ok: compat !== "Unset",
+    });
     // Image-slot hard gates. Belief-bucket coverage stays advisory — only
     // the thumbnail, size/care, and the multi-variant pair block.
     const slots = cachedRecords("image_slots")
@@ -384,6 +391,16 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       {
         label: "Trademark screening confirmed",
         ok: niche ? str(niche.props["Screening Status"]) === "Screened clear" : false,
+      },
+      // set at C8 — the listing can't publish without it
+      {
+        label:
+          str(rec.props["Garment Compatibility"]) && str(rec.props["Garment Compatibility"]) !== "Unset"
+            ? `Garment compatibility: ${str(rec.props["Garment Compatibility"])}`
+            : "Garment compatibility not set.",
+        ok:
+          Boolean(str(rec.props["Garment Compatibility"])) &&
+          str(rec.props["Garment Compatibility"]) !== "Unset",
       }
     );
   }

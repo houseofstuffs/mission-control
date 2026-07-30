@@ -104,6 +104,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         values["PSD Master Link"] = body.psdLink ? String(body.psdLink) : null;
         values["PSD Saved At"] = body.psdLink ? new Date().toISOString().slice(0, 10) : null;
       }
+      // C8's judgement call — "Unset" is stored as itself, not as empty, so
+      // the gate can tell "not looked at yet" from "looked at, unconstrained"
+      if (body.garmentCompatibility !== undefined) {
+        values["Garment Compatibility"] = body.garmentCompatibility
+          ? String(body.garmentCompatibility)
+          : null;
+      }
+      if (body.garmentCompatibilityReason !== undefined) {
+        values["Garment Compatibility Reason"] = String(body.garmentCompatibilityReason ?? "");
+      }
       if (body.textSource !== undefined) values["Text Source"] = body.textSource ? String(body.textSource) : null;
       if (body.textDetail !== undefined) values["Text Detail"] = String(body.textDetail ?? "");
       if (body.textureDetail !== undefined) values["Texture Detail"] = String(body.textureDetail ?? "");

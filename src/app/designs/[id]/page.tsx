@@ -8,6 +8,7 @@ import type { ArtworkData } from "@/components/ArtworkCapture";
 import type { MasterAssetsData } from "@/components/MasterAssets";
 import type { TextTreatmentData } from "@/components/TextTreatment";
 import type { TextureData } from "@/components/TexturePick";
+import type { PrintCheckData } from "@/components/PrintCheck";
 import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
@@ -57,6 +58,7 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
           textSource: String(rec.props["Text Source"] ?? ""),
           textDetail: String(rec.props["Text Detail"] ?? ""),
         }}
+        printCheck={printCheckData(rec)}
         texture={{
           designId: rec.id,
           textureId: (rec.props["Texture"] as string[] | null)?.[0] ?? null,
@@ -80,6 +82,32 @@ function styleOptions(): StyleOption[] {
     category: String(s.props["Category"] ?? ""),
     slots: String(s.props["Slots"] ?? ""),
   }));
+}
+
+function printCheckData(rec: NonNullable<ReturnType<typeof cachedRecord>>): PrintCheckData {
+  const productId = (rec.props["Primary Product"] as string[] | null)?.[0] ?? null;
+  const product = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
+  // colours the primary product actually offers — the set the compatibility
+  // call filters. No product chosen yet just means nothing to filter.
+  const colors = productId
+    ? Array.from(
+        new Set(
+          cachedRecords("product_variants")
+            .filter((v) => ((v.props["Product"] as string[] | null) ?? []).includes(productId))
+            .map((v) => String(v.props["Color"] ?? "").trim())
+            .filter(Boolean)
+        )
+      ).sort()
+    : [];
+  return {
+    designId: rec.id,
+    compatibility: String(rec.props["Garment Compatibility"] ?? ""),
+    reason: String(rec.props["Garment Compatibility Reason"] ?? ""),
+    checked: Boolean(rec.props["Print File Checked"]),
+    notes: String(rec.props["Print File Check Notes"] ?? ""),
+    colors,
+    productName: product?.title ?? null,
+  };
 }
 
 function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): MasterAssetsData {

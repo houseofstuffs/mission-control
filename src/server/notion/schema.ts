@@ -14,6 +14,8 @@
  * External IDs are stored on every synced record — non-negotiable (§10).
  */
 
+import { GARMENT_COMPATIBILITY } from "@/config/design-prompt";
+
 export type PropType =
   | "title"
   | "rich_text"
@@ -370,6 +372,15 @@ export const SCHEMA: DbSpec[] = [
       // gets upscaled by Printify and prints soft.
       "Master Width": { type: "number" },
       "Master Height": { type: "number" },
+      // Which garment colours this artwork can sit on. Set by hand at C8 —
+      // no auto-detection, because "does this read on black" is a judgement.
+      // Drives colourway slot seeding, the variant filter, and the L6 gate.
+      // Absent reads as Unset everywhere.
+      "Garment Compatibility": { type: "select", options: [...GARMENT_COMPATIBILITY] },
+      "Garment Compatibility Reason": { type: "rich_text" },
+      // C8 pre-flight — advisory only. Never blocks, never edits the file.
+      "Print File Checked": { type: "checkbox" },
+      "Print File Check Notes": { type: "rich_text" },
       "Sample Ordered": { type: "checkbox" },
       "Sample ETA": { type: "date" },
       // VA workflow — nullable and invisible in v1 (§3.4)

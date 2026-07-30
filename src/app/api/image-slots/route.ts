@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, createRecord } from "@/server/notion/store";
-import { seedSlots, slotsForListing } from "@/server/imageSlots";
+import { seedSlots, slotsForListing, compatForListing } from "@/server/imageSlots";
 import { MAX_IMAGES } from "@/config/images";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,11 @@ export async function POST(req: Request) {
       if (existing.length > 0) {
         return NextResponse.json({ error: "This listing already has slots — seeding never overwrites." }, { status: 400 });
       }
-      const count = await seedSlots(listing.id, Boolean(listing.props["Is Multi Variant"]));
+      const count = await seedSlots(
+        listing.id,
+        Boolean(listing.props["Is Multi Variant"]),
+        compatForListing(listing)
+      );
       return NextResponse.json({ seeded: count });
     }
 

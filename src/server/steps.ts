@@ -16,6 +16,7 @@ import {
   type WorkflowDef,
 } from "@/lib/workflows";
 import { cachedRecord, createRecord, updateRecord } from "@/server/notion/store";
+import { compatForListing } from "@/server/imageSlots";
 import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
 
 export interface StepEntry {
@@ -104,6 +105,14 @@ function requireRecord(pageId: string): SimpleRecord {
  * BLOCK, and they block server-side so a stale page can't slip past them.
  */
 export function unmetRequirement(rec: SimpleRecord, stepId: string): string | null {
+  if (rec.dbKey === "etsy_listings") {
+    // The publish gate is where an unexamined design stops being harmless:
+    // it decides which garment colours ship. No default is safe here.
+    if ((stepId === "L6" || stepId === "L7") && compatForListing(rec) === "Unset") {
+      return "Garment compatibility not set.";
+    }
+    return null;
+  }
   if (rec.dbKey !== "designs") return null;
   const has = (prop: string) => {
     const v = rec.props[prop];

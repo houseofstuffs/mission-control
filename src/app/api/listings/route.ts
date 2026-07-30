@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, createRecord } from "@/server/notion/store";
-import { seedSlots } from "@/server/imageSlots";
+import { seedSlots, compatForListing } from "@/server/imageSlots";
 import { getDbId } from "@/server/cache/db";
 import type { SimpleValue } from "@/server/notion/props";
 
@@ -43,9 +43,10 @@ export async function POST(req: Request) {
     if (body.shopSectionId) values["Shop Section"] = [String(body.shopSectionId)];
 
     const record = await createRecord("etsy_listings", values);
-    // seed the image-slot plan (advisory, fully editable at L5)
+    // seed the image-slot plan (advisory, fully editable at L5) — how many
+    // colourway slots it gets depends on what the designs can print on
     if (getDbId("image_slots")) {
-      await seedSlots(record.id, Boolean(body.isMultiVariant));
+      await seedSlots(record.id, Boolean(body.isMultiVariant), compatForListing(record));
     }
     await createRecord("workflow_log", {
       Name: `${record.title} — Created new`,

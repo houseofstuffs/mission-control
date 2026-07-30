@@ -113,7 +113,8 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       needs: ["Textured transparent PNG"],
       produces: [
         "Refined artwork (artifacts cut/filled, edges cleaned, texture enhanced)",
-        "PSD master saved + linked on the record",
+        "PSD master + linked to Gdrive",
+        "Transparent PNG master + linked to Gdrive",
       ],
       dependsOn: ["C6"],
       note: "The PSD is the master asset. Every PNG is a disposable derivative.",

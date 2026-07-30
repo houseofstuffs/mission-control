@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker } from "./ui";
+import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 
 export interface ArtworkData {
@@ -85,7 +85,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
   return (
     <div className="card supporting">
       <Kicker>SELECTED GENERATION — C2&apos;S OUTPUT</Kicker>
-      {error ? <div className="callout blocked">{error}</div> : null}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
@@ -129,15 +128,16 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
           ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
-              {busy ? <span className="spinner" /> : null}
+              <Spinner active={busy} />
               Save artwork
             </button>
-            {file && !busy ? (
-              <button className="btn btn-tertiary" onClick={() => setFile(null)}>
+            {file ? (
+              <button className="btn btn-tertiary" onClick={() => setFile(null)} disabled={busy}>
                 Remove snapshot
               </button>
             ) : null}
           </div>
+          {error ? <div className="callout blocked">{error}</div> : null}
           <span className="hint">
             Gives the board a picture from the moment artwork exists. The finished master PNG and
             PSD are captured at C7, and the final preview replaces this thumbnail then.

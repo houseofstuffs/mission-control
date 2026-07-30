@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker } from "./ui";
+import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 
 export interface MasterAssetsData {
@@ -89,7 +89,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
   return (
     <div className="card supporting">
       <Kicker>MASTER ASSETS — C7&apos;S OUTPUT</Kicker>
-      {error ? <div className="callout blocked">{error}</div> : null}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
@@ -131,15 +130,16 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
           ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
-              {busy ? <span className="spinner" /> : null}
+              <Spinner active={busy} />
               Save master assets
             </button>
-            {file && !busy ? (
-              <button className="btn btn-tertiary" onClick={() => setFile(null)}>
+            {file ? (
+              <button className="btn btn-tertiary" onClick={() => setFile(null)} disabled={busy}>
                 Remove preview
               </button>
             ) : null}
           </div>
+          {error ? <div className="callout blocked">{error}</div> : null}
           <span className="hint">
             {data.psdSavedAt
               ? `PSD saved ${data.psdSavedAt} · unblocks the C8 validation gate.`

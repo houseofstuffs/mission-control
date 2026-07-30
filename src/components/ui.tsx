@@ -73,3 +73,12 @@ export function StatusChip({ kind, children }: { kind: string; children: ReactNo
 export function Kicker({ children }: { children: ReactNode }) {
   return <div className="kicker">{children}</div>;
 }
+
+/**
+ * Spinner that always occupies its space — hidden when idle rather than
+ * unmounted, so a button never changes width the moment it starts working.
+ * Layout that jumps at the exact moment you're watching it reads as a fault.
+ */
+export function Spinner({ active }: { active: boolean }) {
+  return <span className="spinner" style={{ visibility: active ? "visible" : "hidden" }} aria-hidden={!active} />;
+}

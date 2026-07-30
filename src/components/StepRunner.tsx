@@ -238,9 +238,14 @@ export function StepRunner({
           <ImageSlotsPanel data={slots} />
         ) : null}
 
-        {/* C2's output: the selected generation — snapshot + master link */}
+        {/* C2's output: which generation won, and the board's first thumbnail */}
         {record.workflowKey === "creative" && selected.id === "C2" && artwork ? (
-          <ArtworkCapture data={artwork} />
+          <ArtworkCapture data={artwork} mode="generation" />
+        ) : null}
+
+        {/* C6's output: the textured transparent master PNG that C7 refines */}
+        {record.workflowKey === "creative" && selected.id === "C6" && artwork ? (
+          <ArtworkCapture data={artwork} mode="master" />
         ) : null}
 
         {/* C8's output: the PSD master link — C10's gate depends on it */}

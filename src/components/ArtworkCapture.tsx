@@ -1,10 +1,16 @@
 "use client";
 
 /**
- * C2's output capture: a lightweight snapshot of the selected generation
- * (drop / paste / click — powers the Kanban thumbnail) plus the link to the
- * master file. The master belongs in Drive/S3 (spec §3.6) — the snapshot is
- * a preview, never the asset.
+ * Artwork capture, used at two points with different jobs:
+ *
+ *   C2 "generation" — which generation won, and the first thumbnail the
+ *   Kanban board can show. No master link: nothing is knocked out yet.
+ *
+ *   C6 "master" — the transparent textured PNG that C7 refines, plus an
+ *   optional better thumbnail now that the artwork actually looks finished.
+ *
+ * Files live in Drive/S3 (spec §3.6); Notion holds links. The snapshot is a
+ * preview, never the asset.
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,7 +25,14 @@ export interface ArtworkData {
   winningModel: string;
 }
 
-export function ArtworkCapture({ data }: { data: ArtworkData }) {
+export function ArtworkCapture({
+  data,
+  mode,
+}: {
+  data: ArtworkData;
+  /** which job this instance is doing — see the header */
+  mode: "generation" | "master";
+}) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -56,6 +69,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
+  const isMaster = mode === "master";
   const dirty = file !== null || link !== data.artworkLink || model !== data.winningModel;
 
   async function save() {
@@ -81,20 +95,25 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>SELECTED ARTWORK — C2&apos;S OUTPUT</Kicker>
+      <Kicker>
+        {isMaster ? "MASTER PNG — C6'S OUTPUT" : "SELECTED GENERATION — C2'S OUTPUT"}
+      </Kicker>
       {error ? <div className="callout blocked">{error}</div> : null}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
-          <div className="field">
-            <label className="kicker" htmlFor="art-link">MASTER PNG LINK — TRANSPARENT BACKGROUND</label>
-            <input
-              id="art-link"
-              className="input"
-              placeholder="https://… — wherever the master file lives, tool-agnostic"
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-            />
-          </div>
+          {isMaster ? (
+            <div className="field">
+              <label className="kicker" htmlFor="art-link">MASTER PNG LINK — TEXTURED, TRANSPARENT</label>
+              <input
+                id="art-link"
+                className="input"
+                placeholder="https://… — wherever the master file lives, tool-agnostic"
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+              />
+            </div>
+          ) : null}
+          {!isMaster ? (
           <div className="field">
             <label className="kicker" htmlFor="art-model">GENERATION MODEL — WHICH ONE WON</label>
             <input
@@ -117,6 +136,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             </datalist>
             <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
           </div>
+          ) : null}
           {file ? (
             <div className="field">
               <label className="kicker" htmlFor="art-bg">IF TRANSPARENT, PREVIEW ON</label>
@@ -147,8 +167,9 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             <BusyNote active={busy} label={file ? "Uploading snapshot" : "Saving"} />
           </div>
           <span className="hint">
-            The snapshot feeds the Kanban thumbnail and downstream reference. Your master PNG is
-            never altered — the backdrop applies to this preview only.
+            {isMaster
+              ? "Dropping a snapshot here replaces the Kanban thumbnail with the finished artwork. Your master PNG is never altered — the backdrop applies to this preview only."
+              : "The snapshot gives the board a picture from the moment artwork exists. The transparent master PNG is captured at C6, after knockout and texture."}
           </span>
         </div>
 
@@ -185,7 +206,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             <>
               <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
               <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                DROP, PASTE (CTRL+V) OR CLICK — SNAPSHOT
+                {isMaster ? "DROP A BETTER THUMBNAIL (OPTIONAL)" : "DROP, PASTE (CTRL+V) OR CLICK — SNAPSHOT"}
               </span>
             </>
           )}

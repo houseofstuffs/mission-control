@@ -14,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
-import { BusyNote } from "./BusyNote";
 import { apiCall, apiJson } from "@/lib/api";
 
 export interface StyleOption {
@@ -374,9 +373,7 @@ function WinnerEditor({
           {busy ? <span className="spinner" /> : null}
           Save revised prompts
         </button>
-        {busy ? <BusyNote active label="Saving" /> : dirty ? (
-          <span className="hint">Unsaved changes — the revised version becomes the record</span>
-        ) : null}
+        {dirty ? <span className="hint">Unsaved changes — the revised version becomes the record</span> : null}
       </div>
     </div>
   );

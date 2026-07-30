@@ -56,7 +56,11 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       label: "image gen",
       title: "Image generation",
       needs: ["Image prompt", "Master canvas ratio (from Primary Product)"],
-      produces: ["Selected image (2 options × 4 models, 8 max)"],
+      produces: [
+        "2-3 styles (1 img gen each)",
+        "4-5 rounds max on selected",
+        "Selected image",
+      ],
       dependsOn: ["C1"],
       note: "Image-generate, not agentic. Artboard at master canvas ratio — the ratio is the generation constraint.",
     },

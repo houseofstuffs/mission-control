@@ -14,8 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
-import { BusyNote } from "./BusyNote";
-import { apiCall } from "@/lib/api";
+import { apiCall, apiJson } from "@/lib/api";
 
 export interface MasterAssetsData {
   designId: string;
@@ -65,14 +64,18 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
   async function save() {
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.append("psdLink", psd);
-    form.append("artworkLink", png);
+    // uploads go to the POST subroute — multipart on PATCH doesn't survive
+    let res;
     if (file) {
+      const form = new FormData();
+      form.append("psdLink", psd);
+      form.append("artworkLink", png);
       form.append("snapshot", file, file.name);
       form.append("snapshotBackdrop", backdrop);
+      res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
+    } else {
+      res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { psdLink: psd, artworkLink: png });
     }
-    const res = await apiCall(`/api/designs/${data.designId}`, { method: "PATCH", body: form });
     if (!res.ok) setError(res.error);
     else {
       setFile(null);
@@ -136,7 +139,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
                 Remove preview
               </button>
             ) : null}
-            <BusyNote active={busy} label={file ? "Uploading preview" : "Saving"} />
           </div>
           <span className="hint">
             {data.psdSavedAt

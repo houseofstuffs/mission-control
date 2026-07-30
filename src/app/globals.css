@@ -242,6 +242,14 @@ a:hover { color: var(--candy); }
   animation: spin 0.7s linear infinite;
 }
 .btn-primary .spinner { border-color: #fff; border-right-color: transparent; }
+/* A busy button is disabled, which pales its background — a white spinner
+   then disappears into it. Dark and slightly heavier while working, so the
+   wheel is the clear signal that something is happening. */
+.btn:disabled .spinner,
+.btn.disabled .spinner {
+  border: 2.5px solid var(--text-primary);
+  border-right-color: transparent;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- cards & wells ---------- */

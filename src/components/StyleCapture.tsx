@@ -12,7 +12,6 @@ import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
-import { BusyNote } from "./BusyNote";
 import { apiCall } from "@/lib/api";
 
 interface Draft {
@@ -270,7 +269,6 @@ export function StyleCapture({ compact = false }: { compact?: boolean }) {
               {generating ? (
                 <span className="hint">Runs on the server — safe to leave this page and come back.</span>
               ) : null}
-              <BusyNote active={busy === "save"} label="Saving to Notion" />
             </div>
 
             <button

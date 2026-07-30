@@ -20,6 +20,17 @@ import {
 
 const OUT = "SCHEMA.md";
 
+/**
+ * What the copy in Google Drive (Docs/stuffs-mission-control-SCHEMA.md)
+ * currently contains. The Drive connector can't overwrite a file in place —
+ * re-uploading mints a new link — so the copy there is refreshed in batches
+ * rather than every time a field lands.
+ *
+ * Update these two lines whenever it IS re-uploaded. Until then this script
+ * says how far behind it has drifted, so nobody has to remember.
+ */
+const DRIVE_COPY = { fields: 232, uploaded: "2026-07-30" };
+
 /** Human name for a property type, plus whatever detail it carries. */
 function describe(spec: PropSpec, byKey: Map<string, DbSpec>): { type: string; detail: string } {
   switch (spec.type) {
@@ -144,6 +155,15 @@ function main() {
   writeFileSync(OUT, out.join("\n"));
   const fields = SCHEMA.reduce((n, d) => n + Object.keys(d.properties).length, 0);
   console.log(`Wrote ${OUT} — ${SCHEMA.length} databases, ${fields} fields.`);
+
+  const drift = fields - DRIVE_COPY.fields;
+  if (drift !== 0) {
+    console.log(
+      `\n  ⚠ The Drive copy is ${Math.abs(drift)} field${Math.abs(drift) === 1 ? "" : "s"} ` +
+        `${drift > 0 ? "behind" : "ahead"} (last uploaded ${DRIVE_COPY.uploaded}).` +
+        `\n    Re-upload to Docs/ when it's worth a new link, then update DRIVE_COPY in this file.`
+    );
+  }
 }
 
 main();

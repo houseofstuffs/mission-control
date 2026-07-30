@@ -314,7 +314,7 @@ export const SCHEMA: DbSpec[] = [
     key: "designs",
     title: "Designs",
     description:
-      "The creative asset — artwork, PSD master, derivatives. Moves through the creative workflow C1–C11. The PSD is the master asset; every PNG is a disposable derivative. Files live in Drive/S3 — Notion stores links only.",
+      "The creative asset — artwork, PSD master, derivatives. Moves through the creative workflow C1–C9. The PSD is the master asset; every PNG is a disposable derivative. Files live in Drive/S3 — Notion stores links only.",
     properties: {
       Name: { type: "title" },
       "Current Step": { type: "select", options: CREATIVE_STEPS },

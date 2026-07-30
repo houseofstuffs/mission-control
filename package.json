@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "schema:doc": "tsx scripts/schema-doc.ts",
     "notion:provision": "tsx scripts/provision-notion.ts",
     "notion:refresh": "tsx scripts/refresh-cache.ts"
   },

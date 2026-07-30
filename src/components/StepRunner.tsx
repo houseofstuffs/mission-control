@@ -165,18 +165,16 @@ export function StepRunner({
             </div>
           </div>
 
-          {/* this step produces an artifact — no artifact, no completion */}
-          {doneBlocker && selectedStatus !== "done" ? (
-            <div className="callout blocked">{doneBlocker}</div>
-          ) : null}
           {error ? <div className="field-error">{error}</div> : null}
 
           <div className="row-gap-12">
             <button
               className="btn btn-primary"
-              disabled={busy !== null || selectedStatus === "done" || doneBlocker !== null}
+              disabled={busy !== null || selectedStatus === "done"}
               title={doneBlocker ?? undefined}
-              onClick={() => run("done", { action: "done", step: selected.id })}
+              // the requirement is explained on attempt, not pre-emptively —
+              // a warning shown before you've done anything is just noise
+              onClick={() => (doneBlocker ? setError(doneBlocker) : run("done", { action: "done", step: selected.id }))}
             >
               {busy === "done" ? <span className="spinner" /> : null}
               Mark step done

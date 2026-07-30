@@ -88,7 +88,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
-            <label className="kicker" htmlFor="art-model">GENERATION MODEL — WHICH ONE WON</label>
+            <label className="kicker" htmlFor="art-model">GENERATION MODEL USED</label>
             <input
               id="art-model"
               className="input"

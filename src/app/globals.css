@@ -517,7 +517,11 @@ a:hover { color: var(--candy); }
   overflow-x: auto;
   padding-bottom: 22px;
 }
-.kanban-col { width: 280px; flex: 0 0 280px; display: flex; flex-direction: column; gap: 12px; }
+/* Columns share the width rather than each claiming a fixed 280px — five
+   fixed columns overflowed a 1200px page no matter how few stages there
+   were. min-width keeps them readable on a narrow window, where the
+   container's overflow-x takes over. */
+.kanban-col { flex: 1 1 0; min-width: 210px; display: flex; flex-direction: column; gap: 12px; }
 .kanban-col-head { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
 
 .kanban-card {

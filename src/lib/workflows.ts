@@ -250,11 +250,19 @@ export function downstreamOf(wf: WorkflowDef, fromStep: string): string[] {
   return wf.steps.filter((s) => out.has(s.id)).map((s) => s.id);
 }
 
-/** Kanban stages for the Designs board — groups of creative steps. */
+/**
+ * Kanban stages for the Designs board — a DISPLAY grouping over C1–C9, five
+ * columns wide so the board doesn't run off the side of the screen.
+ *
+ * Bundling costs nothing here. Staleness and backtracking are still computed
+ * per-step in the runner, which keeps all nine: the reason C2–C6 stayed
+ * separate there — redoing texture must not re-flag the upscale — has no
+ * bearing on how many columns a board draws. Artwork is everything from the
+ * first generation to the textured export, which is one sitting anyway.
+ */
 export const KANBAN_STAGES: Array<{ key: string; label: string; steps: string[] }> = [
   { key: "concept", label: "Concept", steps: ["C1"] },
-  { key: "generate", label: "Generate", steps: ["C2", "C3", "C4"] },
-  { key: "texture", label: "Texture", steps: ["C5", "C6"] },
+  { key: "artwork", label: "Artwork", steps: ["C2", "C3", "C4", "C5", "C6"] },
   { key: "refine", label: "Refine", steps: ["C7"] },
   { key: "validate", label: "Validate", steps: ["C8"] },
   { key: "fanout", label: "Fan out", steps: ["C9"] },

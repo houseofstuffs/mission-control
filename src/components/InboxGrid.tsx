@@ -426,14 +426,21 @@ export function InboxGrid({
               >
                 ™ {idea.trademarkRisk.toLowerCase()}
               </span>
-            ) : idea.captureType === "Copy" && idea.status === "Inbox" ? (
+            ) : (idea.captureType === "Copy" || idea.captureType === "URL") &&
+              idea.status !== "Discarded" ? (
+              // No verdict is its own state, not a blank space — the screen is
+              // fire-and-forget at capture, so "never ran" and "failed" look
+              // identical from here. Either way it's one click to fix, at any
+              // status: an idea that got triaged before its screen landed
+              // used to have no way back.
               <button
-                className="btn btn-tertiary"
-                style={{ fontSize: 11, padding: "3px 8px", alignSelf: "flex-start" }}
+                className="chip stale"
+                style={{ alignSelf: "flex-start", cursor: "pointer", border: "none", font: "inherit" }}
                 disabled={busyId === idea.id}
+                title="No trademark verdict on this yet — click to screen it"
                 onClick={() => triage(idea.id, { action: "screen" })}
               >
-                ™ screen
+                {busyId === idea.id ? "™ screening…" : "™ not screened"}
               </button>
             ) : null}
             {/* occasion lives in its dropdown now; only the due date earns a line */}

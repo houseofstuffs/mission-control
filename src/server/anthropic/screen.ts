@@ -38,21 +38,35 @@ names, celebrity names, brand names, sports teams, and famous slogans are the
 risks. Common idioms, generic sentiments and original wording are Clear —
 do not inflate risk on ordinary language. When you recognise the likely
 source, name it. This is an early-warning heuristic, not legal clearance;
-the shop runs a real screening step before anything publishes.`;
+the shop runs a real screening step before anything publishes.
 
-export async function screenCopy(text: string): Promise<CopyRisk> {
+WHEN AN AUDIENCE IS GIVEN, USE IT. The audience names the fandom the phrase is
+being sold into, and that is usually the source. A plain-sounding line aimed at
+fans of a specific film, band, show or book is far more likely to be a quote or
+lyric FROM it than to be original — check the phrase against that work before
+calling it generic. "Sing your melody" reads as ordinary language on its own;
+sold to fans of Once, it's a line from Falling Slowly.`;
+
+/**
+ * @param niche  the audience this copy is aimed at. Load-bearing: the niche
+ *   is usually where the phrase came from, and without it an ordinary-looking
+ *   lyric reads as generic language.
+ */
+export async function screenCopy(text: string, niche?: string | null): Promise<CopyRisk> {
+  const prompt = [
+    "Screen this merch copy for trademark/IP risk:",
+    "",
+    `"${text.trim()}"`,
+    ...(niche?.trim() ? ["", `Audience / niche: ${niche.trim()}`] : []),
+  ].join("\n");
+
   const message = await anthropic()
     .messages.stream({
       model: model(),
       max_tokens: 2000,
       system: SYSTEM,
       output_config: { format: { type: "json_schema", schema: RISK_SCHEMA } },
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: `Screen this merch copy for trademark/IP risk:\n\n"${text.trim()}"` }],
-        },
-      ],
+      messages: [{ role: "user", content: [{ type: "text", text: prompt }] }],
     })
     .finalMessage();
 

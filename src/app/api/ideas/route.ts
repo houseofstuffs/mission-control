@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRecord, updateRecord } from "@/server/notion/store";
+import { cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { screenCopy } from "@/server/anthropic/screen";
 import { anthropicConfigured } from "@/server/anthropic/client";
@@ -7,6 +7,16 @@ import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // image upload + page create, both throttled
+
+/**
+ * The audience for the capture-time screen. Usually absent — a niche is
+ * normally attached during triage, AFTER capture, which is why the attach
+ * action re-screens.
+ */
+function nicheName(nicheId: string | undefined): string | null {
+  if (!nicheId) return null;
+  return cachedRecords("niches").find((n) => n.id === nicheId)?.title ?? null;
+}
 
 /**
  * Capture is one action — everything but a name is optional (spec §4.3),
@@ -64,12 +74,15 @@ export async function POST(req: Request) {
     const isCopy = String(values["Capture Type"]) === "Copy" || (!image && (name || body.note));
     if (isCopy && anthropicConfigured()) {
       const text = [name, body.note ?? ""].filter(Boolean).join(" — ");
-      void screenCopy(text)
+      void screenCopy(text, nicheName(body.nicheId))
         .then((r) =>
           updateRecord("ideas", record.id, { "Trademark Risk": r.risk, "Risk Reason": r.reason })
         )
-        .catch(() => {
-          /* advisory only — a failed screen never blocks capture */
+        .catch((err) => {
+          // Advisory only — a failed screen never blocks capture. But it's
+          // logged rather than swallowed: the card shows "not screened", and
+          // this is where you find out why.
+          console.error(`Trademark pre-screen failed for "${name}":`, (err as Error).message);
         });
     }
     return NextResponse.json({ record });

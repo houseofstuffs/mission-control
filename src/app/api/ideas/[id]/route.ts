@@ -2,10 +2,29 @@ import { NextResponse } from "next/server";
 import { cachedRecord, createRecord, updateRecord, archiveRecord } from "@/server/notion/store";
 import { screenCopy } from "@/server/anthropic/screen";
 import { anthropicConfigured } from "@/server/anthropic/client";
-import type { SimpleValue } from "@/server/notion/props";
+import { cachedRecords } from "@/server/notion/store";
+import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // the screen action waits on a model call
+
+/** What gets screened: the phrase itself plus whatever note came with it. */
+function copyText(idea: SimpleRecord): string {
+  return [idea.title, String(idea.props["Note"] ?? "")].filter(Boolean).join(" — ");
+}
+
+/** The audience, which is usually the source. Empty when no niche is attached. */
+function nicheNameFor(idea: SimpleRecord): string | null {
+  const nicheId = ((idea.props["Niche"] as string[] | null) ?? [])[0];
+  if (!nicheId) return null;
+  return cachedRecords("niches").find((n) => n.id === nicheId)?.title ?? null;
+}
+
+/** Only text ideas are screened — a photo has no phrase to check. */
+function isCopyIdea(idea: SimpleRecord): boolean {
+  const type = String(idea.props["Capture Type"] ?? "");
+  return type === "Copy" || type === "URL" || type === "";
+}
 
 /**
  * Triage actions on an idea: discard, attach to an existing niche, or
@@ -29,8 +48,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (!anthropicConfigured()) {
         return NextResponse.json({ error: "ANTHROPIC_API_KEY is not set." }, { status: 400 });
       }
-      const text = [idea.title, String(idea.props["Note"] ?? "")].filter(Boolean).join(" — ");
-      const r = await screenCopy(text);
+      const r = await screenCopy(copyText(idea), nicheNameFor(idea));
       const record = await updateRecord("ideas", id, {
         "Trademark Risk": r.risk,
         "Risk Reason": r.reason,
@@ -87,7 +105,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         return NextResponse.json({ error: `Unknown action "${action}"` }, { status: 400 });
     }
 
-    const record = await updateRecord("ideas", id, values);
+    let record = await updateRecord("ideas", id, values);
+
+    // Attaching a niche is the moment the screen becomes worth trusting: the
+    // capture-time pass ran before the audience was known, and the audience is
+    // usually where the phrase came from. "Sing your melody" is generic until
+    // you know it's being sold to Once fans. Re-screen on the way through —
+    // failures leave the prior verdict alone rather than blocking the attach.
+    const attached = (action === "attach" || action === "promote") && isCopyIdea(record);
+    if (attached && anthropicConfigured()) {
+      try {
+        const r = await screenCopy(copyText(record), nicheNameFor(record));
+        record = await updateRecord("ideas", id, {
+          "Trademark Risk": r.risk,
+          "Risk Reason": r.reason,
+        });
+      } catch (err) {
+        console.error(`Re-screen on niche attach failed for "${record.title}":`, (err as Error).message);
+      }
+    }
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

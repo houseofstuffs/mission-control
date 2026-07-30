@@ -1,5 +1,11 @@
 /**
- * Workflow definitions — Creative (C1–C11) and Listing (L1–L7).
+ * Workflow definitions — Creative and Listing (L1–L7).
+ *
+ * Creative runs C1, C2, C3, C4, C5, C7, C8, C10, C11 — nine steps. C6 and C9
+ * were merged into their neighbours (routing into Texture; saving the PSD into
+ * Refine) because each was one action at the desk, not two. Their ids are
+ * retired rather than reused: C10 and C11 keep the meanings the project spec
+ * gives them, and no historical step-state entry can be misread.
  *
  * Backtracking is a first-class path (spec §10, Phase 1). Dependencies are
  * PER-STEP, not "everything after this point": redoing C8 stales retrofits
@@ -40,8 +46,8 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
   steps: [
     {
       id: "C1",
-      label: "input branch",
-      title: "Input branch",
+      label: "input",
+      title: "Input",
       needs: ["Greenlit niche", "Concept (artwork ref, copy, or template)", "Style record (optional)"],
       produces: ["Image prompt + text prompt pair", "Texture shortlist (chosen now, not mid-flow)"],
       dependsOn: [],
@@ -74,21 +80,16 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       dependsOn: ["C2", "C3"],
     },
     {
+      // C5 + the old C6 merged: texture is applied in Kittl by default, so
+      // the routing decision that used to be its own step collapses into it.
+      // Further texture work belongs at C8 as refinement, not a separate pass.
       id: "C5",
       label: "texture",
-      title: "Texture",
+      title: "Texture in Kittl",
       needs: ["Combined composition", "Texture shortlist (from concept stage)"],
-      produces: ["Textured composition (intensity variants rendered in one pass)"],
+      produces: ["Textured composition, exported for uprez"],
       dependsOn: ["C4"],
-      note: "Semantic matching matters. Texture reads differently across colorways — intensity may be variant-level.",
-    },
-    {
-      id: "C6",
-      label: "route",
-      title: "Route by texture source",
-      needs: ["Texture source (Kittl vs owned file)"],
-      produces: ["Export path decision (Kittl→Photoshop, or straight to Photoshop)"],
-      dependsOn: ["C5"],
+      note: "Applied as a Kittl layer — mask when the grain should eat the edges, overlay when it shouldn't. Semantic matching matters: texture reads differently across colorways. Any further texture work is refinement at C8.",
     },
     {
       id: "C7",
@@ -96,24 +97,22 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       title: "Uprez + remove background",
       needs: ["Exported composition"],
       produces: ["Print-resolution artwork, background removed"],
-      dependsOn: ["C6"],
+      dependsOn: ["C5"],
       note: "Two separate operations, not \"enhance\". Uprez happens in Kittl before Photoshop. Order (uprez-then-knockout vs reverse) still to confirm for cleaner edges.",
     },
     {
+      // C8 + the old C9 merged: refining and saving the file you just refined
+      // is one pass at the desk. Later ids keep their meaning (C10 validation,
+      // C11 fan-out) — the gap is deliberate, not a renumber.
       id: "C8",
-      label: "refine",
-      title: "Photoshop refinement",
+      label: "refine psd",
+      title: "Refine + save PSD master",
       needs: ["Print-resolution artwork"],
-      produces: ["Refined artwork (artifacts cut/filled, edges cleaned)"],
+      produces: [
+        "Refined artwork (artifacts cut/filled, edges cleaned)",
+        "PSD master saved + linked on the record",
+      ],
       dependsOn: ["C7"],
-    },
-    {
-      id: "C9",
-      label: "save psd",
-      title: "Save PSD master",
-      needs: ["Refined artwork"],
-      produces: ["PSD master in Drive (link on record)", "PSD saved date"],
-      dependsOn: ["C8"],
       note: "The PSD is the master asset. Every PNG is a disposable derivative.",
     },
     {
@@ -122,7 +121,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       title: "Validation gate",
       needs: ["PSD master", "Primary Product print specs"],
       produces: ["Printify product for primary product", "Verified print mock (bleed + margins)", "Sample decision"],
-      dependsOn: ["C9"],
+      dependsOn: ["C8"],
       note: "Primary product ONLY. Validate before you multiply — a backtrack invalidates one retrofit instead of six.",
     },
     {
@@ -251,8 +250,8 @@ export function downstreamOf(wf: WorkflowDef, fromStep: string): string[] {
 export const KANBAN_STAGES: Array<{ key: string; label: string; steps: string[] }> = [
   { key: "concept", label: "Concept", steps: ["C1"] },
   { key: "generate", label: "Generate", steps: ["C2", "C3", "C4"] },
-  { key: "texture", label: "Texture", steps: ["C5", "C6"] },
-  { key: "refine", label: "Refine", steps: ["C7", "C8", "C9"] },
+  { key: "texture", label: "Texture", steps: ["C5"] },
+  { key: "refine", label: "Refine", steps: ["C7", "C8"] },
   { key: "validate", label: "Validate", steps: ["C10"] },
   { key: "fanout", label: "Fan out", steps: ["C11"] },
   { key: "done", label: "Done", steps: ["Done"] },

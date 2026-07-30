@@ -5,6 +5,7 @@ import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import type { ArtworkData } from "@/components/ArtworkCapture";
+import type { PsdData } from "@/components/PsdCapture";
 import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
@@ -48,6 +49,7 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
         savedPair={savedPair(rec)}
         candidates={parseCandidates(rec)}
         artwork={artworkData(rec)}
+        psd={psdData(rec)}
       />
     </div>
   );
@@ -60,6 +62,14 @@ function styleOptions(): StyleOption[] {
     category: String(s.props["Category"] ?? ""),
     slots: String(s.props["Slots"] ?? ""),
   }));
+}
+
+function psdData(rec: NonNullable<ReturnType<typeof cachedRecord>>): PsdData {
+  return {
+    designId: rec.id,
+    psdLink: String(rec.props["PSD Master Link"] ?? ""),
+    psdSavedAt: String(rec.props["PSD Saved At"] ?? "") || null,
+  };
 }
 
 function artworkData(rec: NonNullable<ReturnType<typeof cachedRecord>>): ArtworkData {

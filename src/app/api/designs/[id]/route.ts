@@ -84,6 +84,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     } else {
       const body = await req.json();
       if (body.artworkLink !== undefined) values["Master PNG Link"] = body.artworkLink ? String(body.artworkLink) : null;
+      // C8 output — saving the link stamps the date the master was saved
+      if (body.psdLink !== undefined) {
+        values["PSD Master Link"] = body.psdLink ? String(body.psdLink) : null;
+        values["PSD Saved At"] = body.psdLink ? new Date().toISOString().slice(0, 10) : null;
+      }
       // primary product assignable from the runner — master canvas rides along,
       // same as at creation (§5.1: canvas comes from the product's print areas)
       if (body.productId !== undefined) {

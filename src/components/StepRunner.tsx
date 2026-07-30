@@ -16,6 +16,7 @@ import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type Can
 import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
+import { PsdCapture, type PsdData } from "./PsdCapture";
 
 export interface RunnerRecord {
   id: string;
@@ -39,6 +40,7 @@ export function StepRunner({
   seo,
   slots,
   artwork,
+  psd,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -47,6 +49,7 @@ export function StepRunner({
   seo?: SeoData;
   slots?: SlotsData;
   artwork?: ArtworkData;
+  psd?: PsdData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -238,6 +241,11 @@ export function StepRunner({
         {/* C2's output: the selected generation — snapshot + master link */}
         {record.workflowKey === "creative" && selected.id === "C2" && artwork ? (
           <ArtworkCapture data={artwork} />
+        ) : null}
+
+        {/* C8's output: the PSD master link — C10's gate depends on it */}
+        {record.workflowKey === "creative" && selected.id === "C8" && psd ? (
+          <PsdCapture data={psd} />
         ) : null}
 
         {/* the candidate set follows the design to C2 — generate each image

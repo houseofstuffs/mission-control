@@ -3,7 +3,7 @@
  * only — pages read the cache here and hand plain props to client components.
  */
 import { cachedRecords } from "@/server/notion/store";
-import { parseStepState } from "@/server/steps";
+import { parseStepState, unmetRequirement } from "@/server/steps";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
@@ -345,9 +345,17 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
     );
   }
 
+  // per-step hard blockers, so the button can explain itself before you click
+  const blockedDone: Record<string, string> = {};
+  for (const step of WORKFLOWS[rec.dbKey === "designs" ? "creative" : "listing"].steps) {
+    const reason = unmetRequirement(rec, step.id);
+    if (reason) blockedDone[step.id] = reason;
+  }
+
   return {
     id: rec.id,
     title: rec.title || "Untitled",
+    blockedDone,
     workflowKey: rec.dbKey === "designs" ? "creative" : "listing",
     current: state.current,
     steps,

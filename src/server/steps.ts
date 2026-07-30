@@ -98,12 +98,35 @@ function requireRecord(pageId: string): SimpleRecord {
   return rec;
 }
 
+/**
+ * Hard requirements — a step whose whole job is to produce an artifact can't
+ * be marked done without it. Advisory gates live in the gate panel; these
+ * BLOCK, and they block server-side so a stale page can't slip past them.
+ */
+export function unmetRequirement(rec: SimpleRecord, stepId: string): string | null {
+  if (rec.dbKey !== "designs") return null;
+  const has = (prop: string) => {
+    const v = rec.props[prop];
+    return Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim().length > 0 : Boolean(v);
+  };
+  if (stepId === "C2" && !has("Artwork Snapshot")) {
+    return "Drop a snapshot of the selected generation first — it's what this step produces.";
+  }
+  if (stepId === "C7") {
+    if (!has("PSD Master Link")) return "Save the PSD master link first — it's the master asset.";
+    if (!has("Master PNG Link")) return "Save the master PNG link first — exported from the refined PSD.";
+  }
+  return null;
+}
+
 /** Mark the current (or given) step done and advance to the next actionable step. */
 export async function markStepDone(pageId: string, stepId?: string): Promise<SimpleRecord> {
   const rec = requireRecord(pageId);
   const wf = workflowForDbKey(rec.dbKey);
   const state = parseStepState(rec);
   const id = stepId ?? state.current;
+  const unmet = unmetRequirement(rec, id);
+  if (unmet) throw new Error(unmet);
   const now = new Date().toISOString();
 
   state.steps[id] = { status: "done", at: now };

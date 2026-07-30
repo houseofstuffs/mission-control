@@ -25,6 +25,8 @@ export interface RunnerRecord {
   current: string;
   steps: Record<string, { status: StepStatus; note?: string; at?: string }>;
   gates?: Array<{ label: string; ok: boolean }>;
+  /** step id → why "done" is blocked; enforced server-side too */
+  blockedDone?: Record<string, string>;
 }
 
 async function stepAction(body: Record<string, unknown>): Promise<string | null> {
@@ -83,6 +85,7 @@ export function StepRunner({
   }
 
   const doneCount = wf.steps.filter((s) => record.steps[s.id]?.status === "done").length;
+  const doneBlocker = record.blockedDone?.[selected.id] ?? null;
 
   return (
     <div className="stack-22">
@@ -156,12 +159,17 @@ export function StepRunner({
             </div>
           </div>
 
+          {/* this step produces an artifact — no artifact, no completion */}
+          {doneBlocker && selectedStatus !== "done" ? (
+            <div className="callout blocked">{doneBlocker}</div>
+          ) : null}
           {error ? <div className="field-error">{error}</div> : null}
 
           <div className="row-gap-12">
             <button
               className="btn btn-primary"
-              disabled={busy !== null || selectedStatus === "done"}
+              disabled={busy !== null || selectedStatus === "done" || doneBlocker !== null}
+              title={doneBlocker ?? undefined}
               onClick={() => run("done", { action: "done", step: selected.id })}
             >
               {busy === "done" ? <span className="spinner" /> : null}

@@ -348,26 +348,31 @@ function WinnerEditor({
       {error ? <div className="callout blocked">{error}</div> : null}
       <div className="field">
         <div className="row-gap-8" style={{ alignItems: "center" }}>
-          <label className="kicker" htmlFor="win-img">IMAGE PROMPT — FOR C2 (EDIT FREELY)</label>
+          <label className="kicker" htmlFor="win-img">IMAGE PROMPT</label>
           <CopyIconButton text={imagePrompt} label="image prompt" />
         </div>
         <AutoTextarea id="win-img" value={imagePrompt} onChange={setImagePrompt} />
       </div>
       <div className="field">
         <div className="row-gap-8" style={{ alignItems: "center" }}>
-          <label className="kicker" htmlFor="win-txt">TEXT PROMPT — KITTL LAYER</label>
+          <label className="kicker" htmlFor="win-txt">TEXT PROMPT</label>
           <CopyIconButton text={textPrompt} label="text prompt" />
         </div>
         <AutoTextarea id="win-txt" value={textPrompt} onChange={setTextPrompt} />
       </div>
       <div className="field">
         <div className="row-gap-8" style={{ alignItems: "center" }}>
-          <label className="kicker" htmlFor="win-tex">TEXTURE NOTE — FOR C5</label>
+          <label className="kicker" htmlFor="win-tex">TEXTURE PROMPT</label>
           <CopyIconButton text={textureNote} label="texture note" />
         </div>
         <AutoTextarea id="win-tex" placeholder="no texture — clean style" value={textureNote} onChange={setTextureNote} />
       </div>
-      {winner.screeningPhrases ? <div className="hint">Screen: {winner.screeningPhrases}</div> : null}
+      {winner.screeningPhrases ? (
+        <div className="field">
+          <span className="kicker">TRADEMARK-SCREEN THIS TEXT</span>
+          <div className="body-sm">{winner.screeningPhrases}</div>
+        </div>
+      ) : null}
       <div className="row-gap-12">
         <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
           {busy ? <span className="spinner" /> : null}
@@ -465,14 +470,14 @@ export function CandidatesBoard({
               {c.notes ? <div className="hint">{c.notes}</div> : null}
               <div className="field">
                 <div className="row-gap-8" style={{ alignItems: "center" }}>
-                  <span className="kicker">IMAGE PROMPT — FOR C2</span>
+                  <span className="kicker">IMAGE PROMPT</span>
                   <CopyIconButton text={c.imagePrompt} label={`${c.styleName} image prompt`} />
                 </div>
                 <div className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{c.imagePrompt}</div>
               </div>
               <div className="field">
                 <div className="row-gap-8" style={{ alignItems: "center" }}>
-                  <span className="kicker">TEXT PROMPT — KITTL LAYER</span>
+                  <span className="kicker">TEXT PROMPT</span>
                   <CopyIconButton text={c.textPrompt} label={`${c.styleName} text prompt`} />
                 </div>
                 <div className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{c.textPrompt}</div>
@@ -480,14 +485,14 @@ export function CandidatesBoard({
               {c.textureNote ? (
                 <div className="field">
                   <div className="row-gap-8" style={{ alignItems: "center" }}>
-                    <span className="kicker">TEXTURE NOTE — FOR C5</span>
+                    <span className="kicker">TEXTURE PROMPT</span>
                     <CopyIconButton text={c.textureNote} label={`${c.styleName} texture note`} />
                   </div>
                   <div className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{c.textureNote}</div>
                 </div>
               ) : null}
               {c.screeningPhrases ? (
-                <div className="hint">Screen: {c.screeningPhrases}</div>
+                <div className="hint">Trademark-screen: {c.screeningPhrases}</div>
               ) : null}
               <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
                 {/* ONE button per card: crown first; once a winner exists,

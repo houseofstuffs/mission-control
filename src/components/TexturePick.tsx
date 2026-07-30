@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker, Spinner } from "./ui";
+import { Spinner } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
@@ -105,7 +105,6 @@ export function TexturePick({ data }: { data: TextureData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>TEXTURE USED — C6&apos;S OUTPUT</Kicker>
       {adding ? (
         <div className="row-gap-12" style={{ alignItems: "flex-end", flexWrap: "wrap" }}>
           <div className="field" style={{ flex: "1 1 200px" }}>
@@ -165,7 +164,7 @@ export function TexturePick({ data }: { data: TextureData }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
-            <label className="kicker" htmlFor="tx-detail">HOW IT WAS APPLIED — MASK OR OVERLAY, STRENGTH</label>
+            <label className="kicker" htmlFor="tx-detail">HOW IT WAS APPLIED</label>
             <AutoTextarea
               id="tx-detail"
               placeholder="e.g. mask at 60%, grain eats the edges"
@@ -185,10 +184,6 @@ export function TexturePick({ data }: { data: TextureData }) {
             ) : null}
           </div>
           {error ? <div className="callout blocked">{error}</div> : null}
-          <span className="hint">
-            Textured and knocked out — good enough to be the board&apos;s thumbnail now. C7&apos;s
-            refined export replaces it later.
-          </span>
         </div>
 
         <button
@@ -224,7 +219,7 @@ export function TexturePick({ data }: { data: TextureData }) {
             <>
               <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
               <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                THUMBNAIL — TEXTURED + KNOCKED OUT
+                THUMBNAIL
               </span>
             </>
           )}

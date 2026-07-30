@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker, Spinner } from "./ui";
+import { Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
 
@@ -89,11 +89,10 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>MASTER ASSETS — C7&apos;S OUTPUT</Kicker>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
-            <label className="kicker" htmlFor="ma-psd">PSD MASTER — LAYERED, OPENS IN PHOTOPEA OR PHOTOSHOP</label>
+            <label className="kicker" htmlFor="ma-psd">PSD MASTER</label>
             <input
               id="ma-psd"
               className="input"
@@ -103,7 +102,7 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
             />
           </div>
           <div className="field">
-            <label className="kicker" htmlFor="ma-png">MASTER PNG — EXPORTED FROM THE REFINED PSD, TRANSPARENT</label>
+            <label className="kicker" htmlFor="ma-png">MASTER PNG</label>
             <input
               id="ma-png"
               className="input"
@@ -124,11 +123,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
             ) : null}
           </div>
           {error ? <div className="callout blocked">{error}</div> : null}
-          <span className="hint">
-            {data.psdSavedAt
-              ? `PSD saved ${data.psdSavedAt} · unblocks the C8 validation gate.`
-              : "C8 won't pass without the PSD — it's the master asset."}
-          </span>
         </div>
 
         <button
@@ -164,7 +158,7 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
             <>
               <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
               <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                FINAL PREVIEW — REPLACES THE THUMBNAIL
+                FINAL PREVIEW
               </span>
             </>
           )}

@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker, Spinner } from "./ui";
+import { Spinner } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { apiJson } from "@/lib/api";
 
@@ -50,9 +50,8 @@ export function TextTreatment({ data }: { data: TextTreatmentData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>TEXT TREATMENT — C3&apos;S OUTPUT</Kicker>
       <div className="field">
-        <label className="kicker" htmlFor="tt-source">HOW THE LETTERING WAS PRODUCED</label>
+        <label className="kicker" htmlFor="tt-source">HOW IT WAS MADE</label>
         <select
           id="tt-source"
           className="select"
@@ -73,7 +72,7 @@ export function TextTreatment({ data }: { data: TextTreatmentData }) {
         </div>
       ) : null}
       <div className="field">
-        <label className="kicker" htmlFor="tt-detail">TEXT DETAIL — EXACT COPY, TYPEFACE, TREATMENT</label>
+        <label className="kicker" htmlFor="tt-detail">TEXT DETAIL</label>
         <AutoTextarea id="tt-detail" value={detail} onChange={setDetail} />
       </div>
       <div className="row-gap-12" style={{ flexWrap: "wrap" }}>

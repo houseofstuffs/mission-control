@@ -17,6 +17,8 @@ import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
+import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
+import { TexturePick, type TextureData } from "./TexturePick";
 
 export interface RunnerRecord {
   id: string;
@@ -43,6 +45,8 @@ export function StepRunner({
   slots,
   artwork,
   masterAssets,
+  textTreatment,
+  texture,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -52,6 +56,8 @@ export function StepRunner({
   slots?: SlotsData;
   artwork?: ArtworkData;
   masterAssets?: MasterAssetsData;
+  textTreatment?: TextTreatmentData;
+  texture?: TextureData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -251,6 +257,16 @@ export function StepRunner({
           <ArtworkCapture data={artwork} />
         ) : null}
 
+
+        {/* C3's output: how the lettering was produced, and what was set */}
+        {record.workflowKey === "creative" && selected.id === "C3" && textTreatment ? (
+          <TextTreatment data={textTreatment} />
+        ) : null}
+
+        {/* C6's output: which texture, and how it was applied */}
+        {record.workflowKey === "creative" && selected.id === "C6" && texture ? (
+          <TexturePick data={texture} />
+        ) : null}
 
         {/* C7's output: PSD master, the PNG exported from it, final preview */}
         {record.workflowKey === "creative" && selected.id === "C7" && masterAssets ? (

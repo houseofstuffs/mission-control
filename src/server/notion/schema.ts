@@ -326,6 +326,22 @@ export const SCHEMA: DbSpec[] = [
       "Primary Product": { type: "relation", relation: "products" },
       "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
       "Winning Model": { type: "select" },
+      // C3 — how the lettering was actually produced. Generated-in-image is
+      // the spelling-risk path; a live text layer is the safe one.
+      "Text Source": {
+        type: "select",
+        options: [
+          "Live text — Kittl",
+          "Live text — PODSpy",
+          "Generated in-image — Kittl",
+          "Generated in-image — PODSpy",
+          "Other",
+        ],
+      },
+      "Text Detail": { type: "rich_text" },
+      // C6 — how the chosen texture was applied (mask vs overlay, strength).
+      // WHICH texture is the Texture relation below.
+      "Texture Detail": { type: "rich_text" },
       Occasion: { type: "select", options: OCCASIONS },
       "Occasion Date": { type: "date" },
       "Lead Time Days": { type: "number" },

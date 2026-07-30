@@ -6,6 +6,8 @@ import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import type { ArtworkData } from "@/components/ArtworkCapture";
 import type { MasterAssetsData } from "@/components/MasterAssets";
+import type { TextTreatmentData } from "@/components/TextTreatment";
+import type { TextureData } from "@/components/TexturePick";
 import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
@@ -50,6 +52,22 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
         candidates={parseCandidates(rec)}
         artwork={artworkData(rec)}
         masterAssets={masterAssetsData(rec)}
+        textTreatment={{
+          designId: rec.id,
+          textSource: String(rec.props["Text Source"] ?? ""),
+          textDetail: String(rec.props["Text Detail"] ?? ""),
+        }}
+        texture={{
+          designId: rec.id,
+          textureId: (rec.props["Texture"] as string[] | null)?.[0] ?? null,
+          textureDetail: String(rec.props["Texture Detail"] ?? ""),
+          snapshotUrl: artworkData(rec).snapshotUrl,
+          textures: cachedRecords("textures").map((t) => ({
+            id: t.id,
+            name: t.title,
+            source: String(t.props["Source"] ?? ""),
+          })),
+        }}
       />
     </div>
   );

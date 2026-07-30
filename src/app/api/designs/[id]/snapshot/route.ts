@@ -63,6 +63,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       values["PSD Saved At"] = psd ? new Date().toISOString().slice(0, 10) : null;
     }
 
+    const textureId = form.get("textureId");
+    if (typeof textureId === "string") values["Texture"] = textureId ? [textureId] : [];
+    const textureDetail = form.get("textureDetail");
+    if (typeof textureDetail === "string") values["Texture Detail"] = textureDetail;
+
     const snapshot = form.get("snapshot");
     if (snapshot && typeof snapshot !== "string" && snapshot.size > 0) {
       if (!snapshot.type.startsWith("image/")) {

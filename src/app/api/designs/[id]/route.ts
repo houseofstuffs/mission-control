@@ -94,6 +94,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         values["PSD Master Link"] = body.psdLink ? String(body.psdLink) : null;
         values["PSD Saved At"] = body.psdLink ? new Date().toISOString().slice(0, 10) : null;
       }
+      if (body.textSource !== undefined) values["Text Source"] = body.textSource ? String(body.textSource) : null;
+      if (body.textDetail !== undefined) values["Text Detail"] = String(body.textDetail ?? "");
+      if (body.textureDetail !== undefined) values["Texture Detail"] = String(body.textureDetail ?? "");
+      if (body.textureId !== undefined) {
+        values["Texture"] = body.textureId ? [String(body.textureId)] : [];
+      }
       // primary product assignable from the runner — master canvas rides along,
       // same as at creation (§5.1: canvas comes from the product's print areas)
       if (body.productId !== undefined) {

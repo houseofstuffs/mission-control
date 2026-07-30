@@ -8,6 +8,34 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
+ * Transparent artwork needs a backdrop to be legible as a thumbnail — light
+ * work vanishes on white, dark work vanishes on black. Picks the contrasting
+ * one from the artwork's own mean luminance (alpha-weighted, so transparent
+ * pixels don't drag the average). Returns null when the image is already
+ * opaque: nothing to flatten.
+ */
+async function autoBackdrop(buf: Buffer): Promise<"#ffffff" | "#111111" | null> {
+  const meta = await sharp(buf).metadata();
+  if (!meta.hasAlpha) return null;
+  // analyse a thumbnail — same answer, a fraction of the work
+  const { data, info } = await sharp(buf)
+    .resize(64, 64, { fit: "inside" })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let lum = 0;
+  let weight = 0;
+  for (let i = 0; i < data.length; i += info.channels) {
+    const a = data[i + 3] / 255;
+    if (a < 0.05) continue; // effectively invisible
+    lum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) * a;
+    weight += a;
+  }
+  if (weight === 0) return "#ffffff"; // fully transparent — white is the safe default
+  return lum / weight > 140 ? "#111111" : "#ffffff";
+}
+
+/**
  * Design field edits from the dashboard — currently C2's artwork capture:
  * a lightweight snapshot (multipart) and/or the link to the master file.
  * The master lives in Drive/S3 per spec §3.6; the snapshot powers Kanban
@@ -36,12 +64,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           return NextResponse.json({ error: "The snapshot must be an image." }, { status: 400 });
         }
         // Downscale before Notion: a full-res generation is many MB, and this
-        // is a thumbnail. PNG in, PNG out — transparency survives.
+        // is a thumbnail. The MASTER file is never touched — only this preview.
         const raw = Buffer.from(await snapshot.arrayBuffer());
-        const resized = await sharp(raw)
-          .resize(1400, 1400, { fit: "inside", withoutEnlargement: true })
-          .png({ compressionLevel: 9 })
-          .toBuffer();
+        const choice = String(form.get("snapshotBackdrop") ?? "auto");
+        const backdrop =
+          choice === "white" ? "#ffffff"
+          : choice === "black" ? "#111111"
+          : choice === "transparent" ? null
+          : await autoBackdrop(raw);
+        let pipeline = sharp(raw).resize(1400, 1400, { fit: "inside", withoutEnlargement: true });
+        if (backdrop) pipeline = pipeline.flatten({ background: backdrop });
+        const resized = await pipeline.png({ compressionLevel: 9 }).toBuffer();
         const thumb = new File([resized], snapshot.name.replace(/\.[^.]+$/, "") + ".png", {
           type: "image/png",
         });

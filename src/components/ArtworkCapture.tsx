@@ -25,6 +25,9 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [link, setLink] = useState(data.artworkLink);
   const [model, setModel] = useState(data.winningModel);
+  // transparent artwork needs a backdrop to read as a thumbnail; auto picks
+  // the contrasting one. Affects the preview only, never the master.
+  const [backdrop, setBackdrop] = useState("auto");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -61,7 +64,10 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
     const form = new FormData();
     form.append("artworkLink", link);
     form.append("winningModel", model);
-    if (file) form.append("snapshot", file, file.name);
+    if (file) {
+      form.append("snapshot", file, file.name);
+      form.append("snapshotBackdrop", backdrop);
+    }
     const res = await apiCall(`/api/designs/${data.designId}`, { method: "PATCH", body: form });
     if (!res.ok) setError(res.error);
     else {
@@ -111,6 +117,23 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             </datalist>
             <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
           </div>
+          {file ? (
+            <div className="field">
+              <label className="kicker" htmlFor="art-bg">IF TRANSPARENT, PREVIEW ON</label>
+              <select
+                id="art-bg"
+                className="select"
+                style={{ maxWidth: 260 }}
+                value={backdrop}
+                onChange={(e) => setBackdrop(e.target.value)}
+              >
+                <option value="auto">Auto — contrast with the artwork</option>
+                <option value="white">White</option>
+                <option value="black">Black</option>
+                <option value="transparent">Keep transparent</option>
+              </select>
+            </div>
+          ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               {busy ? <span className="spinner" /> : null}
@@ -124,7 +147,8 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             <BusyNote active={busy} label={file ? "Uploading snapshot" : "Saving"} />
           </div>
           <span className="hint">
-            The snapshot feeds the Kanban thumbnail and downstream reference; the master stays in Drive.
+            The snapshot feeds the Kanban thumbnail and downstream reference. Your master PNG is
+            never altered — the backdrop applies to this preview only.
           </span>
         </div>
 

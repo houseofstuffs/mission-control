@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiCall, apiJson } from "@/lib/api";
+import { monthDay } from "@/lib/dates";
 
 /** Single-part Notion upload cap; free-plan workspaces enforce ~5MB server-side. */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -82,13 +83,6 @@ function dateInYear(occasion: string, year: number): string | null {
  * date if it hasn't passed, otherwise next year's — floating holidays are
  * recomputed for the new year, not just year-bumped. Graduation has no
  * single date, so it stays manual. Always editable after. */
-/** "2026-09-16" → "Sep 16" — parsed by hand so timezones can't shift the day. */
-function monthDay(iso: string): string {
-  const [, m, d] = iso.split("-").map(Number);
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return m >= 1 && m <= 12 && d ? `${MONTHS[m - 1]} ${d}` : iso;
-}
-
 function occasionDateFor(occasion: string, today: Date): string | null {
   const year = today.getFullYear();
   const thisYear = dateInYear(occasion, year);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { TimeStamp } from "./TimeStamp";
 
 /**
  * Explicit refresh — the only way reads reach Notion (spec §2.1). Shows the
@@ -39,7 +40,7 @@ export function RefreshButton({ lastSyncedAt }: { db?: string; lastSyncedAt?: st
     <div className="row-gap-12">
       {error ? <span className="field-error">{error}</span> : null}
       <span className="hint">
-        {lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleString()}` : "Not synced yet"}
+        {lastSyncedAt ? <>Synced <TimeStamp iso={lastSyncedAt} /></> : "Not synced yet"}
       </span>
       <button className="btn btn-secondary" onClick={refresh} disabled={busy}>
         {busy ? <span className="spinner" /> : null}

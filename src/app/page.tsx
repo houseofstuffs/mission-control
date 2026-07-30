@@ -10,6 +10,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { ProvisionButton } from "@/components/ProvisionButton";
 import { DedupePanel } from "@/components/DedupePanel";
 import { EmptyState, Kicker } from "@/components/ui";
+import { TimeStamp } from "@/components/TimeStamp";
 import { assetUrl } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
@@ -148,7 +149,7 @@ export default function TodayPage() {
                   <div key={m.id} className="body-sm">
                     <strong>{m.event}</strong> — {m.name}
                     {m.detail ? ` (${m.detail})` : ""}
-                    <span className="muted"> · {m.at ? new Date(m.at).toLocaleString() : ""}</span>
+                    <span className="muted"> · {m.at ? <TimeStamp iso={m.at} /> : null}</span>
                   </div>
                 ))}
               </div>

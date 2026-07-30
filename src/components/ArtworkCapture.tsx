@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker, Spinner } from "./ui";
+import { Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
 
@@ -83,7 +83,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>SELECTED GENERATION — C2&apos;S OUTPUT</Kicker>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">

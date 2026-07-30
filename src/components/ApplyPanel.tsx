@@ -341,7 +341,7 @@ function WinnerEditor({
   return (
     <div className="card supporting stack-12">
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
-        <Kicker>WINNER — {winner.styleName}</Kicker>
+        <span className="card-title">{winner.styleName}</span>
         {winner.suggested ? <span className="chip stale">new direction</span> : null}
         <span className="chip done">✓ winner</span>
       </div>

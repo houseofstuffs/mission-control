@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * C2's output — which generation won, and the board's first thumbnail.
+ * C7's output — everything durable the creative workflow produces.
  *
- * This snapshot is the raw generation: no text, no texture, not knocked out.
- * That's deliberate — the board needs a picture from the moment artwork
- * exists, and this one carries it until C7 exports the finished master and
- * replaces it. Durable files are captured at C7, not here.
+ * The refined PSD is the master asset (spec §3.6); the master PNG is
+ * EXPORTED FROM IT after cleanup, so both land here rather than earlier. The
+ * final preview replaces the C2 generation thumbnail on the Kanban board —
+ * the raw generation carries the board until there's something better.
+ *
+ * Files live in Drive/S3; Notion holds links. The snapshot is a downrezzed
+ * preview, never the asset.
  */
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -14,20 +17,20 @@ import { Kicker } from "./ui";
 import { BusyNote } from "./BusyNote";
 import { apiCall } from "@/lib/api";
 
-export interface ArtworkData {
+export interface MasterAssetsData {
   designId: string;
+  psdLink: string;
+  psdSavedAt: string | null;
+  masterPngLink: string;
   snapshotUrl: string | null;
-  artworkLink: string;
-  winningModel: string;
 }
 
-export function ArtworkCapture({ data }: { data: ArtworkData }) {
+export function MasterAssets({ data }: { data: MasterAssetsData }) {
   const router = useRouter();
+  const [psd, setPsd] = useState(data.psdLink);
+  const [png, setPng] = useState(data.masterPngLink);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [model, setModel] = useState(data.winningModel);
-  // transparent artwork needs a backdrop to read as a thumbnail; auto picks
-  // the contrasting one. Affects the preview only, never the master.
   const [backdrop, setBackdrop] = useState("auto");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,13 +60,14 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
     return () => window.removeEventListener("paste", onPaste);
   }, []);
 
-  const dirty = file !== null || model !== data.winningModel;
+  const dirty = file !== null || psd !== data.psdLink || png !== data.masterPngLink;
 
   async function save() {
     setBusy(true);
     setError(null);
     const form = new FormData();
-    form.append("winningModel", model);
+    form.append("psdLink", psd);
+    form.append("artworkLink", png);
     if (file) {
       form.append("snapshot", file, file.name);
       form.append("snapshotBackdrop", backdrop);
@@ -74,44 +78,42 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
       setFile(null);
       router.refresh();
     }
-    setBusy(false); // always runs — apiCall never rejects
+    setBusy(false);
   }
 
   const shownPreview = previewUrl || data.snapshotUrl;
 
   return (
     <div className="card supporting">
-      <Kicker>SELECTED GENERATION — C2&apos;S OUTPUT</Kicker>
+      <Kicker>MASTER ASSETS — C7&apos;S OUTPUT</Kicker>
       {error ? <div className="callout blocked">{error}</div> : null}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18, alignItems: "stretch" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18, alignItems: "stretch" }}>
         <div className="stack-12">
           <div className="field">
-            <label className="kicker" htmlFor="art-model">GENERATION MODEL — WHICH ONE WON</label>
+            <label className="kicker" htmlFor="ma-psd">PSD MASTER — LAYERED, OPENS IN PHOTOPEA OR PHOTOSHOP</label>
             <input
-              id="art-model"
+              id="ma-psd"
               className="input"
-              list="gen-models"
-              placeholder="e.g. Ideogram, Flux, DALL·E, Midjourney…"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
+              placeholder="https://…"
+              value={psd}
+              onChange={(e) => setPsd(e.target.value)}
             />
-            <datalist id="gen-models">
-              <option value="Kittl — Ideogram" />
-              <option value="Kittl — Flux" />
-              <option value="Kittl — DALL·E" />
-              <option value="Kittl — Stable Diffusion" />
-              <option value="Midjourney" />
-              <option value="ChatGPT / GPT Image" />
-              <option value="Ideogram" />
-              <option value="Flux" />
-            </datalist>
-            <span className="hint">Logged per design — after ten designs this shows which model earns its keep.</span>
+          </div>
+          <div className="field">
+            <label className="kicker" htmlFor="ma-png">MASTER PNG — EXPORTED FROM THE REFINED PSD, TRANSPARENT</label>
+            <input
+              id="ma-png"
+              className="input"
+              placeholder="https://…"
+              value={png}
+              onChange={(e) => setPng(e.target.value)}
+            />
           </div>
           {file ? (
             <div className="field">
-              <label className="kicker" htmlFor="art-bg">IF TRANSPARENT, PREVIEW ON</label>
+              <label className="kicker" htmlFor="ma-bg">IF TRANSPARENT, PREVIEW ON</label>
               <select
-                id="art-bg"
+                id="ma-bg"
                 className="select"
                 style={{ maxWidth: 260 }}
                 value={backdrop}
@@ -127,25 +129,26 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               {busy ? <span className="spinner" /> : null}
-              Save artwork
+              Save master assets
             </button>
             {file && !busy ? (
               <button className="btn btn-tertiary" onClick={() => setFile(null)}>
-                Remove snapshot
+                Remove preview
               </button>
             ) : null}
-            <BusyNote active={busy} label={file ? "Uploading snapshot" : "Saving"} />
+            <BusyNote active={busy} label={file ? "Uploading preview" : "Saving"} />
           </div>
           <span className="hint">
-            Gives the board a picture from the moment artwork exists. The finished master PNG and
-            PSD are captured at C7, and the final preview replaces this thumbnail then.
+            {data.psdSavedAt
+              ? `PSD saved ${data.psdSavedAt} · unblocks the C8 validation gate.`
+              : "C8 won't pass without the PSD — it's the master asset."}
           </span>
         </div>
 
         <button
           className="drop-tile"
           style={{
-            minHeight: 160,
+            minHeight: 170,
             ...(dragOver ? { outline: "2px dashed var(--blueberry)", outlineOffset: 4 } : {}),
           }}
           onClick={() => inputRef.current?.click()}
@@ -175,7 +178,7 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
             <>
               <span style={{ fontSize: 26, lineHeight: 1, color: "var(--text-on-mint-title)" }}>+</span>
               <span className="kicker" style={{ color: "var(--text-on-mint-title)" }}>
-                DROP, PASTE (CTRL+V) OR CLICK — SNAPSHOT
+                FINAL PREVIEW — REPLACES THE THUMBNAIL
               </span>
             </>
           )}

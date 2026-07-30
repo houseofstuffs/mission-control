@@ -58,6 +58,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (typeof link === "string") values["Master PNG Link"] = link || null;
       const winningModel = form.get("winningModel");
       if (typeof winningModel === "string") values["Winning Model"] = winningModel || null;
+      const psd = form.get("psdLink");
+      if (typeof psd === "string") {
+        values["PSD Master Link"] = psd || null;
+        values["PSD Saved At"] = psd ? new Date().toISOString().slice(0, 10) : null;
+      }
       const snapshot = form.get("snapshot");
       if (snapshot && typeof snapshot !== "string" && snapshot.size > 0) {
         if (!snapshot.type.startsWith("image/")) {

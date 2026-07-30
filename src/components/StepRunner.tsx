@@ -16,7 +16,7 @@ import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type Can
 import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
-import { PsdCapture, type PsdData } from "./PsdCapture";
+import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
 
 export interface RunnerRecord {
   id: string;
@@ -40,7 +40,7 @@ export function StepRunner({
   seo,
   slots,
   artwork,
-  psd,
+  masterAssets,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -49,7 +49,7 @@ export function StepRunner({
   seo?: SeoData;
   slots?: SlotsData;
   artwork?: ArtworkData;
-  psd?: PsdData;
+  masterAssets?: MasterAssetsData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -240,17 +240,13 @@ export function StepRunner({
 
         {/* C2's output: which generation won, and the board's first thumbnail */}
         {record.workflowKey === "creative" && selected.id === "C2" && artwork ? (
-          <ArtworkCapture data={artwork} mode="generation" />
+          <ArtworkCapture data={artwork} />
         ) : null}
 
-        {/* C6's output: the textured transparent master PNG that C7 refines */}
-        {record.workflowKey === "creative" && selected.id === "C6" && artwork ? (
-          <ArtworkCapture data={artwork} mode="master" />
-        ) : null}
 
-        {/* C8's output: the PSD master link — C10's gate depends on it */}
-        {record.workflowKey === "creative" && selected.id === "C7" && psd ? (
-          <PsdCapture data={psd} />
+        {/* C7's output: PSD master, the PNG exported from it, final preview */}
+        {record.workflowKey === "creative" && selected.id === "C7" && masterAssets ? (
+          <MasterAssets data={masterAssets} />
         ) : null}
 
         {/* the candidate set follows the design to C2 — generate each image

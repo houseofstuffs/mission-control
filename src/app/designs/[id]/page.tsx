@@ -5,7 +5,7 @@ import { runnerRecord } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import type { ArtworkData } from "@/components/ArtworkCapture";
-import type { PsdData } from "@/components/PsdCapture";
+import type { MasterAssetsData } from "@/components/MasterAssets";
 import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
@@ -49,7 +49,7 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
         savedPair={savedPair(rec)}
         candidates={parseCandidates(rec)}
         artwork={artworkData(rec)}
-        psd={psdData(rec)}
+        masterAssets={masterAssetsData(rec)}
       />
     </div>
   );
@@ -64,11 +64,15 @@ function styleOptions(): StyleOption[] {
   }));
 }
 
-function psdData(rec: NonNullable<ReturnType<typeof cachedRecord>>): PsdData {
+function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): MasterAssetsData {
+  const snap = rec.props["Artwork Snapshot"];
+  const first = Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }) : null;
   return {
     designId: rec.id,
     psdLink: String(rec.props["PSD Master Link"] ?? ""),
     psdSavedAt: String(rec.props["PSD Saved At"] ?? "") || null,
+    masterPngLink: String(rec.props["Master PNG Link"] ?? ""),
+    snapshotUrl: first?.url || null,
   };
 }
 

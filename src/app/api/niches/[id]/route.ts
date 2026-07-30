@@ -34,6 +34,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (body.gateReason != null) values["Gate Reason"] = String(body.gateReason);
     if (body.beatThesis != null) values["Beat Thesis"] = String(body.beatThesis);
+    // clears the creative gate — the printed phrases have been searched
+    if (body.screeningStatus != null) values["Screening Status"] = String(body.screeningStatus);
 
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

@@ -19,6 +19,7 @@ export interface NicheCardData {
   gate: string;
   gateReason: string;
   beatThesis: string;
+  screeningStatus: string;
   evaluatedAt: string | null;
   ideaCount: number;
   designCount: number;
@@ -125,6 +126,26 @@ export function NichesPanel({ niches }: { niches: NicheCardData[] }) {
                   if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                 }}
               />
+
+              {/* the creative gate reads this — designs in this niche stay
+                  flagged until the printed phrases have been searched */}
+              <select
+                className="select input-compact"
+                style={{
+                  height: 32,
+                  ...(n.screeningStatus === "Screened clear"
+                    ? {}
+                    : { borderColor: "var(--status-blocked, #d7242a)" }),
+                }}
+                value={n.screeningStatus || "Not screened"}
+                disabled={busyId === n.id}
+                onChange={(e) => save(n.id, { screeningStatus: e.target.value })}
+              >
+                <option value="Not screened">Not screened</option>
+                <option value="Phrases emitted">Phrases emitted</option>
+                <option value="Screened clear">Screened clear</option>
+                <option value="Screened flagged">Screened flagged</option>
+              </select>
 
               {n.gate === "Greenlit" && !n.beatThesis ? (
                 <span className="hint">

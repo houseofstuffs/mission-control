@@ -135,6 +135,7 @@ export function nicheCards(): NicheCardData[] {
       gate: str(n.props["Gate"]) || "Unevaluated",
       gateReason: str(n.props["Gate Reason"]),
       beatThesis: str(n.props["Beat Thesis"]),
+      screeningStatus: str(n.props["Screening Status"]),
       evaluatedAt: str(n.props["Evaluated At"]) || null,
       ideaCount: ideas.filter((i) => rel(i.props["Niche"]).includes(n.id)).length,
       designCount: designs.filter((d) => rel(d.props["Niche"]).includes(n.id)).length,
@@ -339,8 +340,8 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Primary product chosen", ok: rel(rec.props["Primary Product"]).length > 0 },
       { label: "PSD master saved + linked", ok: str(rec.props["PSD Master Link"]).length > 0 },
       {
-        label: "Text re-screened if changed since R5",
-        ok: niche ? ["Screened clear"].includes(str(niche.props["Screening Status"])) : false,
+        label: "Trademark screening confirmed",
+        ok: niche ? str(niche.props["Screening Status"]) === "Screened clear" : false,
       }
     );
   }

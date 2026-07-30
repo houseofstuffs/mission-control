@@ -198,6 +198,7 @@ a:hover { color: var(--candy); }
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   white-space: nowrap;
   transition: transform 0.06s ease, box-shadow 0.06s ease, background 0.1s ease;
@@ -242,6 +243,14 @@ a:hover { color: var(--candy); }
   animation: spin 0.7s linear infinite;
 }
 .btn-primary .spinner { border-color: #fff; border-right-color: transparent; }
+/* A reserved spinner keeps the button from resizing when work starts, but it
+   also pushes the label off-centre. A mirrored spacer on the trailing edge
+   balances it, so the text sits centred whether or not the wheel is turning. */
+.btn:has(.spinner)::after {
+  content: "";
+  width: 16px;
+  flex: none;
+}
 /* A busy button is disabled, which pales its background — a white spinner
    then disappears into it. Dark and slightly heavier while working, so the
    wheel is the clear signal that something is happening. */

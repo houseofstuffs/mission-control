@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
+import { downscaleImage } from "@/lib/downscale";
 
 export interface MasterAssetsData {
   designId: string;
@@ -69,7 +70,9 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
       const form = new FormData();
       form.append("psdLink", psd);
       form.append("artworkLink", png);
-      form.append("snapshot", file, file.name);
+      // shrink first: a full-res generation is far too big to upload whole
+      const small = await downscaleImage(file);
+      form.append("snapshot", small, small.name);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
       res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { psdLink: psd, artworkLink: png });

@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { apiCall, apiJson } from "@/lib/api";
+import { downscaleImage } from "@/lib/downscale";
 
 export interface TextureData {
   designId: string;
@@ -59,7 +60,9 @@ export function TexturePick({ data }: { data: TextureData }) {
       const form = new FormData();
       form.append("textureId", textureId || "");
       form.append("textureDetail", detail);
-      form.append("snapshot", file, file.name);
+      // shrink first: a full-res generation is far too big to upload whole
+      const small = await downscaleImage(file);
+      form.append("snapshot", small, small.name);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
       res = await apiJson(`/api/designs/${data.designId}`, "PATCH", {

@@ -46,9 +46,8 @@ export interface DbSpec {
 }
 
 /** Creative + listing workflow step options, kept in sync with lib/workflows. */
-// C9 retired — merged into C8 (refine + save PSD). Later ids keep their
-// spec meanings (C10 validation, C11 fan-out); the option stays listed so
-// any historical record still resolves.
+// Creative is C1–C9: two pairs merged and uprez+knockout moved ahead of
+// Texture. C10/C11 stay listed so any historical record still resolves.
 const CREATIVE_STEPS = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "Done"];
 const LISTING_STEPS = ["L1", "L2", "L3", "L4", "L5", "L6", "L7", "Pushed"];
 

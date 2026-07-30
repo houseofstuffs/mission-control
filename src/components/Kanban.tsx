@@ -56,12 +56,12 @@ export function Kanban({ cards }: { cards: KanbanCardData[] }) {
     const res = await apiJson("/api/step", "POST", ({
         pageId: card.id,
         action: backward ? "back" : "move",
-        step: toStep === "Done" ? "C11" : toStep,
+        step: toStep === "Done" ? "C9" : toStep,
         reason,
       }));
     if (toStep === "Done" && res.ok) {
       // moving to Done = marking the final step complete
-      await apiJson("/api/step", "POST", { pageId: card.id, action: "done", step: "C11" });
+      await apiJson("/api/step", "POST", { pageId: card.id, action: "done", step: "C9" });
     }
     if (!res.ok) setError(res.error);
     else setError(null);

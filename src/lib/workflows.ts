@@ -1,19 +1,17 @@
 /**
- * Workflow definitions — Creative and Listing (L1–L7).
- *
- * Creative runs C1, C2, C3, C4, C5, C7, C8, C10, C11 — nine steps. C6 and C9
- * were merged into their neighbours (routing into Texture; saving the PSD into
- * Refine) because each was one action at the desk, not two. Their ids are
- * retired rather than reused: C10 and C11 keep the meanings the project spec
- * gives them, and no historical step-state entry can be misread.
+ * Workflow definitions — Creative (C1–C9) and Listing (L1–L7).
  *
  * Backtracking is a first-class path (spec §10, Phase 1). Dependencies are
- * PER-STEP, not "everything after this point": redoing C8 stales retrofits
+ * PER-STEP, not "everything after this point": redoing C7 stales retrofits
  * and mockups but not title and tags — coarse warnings get ignored.
  *
  * `dependsOn` lists the steps whose PRODUCES this step consumes. When a step
  * is redone, every done/downstream step reachable through dependsOn edges is
  * marked stale — stale ≠ unchecked, so you always know what you've re-done.
+ *
+ * Creative was C1–C11 in the project spec; two pairs merged (routing into
+ * Texture, saving the PSD into Refine) and uprez+knockout moved ahead of
+ * Texture, so validation is C8 and fan-out C9. C1–C4 kept their meanings.
  *
  * L8 (bundle listings) is deliberately absent: it's a separate path that
  * creates a NEW listing from published designs, not a step in this sequence.
@@ -51,7 +49,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       needs: ["Greenlit niche", "Concept (artwork ref, copy, or template)", "Style record (optional)"],
       produces: ["Image prompt + text prompt pair", "Texture shortlist (chosen now, not mid-flow)"],
       dependsOn: [],
-      note: "Three starting points — artwork reference, copy first, or Kittl/PODSpy template — converging at C2.",
+      note: "Three starting points — artwork reference, copy first, or a Kittl/PODSpy template — converging at C2.",
     },
     {
       id: "C2",
@@ -60,7 +58,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       needs: ["Image prompt", "Master canvas ratio (from Primary Product)"],
       produces: ["Selected image (2 options × 4 models, 8 max)"],
       dependsOn: ["C1"],
-      note: "Kittl, image-generate not agentic. Artboard at master canvas ratio — ratio is the generation constraint.",
+      note: "Image-generate, not agentic. Artboard at master canvas ratio — the ratio is the generation constraint.",
     },
     {
       id: "C3",
@@ -69,7 +67,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       needs: ["Text prompt"],
       produces: ["Selected text treatment (coloring adjusted)"],
       dependsOn: ["C1"],
-      note: "Text as a Kittl layer, not in-image, wherever spelling matters.",
+      note: "Text as its own layer, never generated in-image, wherever spelling matters.",
     },
     {
       id: "C4",
@@ -80,57 +78,58 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       dependsOn: ["C2", "C3"],
     },
     {
-      // C5 + the old C6 merged: texture is applied in Kittl by default, so
-      // the routing decision that used to be its own step collapses into it.
-      // Further texture work belongs at C8 as refinement, not a separate pass.
+      // Before texture: upscaling interpolates, and grain is exactly the
+      // high-frequency detail an upscaler smooths away. Clean edges also
+      // knock out far more cleanly than distressed, semi-transparent ones.
       id: "C5",
-      label: "texture",
-      title: "Texture in Kittl",
-      needs: ["Combined composition", "Texture shortlist (from concept stage)"],
-      produces: ["Textured composition, exported for uprez"],
-      dependsOn: ["C4"],
-      note: "Applied as a Kittl layer — mask when the grain should eat the edges, overlay when it shouldn't. Semantic matching matters: texture reads differently across colorways. Any further texture work is refinement at C8.",
-    },
-    {
-      id: "C7",
       label: "uprez + knockout",
       title: "Uprez + remove background",
-      needs: ["Exported composition"],
-      produces: ["Print-resolution artwork, background removed"],
-      dependsOn: ["C5"],
-      note: "Two separate operations, not \"enhance\". Uprez happens in Kittl before Photoshop. Order (uprez-then-knockout vs reverse) still to confirm for cleaner edges.",
+      needs: ["Combined composition"],
+      produces: ["Print-resolution artwork, background removed (transparent)"],
+      dependsOn: ["C4"],
+      note: "Two separate operations, not \"enhance\". Uprez first so the texture that follows sits at true print scale — texturing before an upscale turns the grain to mush.",
     },
     {
-      // C8 + the old C9 merged: refining and saving the file you just refined
-      // is one pass at the desk. Later ids keep their meaning (C10 validation,
-      // C11 fan-out) — the gap is deliberate, not a renumber.
-      id: "C8",
+      // Absorbed the old routing step: with texture applied here by default,
+      // the Kittl-vs-Photoshop decision had one branch. Further texture work
+      // is refinement at C7.
+      id: "C6",
+      label: "texture",
+      title: "Texture",
+      needs: ["Print-resolution transparent artwork", "Texture shortlist (from concept stage)"],
+      produces: ["Textured transparent PNG, exported for refinement"],
+      dependsOn: ["C5"],
+      note: "Applied as a layer over the knocked-out artwork — mask when the grain should eat the edges, overlay when it shouldn't. Texture reads differently across colorways, so intensity may be variant-level.",
+    },
+    {
+      // Refine and save the file you just refined: one pass at the desk.
+      id: "C7",
       label: "refine psd",
-      title: "Refine + save PSD master",
-      needs: ["Print-resolution artwork"],
+      title: "Refine PSD",
+      needs: ["Textured transparent PNG"],
       produces: [
-        "Refined artwork (artifacts cut/filled, edges cleaned)",
+        "Refined artwork (artifacts cut/filled, edges cleaned, texture enhanced)",
         "PSD master saved + linked on the record",
       ],
-      dependsOn: ["C7"],
+      dependsOn: ["C6"],
       note: "The PSD is the master asset. Every PNG is a disposable derivative.",
     },
     {
-      id: "C10",
+      id: "C8",
       label: "validate",
       title: "Validation gate",
       needs: ["PSD master", "Primary Product print specs"],
       produces: ["Printify product for primary product", "Verified print mock (bleed + margins)", "Sample decision"],
-      dependsOn: ["C8"],
+      dependsOn: ["C7"],
       note: "Primary product ONLY. Validate before you multiply — a backtrack invalidates one retrofit instead of six.",
     },
     {
-      id: "C11",
+      id: "C9",
       label: "fan out",
       title: "Fan out",
       needs: ["Passed validation gate", "Remaining product print specs"],
       produces: ["Retrofits across the product line (scaling scripted, recomposition by hand)"],
-      dependsOn: ["C10"],
+      dependsOn: ["C8"],
     },
   ],
 };
@@ -143,8 +142,8 @@ export const LISTING_WORKFLOW: WorkflowDef = {
       id: "L1",
       label: "printify product",
       title: "Create Printify product",
-      needs: ["Validated design (C10 passed)", "Product (blueprint × provider)"],
-      produces: ["Printify product with variants (primary done at C10; variations here)"],
+      needs: ["Validated design (C8 passed)", "Product (blueprint × provider)"],
+      produces: ["Printify product with variants (primary done at C8; variations here)"],
       dependsOn: [],
     },
     {
@@ -250,9 +249,8 @@ export function downstreamOf(wf: WorkflowDef, fromStep: string): string[] {
 export const KANBAN_STAGES: Array<{ key: string; label: string; steps: string[] }> = [
   { key: "concept", label: "Concept", steps: ["C1"] },
   { key: "generate", label: "Generate", steps: ["C2", "C3", "C4"] },
-  { key: "texture", label: "Texture", steps: ["C5"] },
-  { key: "refine", label: "Refine", steps: ["C7", "C8"] },
-  { key: "validate", label: "Validate", steps: ["C10"] },
-  { key: "fanout", label: "Fan out", steps: ["C11"] },
-  { key: "done", label: "Done", steps: ["Done"] },
+  { key: "texture", label: "Texture", steps: ["C5", "C6"] },
+  { key: "refine", label: "Refine", steps: ["C7"] },
+  { key: "validate", label: "Validate", steps: ["C8"] },
+  { key: "fanout", label: "Fan out", steps: ["C9"] },
 ];

@@ -244,7 +244,7 @@ export function StepRunner({
         ) : null}
 
         {/* C8's output: the PSD master link — C10's gate depends on it */}
-        {record.workflowKey === "creative" && selected.id === "C8" && psd ? (
+        {record.workflowKey === "creative" && selected.id === "C7" && psd ? (
           <PsdCapture data={psd} />
         ) : null}
 

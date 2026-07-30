@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
+import { CATEGORIES, CATEGORY_LABELS, type Category } from "@/config/product-categories";
 
 export interface ProductCardData {
   id: string;
@@ -30,7 +31,17 @@ export interface ProductCardData {
   variantCount: number | null;
   syncedAt: string | null;
   hasVoiceText: boolean;
+  category: Category | null;
+  estimatedCost: number | null;
+  sizeFilterApplied: string;
+  costSampleSize: number;
+  /** why there's no estimate, when there isn't one */
+  costReason: string | null;
 }
+
+/** Uncategorised products still have to land somewhere — last, and named. */
+const UNCATEGORISED = "__none__";
+type GroupKey = Category | typeof UNCATEGORISED;
 
 interface BlueprintOption {
   id: number;
@@ -40,6 +51,10 @@ interface BlueprintOption {
   image: string | null;
 }
 
+function groupLabel(key: GroupKey): string {
+  return key === UNCATEGORISED ? "Uncategorised" : CATEGORY_LABELS[key];
+}
+
 /** One line, ellipsis on overflow — keeps the card header exactly two lines. */
 const CLAMP: React.CSSProperties = {
   display: "block",
@@ -47,6 +62,87 @@ const CLAMP: React.CSSProperties = {
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
+
+function ProductCard({
+  p,
+  busy,
+  onCategory,
+}: {
+  p: ProductCardData;
+  busy: boolean;
+  onCategory: (category: string) => void;
+}) {
+  return (
+    <div className="card" style={{ padding: 22, gap: 12 }}>
+      {/* Exactly two lines: title on 1, vendor on 2. Both clamp with an
+          ellipsis rather than wrapping, so the vendor can never be
+          pushed to a third line. Full text on hover. */}
+      <Kicker>
+        <span style={CLAMP} title={p.blueprintTitle || p.name}>
+          {p.blueprintTitle || p.name}
+        </span>
+        <span style={{ ...CLAMP, color: "var(--status-done)" }} title={p.providerName}>
+          {p.providerName}
+        </span>
+      </Kicker>
+      <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
+        {p.shortName || p.name}
+      </div>
+      <div className="well">
+        <Kicker>MASTER CANVAS</Kicker>
+        <div className="body-sm" style={{ marginTop: 6 }}>
+          {p.maxW && p.maxH ? (
+            <>
+              max {p.maxW} × {p.maxH}px
+              <br />
+              {p.ratios}
+            </>
+          ) : (
+            "no print areas recorded"
+          )}
+        </div>
+      </div>
+      <div className="body-sm muted">
+        {p.variantCount ?? 0} variants
+        {p.estimatedCost != null ? (
+          <>
+            {" · est. "}${p.estimatedCost.toFixed(2)}
+            {p.costMin != null && p.costMax != null && p.costMax !== p.costMin
+              ? ` · range $${p.costMin.toFixed(2)}–$${p.costMax.toFixed(2)}`
+              : ""}
+          </>
+        ) : null}
+      </div>
+      {/* Never a bare number: the averaging rule travels with the estimate,
+          and when there isn't one, why not. */}
+      <div className="hint" style={{ marginTop: -6 }}>
+        {p.estimatedCost != null
+          ? `${p.sizeFilterApplied} · ${p.costSampleSize} variants`
+          : p.costReason}
+      </div>
+      <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        {p.technique ? <span className="chip count">{p.technique}</span> : null}
+        {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
+        {!p.category ? <span className="chip stale">needs category</span> : null}
+        <select
+          className="select"
+          style={{ width: "auto", padding: "4px 8px", fontSize: 12, marginLeft: "auto" }}
+          value={p.category ?? ""}
+          disabled={busy}
+          aria-label="Category"
+          onChange={(e) => onCategory(e.target.value)}
+        >
+          <option value="">Set category…</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
 
 export function ProductsView({ products, printifyReady }: { products: ProductCardData[]; printifyReady: boolean }) {
   const router = useRouter();
@@ -60,6 +156,38 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
   const [chosen, setChosen] = useState<BlueprintOption | null>(null);
   const [providers, setProviders] = useState<Array<{ id: number; title: string }> | null>(null);
   const [providerId, setProviderId] = useState<number | null>(null);
+
+  const [filter, setFilter] = useState<GroupKey | "all">("all");
+  const [collapsed, setCollapsed] = useState<Set<GroupKey>>(new Set());
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  function toggle(key: GroupKey) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function setCategory(id: string, category: string) {
+    setSavingId(id);
+    setError(null);
+    const res = await apiJson(`/api/products/${id}`, "PATCH", { category });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setSavingId(null);
+  }
+
+  // Fixed order — Apparel, Home, Wall Art, Miscellaneous, then anything the
+  // auto-map couldn't place. Empty groups don't render.
+  const groups = useMemo(() => {
+    const order: GroupKey[] = [...CATEGORIES, UNCATEGORISED];
+    return order
+      .filter((key) => filter === "all" || filter === key)
+      .map((key) => [key, products.filter((p) => (p.category ?? UNCATEGORISED) === key)] as const)
+      .filter(([, items]) => items.length > 0);
+  }, [products, filter]);
 
   useEffect(() => {
     if (!showSeed || blueprints) return;
@@ -131,50 +259,62 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       {notice ? <div className="callout stale" style={{ background: "#eef8f4", borderColor: "#68c2a9", color: "#134a3a" }}>{notice}</div> : null}
       {error ? <div className="callout blocked">{error}</div> : null}
 
-      <div className="grid-cards">
-        {products.map((p) => (
-          <div key={p.id} className="card" style={{ padding: 22, gap: 12 }}>
-            {/* Exactly two lines: title on 1, vendor on 2. Both clamp with an
-                ellipsis rather than wrapping, so the vendor can never be
-                pushed to a third line. Full text on hover. */}
-            <Kicker>
-              <span style={CLAMP} title={p.blueprintTitle || p.name}>
-                {p.blueprintTitle || p.name}
-              </span>
-              <span style={{ ...CLAMP, color: "var(--status-done)" }} title={p.providerName}>
-                {p.providerName}
-              </span>
-            </Kicker>
-            <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
-              {p.shortName || p.name}
-            </div>
-            <div className="well">
-              <Kicker>MASTER CANVAS</Kicker>
-              <div className="body-sm" style={{ marginTop: 6 }}>
-                {p.maxW && p.maxH ? (
-                  <>
-                    max {p.maxW} × {p.maxH}px
-                    <br />
-                    {p.ratios}
-                  </>
-                ) : (
-                  "no print areas recorded"
-                )}
-              </div>
-            </div>
-            <div className="body-sm muted">
-              {p.variantCount ?? 0} variants
-              {p.costMin != null
-                ? ` · base cost $${p.costMin.toFixed(2)}${p.costMax != null && p.costMax !== p.costMin ? `–$${p.costMax.toFixed(2)}` : ""}`
-                : " · base cost: add in Notion (not in Printify's public catalog)"}
-            </div>
-            <div className="row-gap-8">
-              {p.technique ? <span className="chip count">{p.technique}</span> : null}
-              {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
-            </div>
-          </div>
-        ))}
+      {/* narrowing, independent of the grouped default below */}
+      <div className="row-gap-8" style={{ flexWrap: "wrap", display: products.length === 0 ? "none" : undefined }}>
+        {(["all", ...CATEGORIES, UNCATEGORISED] as const).map((key) => {
+          const count =
+            key === "all" ? products.length : products.filter((p) => (p.category ?? UNCATEGORISED) === key).length;
+          if (count === 0 && key !== "all") return null;
+          return (
+            <button
+              key={key}
+              className={`chip${filter === key ? " done" : " count"}`}
+              style={{ cursor: "pointer", border: "none", font: "inherit" }}
+              onClick={() => setFilter(key)}
+            >
+              {key === "all" ? "All" : groupLabel(key)} {count}
+            </button>
+          );
+        })}
       </div>
+
+      {groups.map(([key, items]) => (
+        <div key={key} className="stack-12">
+          <button
+            className="row-gap-8"
+            style={{
+              alignItems: "center",
+              background: "none",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              font: "inherit",
+              textAlign: "left",
+            }}
+            onClick={() => toggle(key)}
+            aria-expanded={!collapsed.has(key)}
+          >
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              {collapsed.has(key) ? "▶" : "▼"}
+            </span>
+            <Kicker>
+              {groupLabel(key)} · {items.length}
+            </Kicker>
+          </button>
+          {collapsed.has(key) ? null : (
+            <div className="grid-cards">
+              {items.map((p) => (
+                <ProductCard
+                  key={p.id}
+                  p={p}
+                  busy={savingId === p.id}
+                  onCategory={(category) => setCategory(p.id, category)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
 
       {showSeed ? (
         <div className="modal-scrim" onClick={() => setShowSeed(false)}>

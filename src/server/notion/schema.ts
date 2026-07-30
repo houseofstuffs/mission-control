@@ -15,6 +15,7 @@
  */
 
 import { GARMENT_COMPATIBILITY } from "@/config/design-prompt";
+import { CATEGORIES } from "@/config/product-categories";
 
 export type PropType =
   | "title"
@@ -277,6 +278,10 @@ export const SCHEMA: DbSpec[] = [
         options: ["DTG", "DTF", "Sublimation", "Embroidery", "Screen print", "UV printing", "Laser engraving", "Other"],
       },
       "Physical/Digital": { type: "select", options: ["Physical", "Digital"] },
+      // Groups the Products view and picks the cost-averaging rule. Auto-mapped
+      // from the blueprint title at seed (src/config/product-categories.ts);
+      // no default — an unmatched product asks to be categorised by hand.
+      Category: { type: "select", options: [...CATEGORIES] },
       "Print Areas (JSON)": { type: "rich_text" },
       "Max Print Width px": { type: "number" },
       "Max Print Height px": { type: "number" },

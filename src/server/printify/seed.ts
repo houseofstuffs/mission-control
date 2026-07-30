@@ -9,6 +9,7 @@
 import { getBlueprint, listVariants, type VariantWithCost } from "./client";
 import { computeMasterCanvas } from "./canvas";
 import { cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
+import { categoryFromTitle } from "@/config/product-categories";
 import type { SimpleValue } from "@/server/notion/props";
 
 export interface SeedResult {
@@ -35,6 +36,10 @@ export async function seedProduct(
   );
 
   const name = `${blueprint.title} — ${providerName}`;
+  // Auto-map the category from the blueprint title. A miss leaves it unset and
+  // the card asks for it — never a guess, because the category decides how
+  // cost is averaged.
+  const category = categoryFromTitle(blueprint.title);
   const values: Record<string, SimpleValue> = {
     Name: name,
     "Printify Blueprint ID": blueprintId,
@@ -69,6 +74,14 @@ export async function seedProduct(
       p.props["Printify Blueprint ID"] === blueprintId &&
       p.props["Printify Print Provider ID"] === providerId
   );
+
+  // Never overwrite a category that's already there — like the two copy
+  // fields, a hand-set value outranks anything derived. Reseeding a product
+  // categorised by hand leaves it alone; one that's still unset gets another
+  // shot at the auto-map (the keyword list may have been tuned since).
+  if (category && !existing?.props["Category"]) {
+    values["Category"] = category;
+  }
 
   let productPageId: string;
   if (existing) {

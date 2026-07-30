@@ -25,7 +25,7 @@ Generated 2026-07-30 · 17 databases
 | 7 | `styles` | Styles | 16 |
 | 8 | `textures` | Textures | 7 |
 | 9 | `mockup_templates` | Mockup Templates | 7 |
-| 10 | `products` | Products | 23 |
+| 10 | `products` | Products | 24 |
 | 11 | `product_variants` | Product Variants | 10 |
 | 12 | `designs` | Designs | 42 |
 | 13 | `etsy_listings` | Etsy Listings | 31 |
@@ -221,6 +221,7 @@ Blueprint × print provider pairs — NOT product types (§3.3). Auto-seeded fro
 | Print Provider Name | rich_text |  |
 | Print Technique | select | DTG · DTF · Sublimation · Embroidery · Screen print · UV printing · Laser engraving · Other |
 | Physical/Digital | select | Physical · Digital |
+| Category | select | apparel · home · wall_art · misc |
 | Print Areas (JSON) | rich_text |  |
 | Max Print Width px | number |  |
 | Max Print Height px | number |  |

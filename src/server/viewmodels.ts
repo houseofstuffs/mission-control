@@ -5,6 +5,8 @@
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState, unmetRequirement } from "@/server/steps";
 import { compatForListing } from "@/server/imageSlots";
+import { estimateCost } from "@/server/cost-estimate";
+import { asCategory } from "@/config/product-categories";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
@@ -232,7 +234,19 @@ function shortProductWord(blueprintTitle: string): string {
 
 export function productCards(): ProductCardData[] {
   const products = cachedRecords("products");
-  return products.map((p) => ({
+  const variants = cachedRecords("product_variants");
+  return products.map((p) => {
+  // Computed live from the cached variants rather than stored: the answer
+  // changes the moment the category does, and a stale number on a card is
+  // worse than no number.
+  const category = asCategory(str(p.props["Category"]));
+  const estimate = estimateCost(
+    variants
+      .filter((v) => rel(v.props["Product"]).includes(p.id))
+      .map((v) => ({ size: str(v.props["Size"]) || null, baseCost: num(v.props["Base Cost"]) })),
+    category
+  );
+  return {
     id: p.id,
     name: p.title || "Untitled product",
     // A "Short Name" typed in Notion always wins over the derived label.
@@ -259,7 +273,13 @@ export function productCards(): ProductCardData[] {
     variantCount: num(p.props["Variant Count"]),
     syncedAt: str(p.props["Synced At"]) || null,
     hasVoiceText: str(p.props["Shop Voice Text"]).trim().length > 0,
-  }));
+    category,
+    estimatedCost: estimate.estimatedCost,
+    sizeFilterApplied: estimate.sizeFilterApplied,
+    costSampleSize: estimate.sampleSize,
+    costReason: estimate.reason,
+  };
+  });
 }
 
 /* ---------- step runner ---------- */

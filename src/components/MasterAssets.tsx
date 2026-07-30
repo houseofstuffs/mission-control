@@ -30,7 +30,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
   const [png, setPng] = useState(data.masterPngLink);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [backdrop, setBackdrop] = useState("auto");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -71,7 +70,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
       form.append("psdLink", psd);
       form.append("artworkLink", png);
       form.append("snapshot", file, file.name);
-      form.append("snapshotBackdrop", backdrop);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
       res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { psdLink: psd, artworkLink: png });
@@ -111,23 +109,6 @@ export function MasterAssets({ data }: { data: MasterAssetsData }) {
               onChange={(e) => setPng(e.target.value)}
             />
           </div>
-          {file ? (
-            <div className="field">
-              <label className="kicker" htmlFor="ma-bg">IF TRANSPARENT, PREVIEW ON</label>
-              <select
-                id="ma-bg"
-                className="select"
-                style={{ maxWidth: 260 }}
-                value={backdrop}
-                onChange={(e) => setBackdrop(e.target.value)}
-              >
-                <option value="auto">Auto — contrast with the artwork</option>
-                <option value="white">White</option>
-                <option value="black">Black</option>
-                <option value="transparent">Keep transparent</option>
-              </select>
-            </div>
-          ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               <Spinner active={busy} />

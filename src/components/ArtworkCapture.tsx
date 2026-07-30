@@ -25,9 +25,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [model, setModel] = useState(data.winningModel);
-  // transparent artwork needs a backdrop to read as a thumbnail; auto picks
-  // the contrasting one. Affects the preview only, never the master.
-  const [backdrop, setBackdrop] = useState("auto");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -67,7 +64,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
       const form = new FormData();
       form.append("winningModel", model);
       form.append("snapshot", file, file.name);
-      form.append("snapshotBackdrop", backdrop);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
       res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { winningModel: model });
@@ -108,23 +104,6 @@ export function ArtworkCapture({ data }: { data: ArtworkData }) {
               <option value="Flux" />
             </datalist>
           </div>
-          {file ? (
-            <div className="field">
-              <label className="kicker" htmlFor="art-bg">IF TRANSPARENT, PREVIEW ON</label>
-              <select
-                id="art-bg"
-                className="select"
-                style={{ maxWidth: 260 }}
-                value={backdrop}
-                onChange={(e) => setBackdrop(e.target.value)}
-              >
-                <option value="auto">Auto — contrast with the artwork</option>
-                <option value="white">White</option>
-                <option value="black">Black</option>
-                <option value="transparent">Keep transparent</option>
-              </select>
-            </div>
-          ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               <Spinner active={busy} />

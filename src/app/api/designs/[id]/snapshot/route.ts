@@ -76,12 +76,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       // Downscale before Notion: a full-res generation is many MB for what
       // renders as a thumbnail. The MASTER file is never touched.
       const raw = Buffer.from(await snapshot.arrayBuffer());
-      const choice = String(form.get("snapshotBackdrop") ?? "auto");
-      const backdrop =
-        choice === "white" ? "#ffffff"
-        : choice === "black" ? "#111111"
-        : choice === "transparent" ? null
-        : await autoBackdrop(raw);
+      // transparent art always gets the contrasting backdrop — measured from
+      // the artwork rather than asked about
+      const backdrop = await autoBackdrop(raw);
       let pipeline = sharp(raw).resize(1400, 1400, { fit: "inside", withoutEnlargement: true });
       if (backdrop) pipeline = pipeline.flatten({ background: backdrop });
       const resized = await pipeline.png({ compressionLevel: 9 }).toBuffer();

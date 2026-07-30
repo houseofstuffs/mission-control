@@ -32,10 +32,10 @@ export function TexturePick({ data }: { data: TextureData }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // the artwork is textured AND knocked out by now — the best thumbnail the
-  // board can have before C7's refined export replaces it
+  // board can have before C7's refined export replaces it. Transparent art
+  // gets a contrasting backdrop chosen server-side, no question asked.
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [backdrop, setBackdrop] = useState("auto");
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dirty = file !== null || textureId !== (data.textureId ?? "") || detail !== data.textureDetail;
@@ -60,7 +60,6 @@ export function TexturePick({ data }: { data: TextureData }) {
       form.append("textureId", textureId || "");
       form.append("textureDetail", detail);
       form.append("snapshot", file, file.name);
-      form.append("snapshotBackdrop", backdrop);
       res = await apiCall(`/api/designs/${data.designId}/snapshot`, { method: "POST", body: form });
     } else {
       res = await apiJson(`/api/designs/${data.designId}`, "PATCH", {
@@ -171,23 +170,6 @@ export function TexturePick({ data }: { data: TextureData }) {
               onChange={setDetail}
             />
           </div>
-          {file ? (
-            <div className="field">
-              <label className="kicker" htmlFor="tx-bg">IF TRANSPARENT, PREVIEW ON</label>
-              <select
-                id="tx-bg"
-                className="select"
-                style={{ maxWidth: 260 }}
-                value={backdrop}
-                onChange={(e) => setBackdrop(e.target.value)}
-              >
-                <option value="auto">Auto — contrast with the artwork</option>
-                <option value="white">White</option>
-                <option value="black">Black</option>
-                <option value="transparent">Keep transparent</option>
-              </select>
-            </div>
-          ) : null}
           <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
             <button className="btn btn-primary" onClick={save} disabled={busy || !dirty}>
               <Spinner active={busy} />

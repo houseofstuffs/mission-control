@@ -414,44 +414,55 @@ export function InboxGrid({
               </div>
               {trash(idea)}
             </div>
-            {/* trademark pre-screen chip — advisory; hover shows the reason.
-                Copy ideas without a verdict yet offer a manual screen. */}
-            {idea.trademarkRisk ? (
-              <span
-                className={`chip ${
-                  idea.trademarkRisk === "High" ? "blocked" : idea.trademarkRisk === "Caution" ? "stale" : "done"
-                }`}
-                style={{ alignSelf: "flex-start", cursor: idea.riskReason ? "help" : undefined }}
-                title={idea.riskReason || undefined}
-              >
-                ™ {idea.trademarkRisk.toLowerCase()}
-              </span>
-            ) : (idea.captureType === "Copy" || idea.captureType === "URL") &&
-              idea.status !== "Discarded" ? (
-              // No verdict is its own state, not a blank space — the screen is
-              // fire-and-forget at capture, so "never ran" and "failed" look
-              // identical from here. Either way it's one click to fix, at any
-              // status: an idea that got triaged before its screen landed
-              // used to have no way back.
-              <button
-                className="chip stale"
-                style={{ alignSelf: "flex-start", cursor: "pointer", border: "none", font: "inherit" }}
-                disabled={busyId === idea.id}
-                title="No trademark verdict on this yet — click to screen it"
-                onClick={() => triage(idea.id, { action: "screen" })}
-              >
-                {busyId === idea.id ? "™ screening…" : "™ not screened"}
-              </button>
-            ) : null}
+            {/* Row 1 — trademark pre-screen; advisory, hover shows the reason.
+                No verdict is its own state, not a blank space: the capture-time
+                screen is fire-and-forget, so "never ran" and "failed" look
+                identical from here. Either way it's one click at any status —
+                an idea triaged before its screen landed used to have no way
+                back. Styled as a chip, not a button: same pill as PARKED. */}
+            <div className="idea-row">
+              {idea.trademarkRisk ? (
+                <span
+                  className={`chip ${
+                    idea.trademarkRisk === "High" ? "blocked" : idea.trademarkRisk === "Caution" ? "stale" : "done"
+                  }`}
+                  style={{ cursor: idea.riskReason ? "help" : undefined }}
+                  title={idea.riskReason || undefined}
+                >
+                  ™ {idea.trademarkRisk.toLowerCase()}
+                </span>
+              ) : (idea.captureType === "Copy" || idea.captureType === "URL") &&
+                idea.status !== "Discarded" ? (
+                <button
+                  className="chip stale"
+                  style={{ cursor: "pointer" }}
+                  disabled={busyId === idea.id}
+                  title="No trademark verdict on this yet — click to screen it"
+                  onClick={() => triage(idea.id, { action: "screen" })}
+                >
+                  {busyId === idea.id ? "™ screening…" : "™ not screened"}
+                </button>
+              ) : null}
+              {/* rides in row 1 on compact cards so it can't add a fourth row */}
+              {compact && idea.sourceUrl ? (
+                <a className="body-sm" href={idea.sourceUrl} target="_blank" rel="noreferrer">source ↗</a>
+              ) : null}
+            </div>
             {/* occasion lives in its dropdown now; only the due date earns a line */}
             {!compact && idea.enterCreativeBy ? (
               <div className="hint">due {monthDay(idea.enterCreativeBy)}</div>
             ) : null}
             {!compact && idea.note ? <div className="body-sm">{idea.note}</div> : null}
-            {idea.sourceUrl ? (
+            {!compact && idea.sourceUrl ? (
               <a className="body-sm" href={idea.sourceUrl} target="_blank" rel="noreferrer">source ↗</a>
             ) : null}
-            {idea.nicheName ? <div className="chip count">→ {idea.nicheName}</div> : null}
+            {/* Row 2 on a triaged card — the untriaged one puts its niche
+                dropdown in the same slot below. */}
+            {idea.nicheName ? (
+              <div className="idea-row">
+                <div className="chip count">→ {idea.nicheName}</div>
+              </div>
+            ) : null}
             {idea.status === "Inbox" ? (
               <div className="idea-actions">
                 {newNicheFor === idea.id ? (
@@ -542,7 +553,7 @@ export function InboxGrid({
                 </select>
               </div>
             ) : (
-              <div className="row-gap-8">
+              <div className="idea-row">
                 {/* legacy Promoted rows read as Triaged — one status, one meaning */}
                 <span className={`chip ${idea.status === "Discarded" ? "neutral" : "done"}`}>
                   {idea.status === "Promoted" ? "Triaged" : idea.status}

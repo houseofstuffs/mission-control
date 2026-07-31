@@ -87,14 +87,18 @@ function ProductCard({
   onRepresentative: (variantId: string) => void;
 }) {
   // the method means something different per value — say so on hover
-  const methodTitle =
+  const methodExplained =
     p.costMethod === "Representative size"
-      ? "One chosen size's cost, used directly — sizes on this product are different products."
+      ? "one chosen size's cost, used directly"
       : p.costMethod === "Core size average"
-        ? "Average of S–2XL only — the sizes that carry apparel volume."
+        ? "average of S–2XL only, the sizes that carry apparel volume"
         : p.costMethod === "Full average"
-          ? "Average across every variant."
-          : undefined;
+          ? "average across every variant"
+          : null;
+  const methodTitle =
+    p.estimatedCost != null && methodExplained
+      ? `${p.costMethod} (${methodExplained})${p.costVariantCount ? ` · ${p.costVariantCount} variant${p.costVariantCount === 1 ? "" : "s"}` : ""}${p.costPulledAt ? ` · pulled ${p.costPulledAt}` : ""}`
+      : undefined;
   return (
     <div className="card" style={{ padding: 22, gap: 12 }}>
       <div className="row-gap-12" style={{ alignItems: "flex-start" }}>
@@ -141,25 +145,23 @@ function ProductCard({
           )}
         </div>
       </div>
-      <div className="body-sm muted">
+      {/* Method, count and pull date ride in the tooltip — the line stays
+          clean, the transparency is one hover away. */}
+      <div className="body-sm muted" title={methodTitle}>
         {p.variantCount ?? 0} variants
         {p.estimatedCost != null ? (
           <>
             {" · est. "}
-            <strong style={{ color: "var(--text-primary)" }}>${p.estimatedCost.toFixed(2)}</strong>
+            <strong>${p.estimatedCost.toFixed(2)}</strong>
             {p.costMin != null && p.costMax != null && p.costMax !== p.costMin
               ? ` · range $${p.costMin.toFixed(2)}–$${p.costMax.toFixed(2)}`
               : ""}
           </>
         ) : null}
       </div>
-      {/* Never a bare number: the method travels with the estimate (hover for
-          what it means), and when there's no estimate, why not. */}
-      <div className="hint" style={{ marginTop: -6 }} title={methodTitle}>
-        {p.estimatedCost != null
-          ? `${p.costMethod}${p.costVariantCount ? ` · ${p.costVariantCount} variant${p.costVariantCount === 1 ? "" : "s"}` : ""}${p.costPulledAt ? ` · pulled ${p.costPulledAt}` : ""}`
-          : p.costReason}
-      </div>
+      {p.estimatedCost == null ? (
+        <div className="hint" style={{ marginTop: -6 }}>{p.costReason}</div>
+      ) : null}
       {/* wall_art without its anchor: same treatment as needs-shop-voice,
           plus the picker that resolves it in place */}
       {p.needsRepresentative ? (
@@ -267,6 +269,12 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
   }
 
   const [pulling, setPulling] = useState(false);
+  // one date for the row: pulls run as a batch, so the newest stamp speaks
+  // for the set
+  const lastPulled = products.reduce<string | null>(
+    (max, p) => (p.costPulledAt && (!max || p.costPulledAt > max) ? p.costPulledAt : max),
+    null
+  );
 
   /** One product per request — a 231-variant catalog probes in chunks and
    *  would time out as a single batch. Sequential, with running progress. */
@@ -275,16 +283,17 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
     setError(null);
     const targets = products.filter((p) => p.blueprintId && p.providerId);
     let done = 0;
-    for (const t of targets) {
-      setNotice(`Pulling costs ${done + 1}/${targets.length} — ${t.productLine}…`);
+    // One product failing must never strand the ones behind it — collect
+    // every failure and keep going, then name each one with its reason.
+    const failed: string[] = [];
+    for (const [i, t] of targets.entries()) {
+      setNotice(`Pulling costs ${i + 1}/${targets.length} — ${t.productLine}…`);
       const res = await apiJson(`/api/printify/pull-costs`, "POST", { productId: t.id });
-      if (!res.ok) {
-        setError(`${t.productLine}: ${res.error}`);
-        break;
-      }
-      done++;
+      if (!res.ok) failed.push(`${t.productLine}: ${res.error}`);
+      else done++;
     }
-    setNotice(done > 0 ? `Pulled account-level costs for ${done} product${done === 1 ? "" : "s"}.` : null);
+    setNotice(done > 0 ? `Pulled account-level costs for ${done} of ${targets.length} products.` : null);
+    setError(failed.length > 0 ? `Couldn't pull ${failed.length}:\n${failed.join("\n")}` : null);
     router.refresh();
     setPulling(false);
   }
@@ -365,10 +374,13 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
           Seed a product from Printify
         </button>
         {printifyReady && products.length > 0 ? (
-          <button className="btn btn-secondary" onClick={pullAllCosts} disabled={pulling}>
-            {pulling ? <span className="spinner" /> : null}
-            {products.some((p) => p.hasCosts) ? "Re-pull costs" : "Pull costs from Printify"}
-          </button>
+          <>
+            <button className="btn btn-secondary" onClick={pullAllCosts} disabled={pulling}>
+              {pulling ? <span className="spinner" /> : null}
+              {products.some((p) => p.hasCosts) ? "Re-pull costs" : "Pull costs from Printify"}
+            </button>
+            {lastPulled && !pulling ? <span className="hint">costs pulled {lastPulled}</span> : null}
+          </>
         ) : null}
         {/* only exists while a product lacks its catalog photo — products
             seeded before thumbnails. One click, then it disappears. */}
@@ -384,7 +396,7 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
       </div>
 
       {notice ? <div className="callout stale" style={{ background: "#eef8f4", borderColor: "#68c2a9", color: "#134a3a" }}>{notice}</div> : null}
-      {error ? <div className="callout blocked">{error}</div> : null}
+      {error ? <div className="callout blocked" style={{ whiteSpace: "pre-wrap" }}>{error}</div> : null}
 
       {/* narrowing, independent of the grouped default below */}
       <div className="row-gap-8" style={{ flexWrap: "wrap", display: products.length === 0 ? "none" : undefined }}>

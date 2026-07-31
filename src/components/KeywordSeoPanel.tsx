@@ -22,7 +22,7 @@ import Link from "next/link";
 import { Kicker, Spinner } from "./ui";
 import { CopyIconButton } from "./CopyIconButton";
 import { apiJson } from "@/lib/api";
-import { BUCKETS, TAG_COUNT, TARGET_MIX, type Bucket } from "@/config/keywords";
+import { BUCKETS, TAG_COUNT, TAG_MAX_CHARS, TARGET_MIX, type Bucket } from "@/config/keywords";
 
 export interface KeywordRow {
   id: string;
@@ -1004,6 +1004,31 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
     setTags((cur) => cur.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
   }
 
+  // inline edit — the tag TEXT changes; metrics belong to the phrase, so
+  // the edited word re-resolves against the bank by name: match a bank
+  // keyword and its bucket/numbers apply, match nothing and it's honestly
+  // "new". The original bank record keeps its own numbers untouched.
+  const [editing, setEditing] = useState<{ orig: string; value: string } | null>(null);
+  const editOverCap = editing != null && editing.value.trim().length > TAG_MAX_CHARS;
+  function commitEdit() {
+    if (!editing) return;
+    const next = editing.value.trim();
+    if (!next || next.toLowerCase() === editing.orig.toLowerCase()) {
+      setEditing(null);
+      return;
+    }
+    if (next.length > TAG_MAX_CHARS) return; // hint shows; Escape cancels
+    setDirty(true);
+    setTags((cur) => {
+      const without = cur.filter((t) => t.toLowerCase() !== editing.orig.toLowerCase());
+      // editing into a word already selected just collapses the duplicate
+      return without.some((t) => t.toLowerCase() === next.toLowerCase())
+        ? without
+        : [...without, next];
+    });
+    setEditing(null);
+  }
+
   async function save() {
     setBusy("save");
     setError(null);
@@ -1102,14 +1127,37 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
               {status}
             </div>
             {items.map((t) => (
-              <div key={t} className="row-gap-8" style={{ alignItems: "center" }}>
-                <span
-                  className="body-sm"
-                  style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={tagTooltip(t)}
-                >
-                  {t}
-                </span>
+              <div key={t} className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                {editing?.orig === t ? (
+                  <>
+                    <input
+                      autoFocus
+                      className="input"
+                      style={{ flex: 1, minWidth: 0, fontSize: 12, padding: "3px 6px" }}
+                      value={editing.value}
+                      onChange={(e) => setEditing({ orig: t, value: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitEdit();
+                        if (e.key === "Escape") setEditing(null);
+                      }}
+                      onBlur={commitEdit}
+                    />
+                    {editOverCap ? (
+                      <span className="hint" style={{ flexBasis: "100%", color: "var(--status-blocked, #b3423a)" }}>
+                        {editing.value.trim().length}/{TAG_MAX_CHARS} — over Etsy&apos;s tag cap
+                      </span>
+                    ) : null}
+                  </>
+                ) : (
+                  <span
+                    className="body-sm"
+                    style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "text" }}
+                    title={`${tagTooltip(t)} — click to edit`}
+                    onClick={() => setEditing({ orig: t, value: t })}
+                  >
+                    {t}
+                  </span>
+                )}
                 <button
                   type="button"
                   aria-label={`Remove ${t}`}

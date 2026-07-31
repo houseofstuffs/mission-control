@@ -16,7 +16,7 @@
  * always a draft: title, hook, tags and attributes render editable and
  * nothing persists until its own explicit save.
  */
-import { useRef, useState } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Kicker, Spinner } from "./ui";
@@ -75,8 +75,44 @@ const MOMENTUM_CHIP: Record<string, string> = {
   Legacy: "stale",
 };
 
-/** per-bucket tag targets, the numeric side of TARGET_MIX (~6-7 · ~4-5 · ~1-2) */
-const TAG_TARGETS: Record<string, number> = { Visibility: 7, Reach: 5, "Best Seller": 2 };
+/**
+ * Tier-1 shortlist sizes — top-N per bucket, ranked within each bucket
+ * separately so low-competition Visibility keywords can't crowd out the
+ * Reach and Best Seller candidates. Fixed sizes, NOT reduced by what's
+ * already selected: a word ✕'d out of the selection returns here.
+ */
+const SHORTLIST_PER_BUCKET: Record<string, number> = { Visibility: 12, Reach: 10, "Best Seller": 4 };
+
+/**
+ * Tier 2 — the selected working set (up to 13 going onto this listing).
+ * Lives in context because two siblings render it: the center panel adds
+ * to it (shortlist taps, AI suggestions), the right rail displays it,
+ * removes from it, and saves it. One state, one tally.
+ */
+const TagSelection = createContext<{
+  tags: string[];
+  setTags: React.Dispatch<React.SetStateAction<string[]>>;
+  dirty: boolean;
+  setDirty: (d: boolean) => void;
+} | null>(null);
+
+export function TagSelectionProvider({ initial, children }: { initial: string; children: ReactNode }) {
+  const [tags, setTags] = useState<string[]>(
+    initial.split(",").map((t) => t.trim()).filter(Boolean)
+  );
+  const [dirty, setDirty] = useState(false);
+  return (
+    <TagSelection.Provider value={{ tags, setTags, dirty, setDirty }}>
+      {children}
+    </TagSelection.Provider>
+  );
+}
+
+function useTagSelection() {
+  const ctx = useContext(TagSelection);
+  if (!ctx) throw new Error("TagSelectionProvider missing — StepRunner wraps L2 with it.");
+  return ctx;
+}
 
 /** ranking inside a bucket: markets selling NOW first, then raw volume.
  *  No momentum data ranks between Steady and Legacy — unknown isn't bad. */
@@ -137,10 +173,8 @@ interface CopyDraft {
 
 export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const router = useRouter();
-  const [tags, setTags] = useState<string[]>(
-    seo.tags.split(",").map((t) => t.trim()).filter(Boolean)
-  );
-  const [dirty, setDirty] = useState(false);
+  // tier 2 is shared with the SelectedTagsRail on the right — one state
+  const { tags, setTags, setDirty } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -178,40 +212,36 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
 
   const inTagList = (name: string) => tags.some((t) => t.toLowerCase() === name.toLowerCase());
-  const mixCount = (bucket: string) => tags.filter((t) => bucketOf(t) === bucket).length;
 
-  // The candidate pool: Design-inherited keywords AND attached-but-untagged
-  // ones (imports land attached — this is their path into the tag list).
+  // Tier 3 — the full candidate pool: everything researched for this
+  // Design (imports land here) plus any legacy attachments not yet tagged.
   const pool: Array<KeywordRow & { attached: boolean }> = [
     ...seo.inherited.map((k) => ({ ...k, attached: false })),
     ...seo.attached.filter((k) => !inTagList(k.name)).map((k) => ({ ...k, attached: true })),
   ];
-  // The recommendation cut: only buckets worth tagging, ranked (momentum,
-  // then volume), capped at the ROOM LEFT toward each bucket's target given
-  // what's already in the tag list — so the shortlist shrinks live as picks
-  // land. Dead/unmeasured never recommend; "show all" still has everything.
+  // Tier 1 — the bucket-balanced shortlist: top N PER BUCKET, ranked within
+  // each bucket (momentum, then volume) so Visibility's natural size can't
+  // crowd out Reach/Best Seller. Fixed sizes; a ✕'d word requalifies and
+  // returns here — removal is "not this one", never "forget this word".
   const recommendedInherited: Array<KeywordRow & { attached: boolean }> = [];
   for (const bucket of ["Visibility", "Reach", "Best Seller"]) {
-    const room = Math.max(0, (TAG_TARGETS[bucket] ?? 0) - mixCount(bucket));
-    if (room === 0) continue;
     recommendedInherited.push(
-      ...pool.filter((k) => k.bucket === bucket && k.tagEligible).sort(keywordRank).slice(0, room)
+      ...pool
+        .filter((k) => k.bucket === bucket && k.tagEligible && !inTagList(k.name))
+        .sort(keywordRank)
+        .slice(0, SHORTLIST_PER_BUCKET[bucket])
     );
   }
   const inheritedShown = showAllInherited
     ? BUCKETS.flatMap((b) => pool.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
     : recommendedInherited;
 
-  // No hard stop at 13 — over-filling while sifting is normal; the counter
+  // No hard stop at 13 — over-filling while sifting is normal; the rail
   // warns and the publish gate still requires exactly 13 at L6.
   function addTag(name: string) {
     if (inTagList(name)) return;
     setDirty(true);
     setTags((cur) => [...cur, name]);
-  }
-  function removeTag(name: string) {
-    setDirty(true);
-    setTags((cur) => cur.filter((t) => t.toLowerCase() !== name.toLowerCase()));
   }
   async function call(label: string, url: string, method: string, body: unknown) {
     setBusy(label);
@@ -223,17 +253,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     return res.ok;
   }
 
-  async function saveTags() {
-    const ok = await call("tags", `/api/listings/${seo.listingId}`, "PATCH", { tags: tags.join(", ") });
-    if (ok) setDirty(false);
-  }
-
-  /** pick a candidate: attach the relation if it isn't yet, into the tag list if eligible */
-  async function pickKeyword(k: KeywordRow & { attached: boolean }) {
-    if (!k.attached) {
-      const ok = await call("attach", `/api/keywords/${k.id}`, "PATCH", { attachListingId: seo.listingId });
-      if (!ok) return;
-    }
+  /** pick a shortlist candidate into the Selected panel. No relation write
+   *  here — saving the selection syncs attachments server-side. */
+  function pickKeyword(k: KeywordRow) {
     if (k.tagEligible) addTag(k.name);
   }
 
@@ -379,61 +401,22 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       {error ? <div className="callout blocked">{error}</div> : null}
       {notice ? <div className="hint">{notice}</div> : null}
 
-      {/* tag composer — the one selection everything feeds */}
-      <div className="well">
-        <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-          <Kicker>TAGS · {tags.length}/{TAG_COUNT}</Kicker>
-          {tags.length > TAG_COUNT ? (
-            <span className="chip stale">
-              {tags.length - TAG_COUNT} over the {TAG_COUNT}-tag limit — trim before publish
-            </span>
-          ) : null}
-          <span className="hint">target {TARGET_MIX} — guidance, not a rule</span>
-          <span style={{ marginLeft: "auto" }}>
-            <TagMixTally tags={tags} bucketOf={bucketOf} />
-          </span>
-        </div>
-        <div className="row-gap-8" style={{ flexWrap: "wrap", marginTop: 8 }}>
-          {tags.length === 0 ? <span className="hint">No tags yet — toggle keywords below, import a CSV, or generate a draft.</span> : null}
-          {tags.map((t) => (
-            <button
-              key={t}
-              type="button"
-              className="chip done"
-              style={{ cursor: "pointer", border: "none" }}
-              title={`${bucketOf(t) ?? "not in keyword bank"} — remove tag`}
-              onClick={() => removeTag(t)}
-            >
-              {t} ✕
-            </button>
-          ))}
-          {tags.length > 0 ? <CopyIconButton text={tags.join(", ")} label="tags" /> : null}
-        </div>
-        <div className="row-gap-12" style={{ marginTop: 10 }}>
-          <button className="btn btn-secondary" onClick={saveTags} disabled={busy !== null || !dirty}>
-            {busy === "tags" ? <span className="spinner" /> : null}
-            Save tags to listing
-          </button>
-          {dirty ? <span className="hint">Unsaved tag changes</span> : null}
-        </div>
-      </div>
-
-      {/* inherited from the Design — keyword work already done upstream,
-          pre-populated here instead of retyped */}
+      {/* tier 1 — the bucket-balanced shortlist; the selected set lives in
+          the rail on the right */}
       {pool.length > 0 ? (
         <div className="field">
           <span className="kicker">
             {showAllInherited
-              ? `KEYWORD CANDIDATES — ALL · ${pool.length}`
-              : `RECOMMENDED TAGS · ${recommendedInherited.length}`}
+              ? `FULL KEYWORD POOL · ${pool.length}`
+              : `SHORTLIST · ${recommendedInherited.length}`}
           </span>
           <span className="hint">
             {showAllInherited
               ? "Everything from this Design and your imports, best first — dead and unmeasured included down here."
-              : "Best picks toward the target mix from this Design and your imports — ranked by momentum, then volume. The shortlist shrinks as your tag list fills. Tap to add."}
+              : "Bucket-balanced: the top visibility, reach and best-seller candidates, each ranked within its own bucket (momentum, then volume). Tap + to move one into Selected tags on the right; a ✕'d word returns here."}
           </span>
           {!showAllInherited && recommendedInherited.length === 0 ? (
-            <span className="hint">Tag targets covered for every bucket — nothing more to recommend.</span>
+            <span className="hint">Nothing left to recommend — browse the full pool below.</span>
           ) : null}
           {/* two columns — the candidate names are short enough to pair up */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
@@ -653,8 +636,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               })}
             </div>
             <span className="hint">
-              Accepted suggestions join the tag list above — the tally and the {TAG_COUNT}-tag counter
-              track your edited selection, not the draft.
+              Accepted suggestions join Selected tags on the right — the tally and the {TAG_COUNT}-tag
+              counter track your edited selection, not the draft.
             </span>
           </div>
         ) : null}
@@ -816,10 +799,10 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         )}
       </div>
 
-      {/* attach an existing keyword */}
+      {/* tier-2 manual add: a bank keyword that didn't make the shortlist */}
       {seo.available.length > 0 ? (
         <div className="field">
-          <label className="kicker" htmlFor="kw-attach">ATTACH AN EXISTING KEYWORD</label>
+          <label className="kicker" htmlFor="kw-attach">ADD A KEYWORD NOT ON THE SHORTLIST</label>
           <select
             id="kw-attach"
             className="select"
@@ -827,17 +810,18 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             value=""
             disabled={busy !== null}
             onChange={(e) => {
-              if (e.target.value) {
-                call("attach", `/api/keywords/${e.target.value}`, "PATCH", { attachListingId: seo.listingId });
-              }
+              const name = e.target.value;
+              if (name) addTag(name);
             }}
           >
             <option value="" disabled>Keyword…</option>
-            {seo.available.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.name} · {(k.bucket || "unknown").toLowerCase()}
-              </option>
-            ))}
+            {seo.available
+              .filter((k) => k.name.length <= 20 && !inTagList(k.name))
+              .map((k) => (
+                <option key={k.id} value={k.name}>
+                  {k.name} · {(k.bucket || "unknown").toLowerCase()}
+                </option>
+              ))}
           </select>
         </div>
       ) : null}
@@ -847,25 +831,43 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
 }
 
 /**
- * The attached-keywords registry — a thin rail box under the publish gates.
- * Reading and pruning only: the working surface (recommendations, tags,
- * imports) lives in the main panel; this answers "what's on the record"
- * with a minimal ✕ to detach. Dead/unmeasured stay collapsed behind their
- * count — CSV imports attach everything, and nobody sifts 900 dead rows.
+ * Tier 2 — the Selected tags rail, under the publish gates. The up-to-13
+ * working set the operator is actually building: added from the shortlist
+ * (or AI suggestions) in the center panel, removed here with the minimal ✕.
+ * A ✕'d word requalifies for the shortlist — removal is "not this one",
+ * never "forget this word exists". Save commits the set to the listing;
+ * the server syncs keyword attachments to match.
  */
-export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
+export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const router = useRouter();
+  const { tags, setTags, dirty, setDirty } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showParked, setShowParked] = useState(false);
   const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
-  const PARKED_RENDER_CAP = 100;
 
-  // attachment = the hand-picked shortlist. Anything attached beyond the
-  // tag list is residue from the old attach-everything imports.
-  const tagNames = new Set(
-    seo.tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
-  );
+  const bucketOf = (tag: string): string | null =>
+    seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
+
+  function remove(tag: string) {
+    setDirty(true);
+    setTags((cur) => cur.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
+  }
+
+  async function save() {
+    setBusy("save");
+    setError(null);
+    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", { tags: tags.join(", ") });
+    if (!res.ok) setError(res.error);
+    else {
+      setDirty(false);
+      router.refresh();
+    }
+    setBusy(null);
+  }
+
+  // residue from the old attach-everything imports — offer the move-out
+  // until the attachment list matches the picks
+  const tagNames = new Set(tags.map((t) => t.trim().toLowerCase()));
   const excess = seo.attached.filter((k) => !tagNames.has(k.name.trim().toLowerCase())).length;
 
   /** chunked: ~1000 relation moves can't fit one request — loop until clear */
@@ -894,28 +896,6 @@ export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
     setBusy(null);
   }
 
-  const main = seo.attached
-    .filter((k) => k.bucket !== "Dead" && k.bucket !== "Unknown")
-    .slice()
-    .sort(
-      (a, b) =>
-        BUCKETS.indexOf((a.bucket || "Unknown") as Bucket) -
-          BUCKETS.indexOf((b.bucket || "Unknown") as Bucket) || keywordRank(a, b)
-    );
-  const parked = seo.attached
-    .filter((k) => k.bucket === "Dead" || k.bucket === "Unknown")
-    .slice()
-    .sort(keywordRank);
-
-  async function detach(k: KeywordRow) {
-    setBusy(k.id);
-    setError(null);
-    const res = await apiJson(`/api/keywords/${k.id}`, "PATCH", { detachListingId: seo.listingId });
-    if (!res.ok) setError(res.error);
-    else router.refresh();
-    setBusy(null);
-  }
-
   const SHORT_BUCKET: Record<string, string> = {
     Visibility: "vis",
     Reach: "reach",
@@ -924,76 +904,82 @@ export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
     Dead: "dead",
   };
 
-  const row = (k: KeywordRow) => (
-    <div key={k.id} className="row-gap-8" style={{ alignItems: "center" }}>
-      <span
-        className={`chip ${BUCKET_CHIP[k.bucket] ?? "neutral"}`}
-        style={{ flex: "0 0 auto" }}
-        title={`${k.bucket || "Unknown"} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentumTitle ? ` · ${k.momentumTitle}` : ""}`}
-      >
-        {SHORT_BUCKET[k.bucket] ?? "?"}
-      </span>
-      <span className="body-sm" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={k.name}>
-        {k.name}
-        {k.momentum === "Selling now" ? " 🔥" : ""}
-      </span>
-      <button
-        type="button"
-        aria-label={`Detach ${k.name}`}
-        title="Detach from this listing"
-        disabled={busy !== null}
-        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "2px 4px", flex: "0 0 auto" }}
-        onClick={() => detach(k)}
-      >
-        {busy === k.id ? <span className="spinner" /> : "✕"}
-      </button>
-    </div>
-  );
-
   return (
     <div className="gate-panel">
-      <div className="panel-title">Attached keywords · {seo.attached.length}</div>
+      <div className="panel-title">
+        Selected tags · {tags.length}/{TAG_COUNT}
+      </div>
+      <div className="hint">target {TARGET_MIX}</div>
+      <div>
+        <TagMixTally tags={tags} bucketOf={bucketOf} />
+      </div>
+      {tags.length > TAG_COUNT ? (
+        <span className="chip stale" style={{ alignSelf: "flex-start" }}>
+          {tags.length - TAG_COUNT} over the limit — trim before publish
+        </span>
+      ) : null}
       {error ? <div className="field-error">{error}</div> : null}
+      {tags.length === 0 ? (
+        <div className="hint">Nothing selected yet — tap + on the shortlist.</div>
+      ) : (
+        <div className="stack-12" style={{ gap: 6 }}>
+          {tags.map((t) => {
+            const bucket = bucketOf(t);
+            return (
+              <div key={t} className="row-gap-8" style={{ alignItems: "center" }}>
+                <span
+                  className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
+                  style={{ flex: "0 0 auto" }}
+                  title={bucket ?? "not in the keyword bank"}
+                >
+                  {bucket ? SHORT_BUCKET[bucket] ?? "?" : "new"}
+                </span>
+                <span
+                  className="body-sm"
+                  style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={t}
+                >
+                  {t}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${t}`}
+                  title="Remove — it returns to the shortlist"
+                  disabled={busy !== null}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "2px 4px", flex: "0 0 auto" }}
+                  onClick={() => remove(t)}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+        <button className="btn btn-secondary" onClick={save} disabled={busy !== null || !dirty}>
+          {busy === "save" ? <span className="spinner" /> : null}
+          Save tags to listing
+        </button>
+        {dirty ? <span className="hint">Unsaved</span> : null}
+        {tags.length > 0 ? <CopyIconButton text={tags.join(", ")} label="tags" /> : null}
+      </div>
       {excess > 5 ? (
-        <div className="stack-12" style={{ gap: 6, marginBottom: 8 }}>
+        <div className="stack-12" style={{ gap: 6, marginTop: 10 }}>
           <button
-            className="btn btn-secondary"
-            style={{ fontSize: 12, padding: "5px 10px", alignSelf: "flex-start" }}
+            className="btn btn-tertiary"
+            style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
             disabled={busy !== null}
             onClick={cleanUp}
           >
             {busy === "cleanup" ? <span className="spinner" /> : null}
-            Keep my tags — move {excess} to the design pool
+            Move {excess} old attachments to the design pool
           </button>
           <span className="hint">
             {cleanupProgress ??
-              "Attached should be your shortlist. This moves everything not in your tag list to the Design's pool — still recommendable, off this record."}
+              "Residue from earlier imports that attached every row. Moves them to the Design's pool — still recommendable, off this record."}
           </span>
         </div>
-      ) : null}
-      {main.length === 0 ? (
-        <div className="hint">Nothing measured attached yet — pick from the recommendations.</div>
-      ) : (
-        <div className="stack-12" style={{ gap: 6 }}>{main.map(row)}</div>
-      )}
-      {parked.length > 0 ? (
-        <>
-          <button
-            className="btn btn-tertiary"
-            style={{ fontSize: 11, padding: "3px 8px", alignSelf: "flex-start", marginTop: 8 }}
-            onClick={() => setShowParked((v) => !v)}
-          >
-            {showParked ? "Hide" : "Show"} {parked.length} dead / unmeasured
-          </button>
-          {showParked ? (
-            <div className="stack-12" style={{ gap: 6, marginTop: 6 }}>
-              {parked.slice(0, PARKED_RENDER_CAP).map(row)}
-              {parked.length > PARKED_RENDER_CAP ? (
-                <span className="hint">…and {parked.length - PARKED_RENDER_CAP} more — detach in Notion if you need a bulk prune.</span>
-              ) : null}
-            </div>
-          ) : null}
-        </>
       ) : null}
     </div>
   );

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cachedRecord, updateRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
 import { markStepsStale } from "@/server/steps";
 import type { SimpleValue } from "@/server/notion/props";
 
@@ -66,6 +66,29 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // the images a lie until re-checked. Stale, never silent.
     if (colorwaysChanged) {
       await markStepsStale(id, ["L4", "L5"], "Colorways changed — re-check images and slots.");
+    }
+    // Saving tags syncs keyword ATTACHMENTS to the committed selection —
+    // the visibility publish gate reads the relation, and attachment means
+    // "on this listing's shortlist". Only names crossing the old/new tag
+    // boundary are touched (≤ a couple dozen writes); legacy residue is
+    // the rehome route's job, not a save side-effect.
+    if (body.tags != null) {
+      const norm = (s: string) => s.trim().toLowerCase();
+      const oldTags = new Set(
+        String(listing.props["Tags"] ?? "").split(",").map(norm).filter(Boolean)
+      );
+      const newTags = new Set(String(body.tags).split(",").map(norm).filter(Boolean));
+      for (const k of cachedRecords("keywords")) {
+        const name = norm(k.title);
+        if (!name) continue;
+        const rels = (k.props["Etsy Listings"] as string[] | null) ?? [];
+        const has = rels.includes(id);
+        if (newTags.has(name) && !has) {
+          await updateRecord("keywords", k.id, { "Etsy Listings": [...rels, id] });
+        } else if (!newTags.has(name) && has && oldTags.has(name)) {
+          await updateRecord("keywords", k.id, { "Etsy Listings": rels.filter((x) => x !== id) });
+        }
+      }
     }
     return NextResponse.json({ record });
   } catch (err) {

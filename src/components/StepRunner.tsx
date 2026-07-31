@@ -13,7 +13,7 @@ import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workf
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
-import { KeywordSeoPanel, AttachedKeywordsRail, type SeoData } from "./KeywordSeoPanel";
+import { KeywordSeoPanel, SelectedTagsRail, TagSelectionProvider, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
@@ -104,6 +104,9 @@ export function StepRunner({
   const doneBlocker = record.blockedDone?.[selected.id] ?? null;
 
   return (
+    // tag selection is shared between the L2 panel (adds) and the rail
+    // (shows/removes/saves) — the provider is the one state they both read
+    <TagSelectionProvider initial={seo?.tags ?? ""}>
     <div className="stack-22">
       {/* step rail */}
       <div className="step-rail" role="tablist" aria-label={`${wf.name} steps`}>
@@ -339,10 +342,10 @@ export function StepRunner({
               ))
             )}
           </div>
-          {/* L2's registry rides under the gates — what's on the record,
-              with a minimal ✕; the working surface stays in the left column */}
+          {/* L2's Selected-tags working set rides under the gates — the
+              up-to-13 being built, minimal ✕; candidates stay on the left */}
           {record.workflowKey === "listing" && selected.id === "L2" && seo ? (
-            <AttachedKeywordsRail seo={seo} />
+            <SelectedTagsRail seo={seo} />
           ) : null}
           <div className="card supporting">
             <Kicker>PROGRESS</Kicker>
@@ -399,6 +402,7 @@ export function StepRunner({
         </div>
       ) : null}
     </div>
+    </TagSelectionProvider>
   );
 }
 

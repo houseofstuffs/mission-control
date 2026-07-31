@@ -64,24 +64,47 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     if (!pid) {
-      // find it: same blueprint × provider, skipping anything probe-shaped
+      // find it: same blueprint × provider, skipping anything probe-shaped.
+      // Everything ELSE in the shop is collected too — a product made with a
+      // different print provider (Printify's UI loves "Printify Choice")
+      // exists, is visible, and would otherwise be dropped silently, which
+      // reads as "the dropdown can't see my product".
       const matches: ShopProduct[] = [];
+      const rejected: ShopProduct[] = [];
       for (let page = 1; page <= 4; page++) {
         const batch = await listShopProducts(shop, page);
         for (const p of batch) {
-          if (
-            p.blueprint_id === blueprintId &&
-            p.print_provider_id === providerId &&
-            !p.title.includes("cost probe")
-          ) {
-            matches.push(p);
-          }
+          if (p.title.includes("cost probe")) continue;
+          if (p.blueprint_id === blueprintId && p.print_provider_id === providerId) matches.push(p);
+          else rejected.push(p);
         }
         if (batch.length < 50) break;
       }
+      // name the shapes of what was rejected, so a provider mismatch is
+      // visible instead of mysterious. Provider names come from any seeded
+      // product sharing the pair; ids otherwise.
+      const shapeOf = (p: ShopProduct) => {
+        const twin = cachedRecords("products").find(
+          (r) =>
+            r.props["Printify Blueprint ID"] === p.blueprint_id &&
+            r.props["Printify Print Provider ID"] === p.print_provider_id
+        );
+        const provider = twin
+          ? String(twin.props["Print Provider Name"] ?? `provider #${p.print_provider_id}`)
+          : `provider #${p.print_provider_id}`;
+        return `"${p.title}" (blueprint ${p.blueprint_id} × ${provider})`;
+      };
+      const otherShapes = rejected.slice(0, 8).map(shapeOf);
+
       if (matches.length === 0) {
         return NextResponse.json(
-          { error: "No product in your Printify shop matches this blueprint × provider — create it in Printify first." },
+          {
+            error:
+              `No product in your Printify shop matches blueprint ${blueprintId} × provider ${providerId} (this listing's product).` +
+              (otherShapes.length
+                ? ` Found with a DIFFERENT shape: ${otherShapes.join(" · ")}. A product made with another print provider can't connect — recreate it in Printify with the right provider, or seed that provider as a Product and point the listing at it.`
+                : " Create it in Printify first."),
+          },
           { status: 404 }
         );
       }
@@ -90,6 +113,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({
           candidates: matches.map((m) => ({ id: m.id, title: m.title })),
           note,
+          otherShapes,
         });
       }
       shopProduct = matches[0];

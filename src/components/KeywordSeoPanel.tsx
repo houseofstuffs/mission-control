@@ -181,7 +181,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [showParked, setShowParked] = useState(false);
   const [showAllInherited, setShowAllInherited] = useState(false);
   const [showBody, setShowBody] = useState(false);
+  // per-listing body edits — this listing's Body Copy only, the product's
+  // boilerplate is never touched from here
+  const [bodyDraft, setBodyDraft] = useState(seo.bodyCopy);
   const bodyCopySet = seo.bodyCopy.trim().length > 0;
+  const bodyDirty = bodyDraft !== seo.bodyCopy;
 
   // ONE bucket lookup for the whole panel — attached, inherited, imported
   // and AI-suggested tags all resolve through the same bank map, so the
@@ -758,24 +762,51 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               <button
                 className="btn btn-tertiary"
                 style={{ fontSize: 12, padding: "4px 10px" }}
-                onClick={() => setShowBody((v) => !v)}
+                onClick={() => {
+                  setBodyDraft(seo.bodyCopy); // fresh from the record on open
+                  setShowBody((v) => !v);
+                }}
               >
-                {showBody ? "Collapse" : "Read it"}
+                {showBody ? "Collapse" : "Read / edit"}
               </button>
             ) : null}
             <span className="hint">
               Stitches {seo.product.name}&apos;s fit/fabric/care copy under the hook — same text on
               every listing that sells this garment.
             </span>
-            {/* the description as a buyer reads it: hook, then boilerplate */}
+            {/* the description as a buyer reads it: hook (edited in its own
+                field above), then the body — editable HERE, for THIS listing
+                only. The product boilerplate is never written from L2. */}
             {showBody ? (
-              <div className="well" style={{ flexBasis: "100%", whiteSpace: "pre-wrap" }}>
-                {seo.hook.trim() ? (
-                  <>{seo.hook.trim()}{"\n\n"}</>
-                ) : (
-                  <span className="hint">(no hook saved yet — it opens the description){"\n\n"}</span>
-                )}
-                {seo.bodyCopy}
+              <div className="well" style={{ flexBasis: "100%" }}>
+                <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>
+                  {seo.hook.trim() ? (
+                    seo.hook.trim()
+                  ) : (
+                    <span className="hint">(no hook saved yet — it opens the description)</span>
+                  )}
+                </div>
+                <textarea
+                  className="input"
+                  value={bodyDraft}
+                  rows={Math.min(24, bodyDraft.split("\n").length + 4)}
+                  style={{ resize: "vertical", width: "100%" }}
+                  onChange={(e) => setBodyDraft(e.target.value)}
+                />
+                <div className="row-gap-12" style={{ marginTop: 8, alignItems: "center" }}>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
+                    onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
+                  >
+                    {busy === "body-edit" ? <span className="spinner" /> : null}
+                    Save body copy — this listing only
+                  </button>
+                  {bodyDirty ? <span className="hint">Unsaved</span> : null}
+                  <span className="hint">
+                    The product boilerplate is untouched; &quot;Refresh from product&quot; replaces these edits.
+                  </span>
+                </div>
               </div>
             ) : null}
           </div>

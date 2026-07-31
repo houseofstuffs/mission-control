@@ -139,9 +139,17 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
         )
         .map((k) => rowById.get(k.id)!)
     : [];
-  // one lookup for the tally and the suggestion chips — the whole bank
-  const bankBuckets: Record<string, string> = {};
-  for (const r of rows) bankBuckets[r.name.trim().toLowerCase()] = r.bucket;
+  // one lookup for the tally, suggestion chips and rail tooltips — the
+  // whole bank, with the same metrics the shortlist pills show on hover
+  const bank: SeoData["bank"] = {};
+  for (const r of rows) {
+    bank[r.name.trim().toLowerCase()] = {
+      bucket: r.bucket,
+      searches: r.avgSearches,
+      competition: r.competition,
+      momentum: r.momentum,
+    };
+  }
 
   const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
   const productRec = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
@@ -175,7 +183,7 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
       .filter((r) => !attachedIds.has(r.id) && !inherited.some((i) => i.id === r.id))
       .map((r) => ({ id: r.id, name: r.name, bucket: r.bucket })),
     tags: String(rec.props["Tags"] ?? ""),
-    bankBuckets,
+    bank,
     dismissed,
     title: String(rec.props["Title"] ?? ""),
     hook: String(rec.props["Description Hook"] ?? ""),

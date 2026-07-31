@@ -46,8 +46,12 @@ export interface SeoData {
   /** unattached keywords, for the attach picker */
   available: Array<{ id: string; name: string; bucket: string }>;
   tags: string;
-  /** lowercased keyword name → bucket, across the whole bank — the tally's lookup */
-  bankBuckets: Record<string, string>;
+  /** lowercased keyword name → bucket + metrics, across the whole bank —
+   *  one lookup for the tally, the suggestion chips, and the rail tooltips */
+  bank: Record<
+    string,
+    { bucket: string; searches: number | null; competition: number | null; momentum: string | null }
+  >;
   /** keyword ids ✕'d off the shortlist — persisted, excluded from recommendations */
   dismissed: string[];
   /** saved copy fields, editable here */
@@ -211,7 +215,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   // and AI-suggested tags all resolve through the same bank map, so the
   // tally can never disagree with the chips.
   const bucketOf = (tag: string): string | null =>
-    seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
+    seo.bank[tag.trim().toLowerCase()]?.bucket ?? null;
 
   const inTagList = (name: string) => tags.some((t) => t.toLowerCase() === name.toLowerCase());
 
@@ -961,7 +965,16 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
 
   const bucketOf = (tag: string): string | null =>
-    seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
+    seo.bank[tag.trim().toLowerCase()]?.bucket ?? null;
+
+  /** same story the shortlist pills tell on hover — bucket, metrics, momentum */
+  const tagTooltip = (tag: string): string => {
+    const info = seo.bank[tag.trim().toLowerCase()];
+    if (!info) return `${tag} — not in the keyword bank, no metrics`;
+    return `${info.bucket} · ${fmt(info.searches)} searches · ${fmt(info.competition)} comp${
+      info.momentum && info.momentum !== "Unknown" ? ` · ${info.momentum.toLowerCase()}` : ""
+    }`;
+  };
 
   // display AND save in bucket order — visibility block on top, additions
   // slot into their section instead of appending to the bottom
@@ -1079,7 +1092,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
                 <span
                   className="body-sm"
                   style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={t}
+                  title={tagTooltip(t)}
                 >
                   {t}
                 </span>

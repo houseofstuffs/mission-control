@@ -30,7 +30,7 @@ export interface PrintCheckData {
 }
 
 interface Finding {
-  ok: boolean;
+  level: "ok" | "info" | "warn";
   text: string;
 }
 
@@ -151,11 +151,15 @@ function PrintFileCheck({ data }: { data: PrintCheckData }) {
     setBusy(false);
   }
 
-  // freshly-run findings win; otherwise show what's on the record
-  const stored = data.notes
+  // freshly-run findings win; otherwise show what's on the record. Old
+  // records stored before the ℹ level existed still parse: ⚠ → warn, ✓ → ok.
+  const stored: Finding[] = data.notes
     .split("\n")
     .filter((line) => line.trim() && !line.startsWith("Checked "))
-    .map((line) => ({ ok: !line.startsWith("⚠"), text: line.replace(/^[✓⚠]\s*/, "") }));
+    .map((line) => ({
+      level: line.startsWith("⚠") ? "warn" : line.startsWith("ℹ") ? "info" : "ok",
+      text: line.replace(/^[✓⚠ℹ]\s*/, ""),
+    }));
   const shown = findings ?? (stored.length > 0 ? stored : null);
 
   return (
@@ -201,8 +205,8 @@ function PrintFileCheck({ data }: { data: PrintCheckData }) {
       {shown ? (
         <div className="gate-panel" style={{ marginTop: 4 }}>
           {shown.map((f) => (
-            <div key={f.text} className={`gate-item${f.ok ? " ok" : ""}`}>
-              {f.ok ? "✓ " : ""}{f.text}
+            <div key={f.text} className={`gate-item${f.level === "ok" ? " ok" : f.level === "info" ? " info" : ""}`}>
+              {f.level === "ok" ? "✓ " : f.level === "info" ? "ℹ " : ""}{f.text}
             </div>
           ))}
         </div>

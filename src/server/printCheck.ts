@@ -22,6 +22,16 @@ import {
  *  so the shares it measures are a true sample, not a blurred average. */
 const MAX_WALK_EDGE = 3000;
 
+/**
+ * ok    → green check.
+ * info  → neutral note: a legitimate style choice worth knowing about, not a
+ *         defect. Soft alpha (the vintage fade) lives here — it reads
+ *         identically to full strength on screen, so it deserves a note, but
+ *         painting it red just teaches people to ignore the panel.
+ * warn  → attention: near-always an actual problem (pure black, undersized).
+ */
+export type FindingLevel = "ok" | "info" | "warn";
+
 export interface PrintCheckResult {
   width: number | null;
   height: number | null;
@@ -31,7 +41,7 @@ export interface PrintCheckResult {
   pureBlackShare: number;
   /** true when the pixel walk ran on a reduction, not the full file */
   sampled: boolean;
-  findings: Array<{ ok: boolean; text: string }>;
+  findings: Array<{ level: FindingLevel; text: string }>;
 }
 
 export async function inspectPrintFile(
@@ -71,32 +81,35 @@ export async function inspectPrintFile(
   const pureBlackShare = opaque > 0 ? pureBlack / opaque : 0;
   const longEdge = Math.max(width ?? 0, height ?? 0);
 
-  const findings: Array<{ ok: boolean; text: string }> = [];
+  const findings: Array<{ level: FindingLevel; text: string }> = [];
 
+  // Soft alpha is a style (the vintage fade), so low solidity is a NOTE, not
+  // an alarm — the point is that screens hide it and ink doesn't. The number
+  // leads with what the effect does, not with what's "missing".
   findings.push(
     opaqueShare < MIN_OPAQUE_SHARE
       ? {
-          ok: false,
-          text: `Artwork is largely semi-transparent (${pct(opaqueShare)} solid) — will print at reduced strength. Check texture is not riding on alpha.`,
+          level: "info",
+          text: `Soft alpha across the artwork — ${pct(1 - opaqueShare)} of it prints at partial ink strength (${pct(opaqueShare)} fully solid). If that's the vintage fade, it's working as designed: expect the print darker and more fabric-tinted than mockups show, and let a sample confirm it. If no fade was intended, look for an alpha texture mask or an opacity slider.`,
         }
-      : { ok: true, text: `${pct(opaqueShare)} of the artwork is solid — texture is carried by colour, not alpha.` }
+      : { level: "ok", text: `Ink lays down at full strength across ${pct(opaqueShare)} of the artwork.` }
   );
 
   findings.push(
     pureBlackShare > MAX_PURE_BLACK_SHARE
       ? {
-          ok: false,
+          level: "warn",
           text: `Pure black present (${pct(pureBlackShare)} of the artwork) — will be destroyed by background knockout and limits garment compatibility.`,
         }
-      : { ok: true, text: "No meaningful pure black — linework will survive knockout." }
+      : { level: "ok", text: "No meaningful pure black — linework will survive knockout." }
   );
 
   findings.push(
     longEdge > 0 && longEdge < MIN_LONG_EDGE
-      ? { ok: false, text: `Long edge is ${longEdge}px — under the ${MIN_LONG_EDGE}px a print file wants.` }
+      ? { level: "warn", text: `Long edge is ${longEdge}px — under the ${MIN_LONG_EDGE}px a print file wants.` }
       : longEdge > 0
-        ? { ok: true, text: `${width}×${height} — clears the ${MIN_LONG_EDGE}px minimum.` }
-        : { ok: false, text: "Couldn't read the file's dimensions." }
+        ? { level: "ok", text: `${width}×${height} — clears the ${MIN_LONG_EDGE}px minimum.` }
+        : { level: "warn", text: "Couldn't read the file's dimensions." }
   );
 
   return { width, height, opaqueShare, pureBlackShare, sampled, findings };
@@ -108,7 +121,8 @@ function pct(x: number): string {
 
 /** Flatten a result into the plain text stored on the record. */
 export function checkNotes(r: PrintCheckResult): string {
-  const lines = r.findings.map((f) => `${f.ok ? "✓" : "⚠"} ${f.text}`);
+  const glyph: Record<FindingLevel, string> = { ok: "✓", info: "ℹ", warn: "⚠" };
+  const lines = r.findings.map((f) => `${glyph[f.level]} ${f.text}`);
   lines.push(
     `Checked ${new Date().toISOString().slice(0, 10)}${r.sampled ? " · measured on a sampled reduction" : ""}`
   );

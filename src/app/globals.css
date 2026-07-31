@@ -448,6 +448,9 @@ a:hover { color: var(--candy); }
   color: var(--text-primary);
 }
 .gate-item.ok { border-left-color: var(--status-done); }
+/* informational, not failing — a style choice worth knowing about. Blueberry
+   bar: noteworthy, but not THE RULE's attention red. */
+.gate-item.info { border-left-color: var(--blueberry); }
 
 /* ---------- table (Listings) ---------- */
 

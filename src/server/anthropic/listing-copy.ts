@@ -45,10 +45,12 @@ const DRAFT_SCHEMA = {
       description:
         `The Etsy listing title: UNDER ${15} words (hard rule — count them), front-loading the strongest Visibility-bucket keyword as the opening phrase, readable as a sentence a person would type into Etsy search, not a keyword pile. Name the product type.`,
     },
+    // NOTE: no maxItems/maxLength here — the structured-output validator
+    // rejects them ("property 'maxItems' is not supported"). The caps are
+    // enforced in the prompt text and again in the post-filter below.
     tags: {
       type: "array",
-      items: { type: "string", maxLength: TAG_MAX_CHARS },
-      maxItems: TAG_COUNT,
+      items: { type: "string" },
       description:
         `The full proposed tag set, up to ${TAG_COUNT}. Every toggled-on tag-eligible keyword appears verbatim first; fill the remainder with phrase variants (plurals, buyer phrasings, gift angles) toward the target mix of ${TARGET_MIX}. HARD RULE: every tag ${TAG_MAX_CHARS} characters or fewer — count characters, drop or shorten anything over. No duplicates, no single generic words.`,
     },

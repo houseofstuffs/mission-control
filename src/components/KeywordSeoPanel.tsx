@@ -74,6 +74,19 @@ const MOMENTUM_CHIP: Record<string, string> = {
   Legacy: "stale",
 };
 
+/** per-bucket tag targets, the numeric side of TARGET_MIX (~6-7 · ~4-5 · ~1-2) */
+const TAG_TARGETS: Record<string, number> = { Visibility: 7, Reach: 5, "Best Seller": 2 };
+
+/** ranking inside a bucket: markets selling NOW first, then raw volume.
+ *  No momentum data ranks between Steady and Legacy — unknown isn't bad. */
+const MOMENTUM_RANK: Record<string, number> = { "Selling now": 0, Steady: 1, Legacy: 3 };
+function keywordRank(a: KeywordRow, b: KeywordRow): number {
+  const ma = MOMENTUM_RANK[a.momentum ?? ""] ?? 2;
+  const mb = MOMENTUM_RANK[b.momentum ?? ""] ?? 2;
+  if (ma !== mb) return ma - mb;
+  return (b.avgSearches ?? -1) - (a.avgSearches ?? -1);
+}
+
 function fmt(n: number | null): string {
   return n == null ? "—" : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
 }
@@ -157,8 +170,15 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
 
   const groups = BUCKETS.map((b: Bucket) => ({
     bucket: b,
-    items: seo.attached.filter((k) => (k.bucket || "Unknown") === b),
+    items: seo.attached.filter((k) => (k.bucket || "Unknown") === b).slice().sort(keywordRank),
   })).filter((g) => g.items.length > 0);
+  // Dead and unmeasured aren't tag candidates — parked out of sight, one
+  // toggle away. Nothing is hidden from the record, just from the sift.
+  const mainGroups = groups.filter((g) => g.bucket !== "Dead" && g.bucket !== "Unknown");
+  const parkedGroups = groups.filter((g) => g.bucket === "Dead" || g.bucket === "Unknown");
+  const parkedCount = parkedGroups.reduce((n, g) => n + g.items.length, 0);
+  const [showParked, setShowParked] = useState(false);
+  const [showAllInherited, setShowAllInherited] = useState(false);
 
   // ONE bucket lookup for the whole panel — attached, inherited, imported
   // and AI-suggested tags all resolve through the same bank map, so the
@@ -167,6 +187,23 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
 
   const inTagList = (name: string) => tags.some((t) => t.toLowerCase() === name.toLowerCase());
+  const mixCount = (bucket: string) => tags.filter((t) => bucketOf(t) === bucket).length;
+
+  // The recommendation cut: only buckets worth tagging, ranked (momentum,
+  // then volume), capped at the ROOM LEFT toward each bucket's target given
+  // what's already in the tag list — so the shortlist shrinks live as picks
+  // land. Dead/unmeasured never recommend; "show all" still has everything.
+  const recommendedInherited: KeywordRow[] = [];
+  for (const bucket of ["Visibility", "Reach", "Best Seller"]) {
+    const room = Math.max(0, (TAG_TARGETS[bucket] ?? 0) - mixCount(bucket));
+    if (room === 0) continue;
+    recommendedInherited.push(
+      ...seo.inherited.filter((k) => k.bucket === bucket).sort(keywordRank).slice(0, room)
+    );
+  }
+  const inheritedShown = showAllInherited
+    ? BUCKETS.flatMap((b) => seo.inherited.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
+    : recommendedInherited;
 
   function addTag(name: string) {
     if (inTagList(name) || tags.length >= TAG_COUNT) return;
@@ -382,26 +419,46 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           pre-populated here instead of retyped */}
       {seo.inherited.length > 0 ? (
         <div className="field">
-          <span className="kicker">FROM THIS DESIGN · {seo.inherited.length}</span>
-          <span className="hint">
-            Keywords attached to the Design during the creative workflow. Toggle to attach here
-            {" "}— eligible ones join the tag list.
+          <span className="kicker">
+            {showAllInherited
+              ? `FROM THIS DESIGN — ALL · ${seo.inherited.length}`
+              : `FROM THIS DESIGN — RECOMMENDED · ${recommendedInherited.length}`}
           </span>
+          <span className="hint">
+            {showAllInherited
+              ? "Everything related to this Design, best first. Dead and unmeasured included down here."
+              : "Best picks toward the target mix — ranked by momentum, then volume. The shortlist shrinks as your tag list fills. Tap to attach; eligible ones join the tags."}
+          </span>
+          {!showAllInherited && recommendedInherited.length === 0 ? (
+            <span className="hint">Tag targets covered for every bucket — nothing more to recommend.</span>
+          ) : null}
           <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-            {seo.inherited.map((k) => (
+            {inheritedShown.map((k) => (
               <button
                 key={k.id}
                 type="button"
                 className="chip neutral"
                 style={{ cursor: "pointer" }}
                 disabled={busy !== null}
-                title={`${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
+                title={`${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
                 onClick={() => attachInherited(k)}
               >
                 + {k.name} · {(k.bucket || "unknown").toLowerCase()}
+                {k.momentum === "Selling now" ? " 🔥" : ""}
               </button>
             ))}
           </div>
+          {seo.inherited.length > recommendedInherited.length ? (
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
+              onClick={() => setShowAllInherited((v) => !v)}
+            >
+              {showAllInherited
+                ? "Show recommended only"
+                : `Show all ${seo.inherited.length}`}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -708,11 +765,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         )}
       </div>
 
-      {/* attached keywords, grouped by bucket */}
+      {/* attached keywords, grouped by bucket — Dead/unmeasured parked below */}
       {seo.attached.length === 0 ? (
         <div className="hint">No keywords attached yet — add one below or attach an existing one.</div>
       ) : (
-        groups.map((g) => (
+        [...mainGroups, ...(showParked ? parkedGroups : [])].map((g) => (
           <div key={g.bucket} className="field">
             <span className="kicker">{g.bucket.toUpperCase()} · {g.items.length}</span>
             <div className="stack-12">
@@ -766,6 +823,17 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           </div>
         ))
       )}
+
+      {/* parked: attached but not worth the sift — dead volume or no numbers */}
+      {parkedCount > 0 ? (
+        <button
+          className="btn btn-tertiary"
+          style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
+          onClick={() => setShowParked((v) => !v)}
+        >
+          {showParked ? "Hide" : "Show"} {parkedCount} dead / unmeasured keyword{parkedCount === 1 ? "" : "s"}
+        </button>
+      ) : null}
 
       {/* attach an existing keyword */}
       {seo.available.length > 0 ? (

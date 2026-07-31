@@ -22,7 +22,6 @@ import {
   PIPELINE_TYPES,
   BLEND_MODES,
   FIT_MODES,
-  SURFACE_TAGS,
   DEFAULT_BLEND,
   DEFAULT_FIT,
   DEFAULT_QUAD,
@@ -336,7 +335,6 @@ export function MockupTemplateIntake() {
   const [quadTouched, setQuadTouched] = useState(false);
   const [blend, setBlend] = useState<string>(DEFAULT_BLEND);
   const [fit, setFit] = useState<string>(DEFAULT_FIT);
-  const [surface, setSurface] = useState("");
   const [basePreview, setBasePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -366,9 +364,7 @@ export function MockupTemplateIntake() {
           ? "Full Displacement needs a displacement map."
           : simple && !quadTouched
             ? "Place the four corners on the print area."
-            : !surface
-              ? "Tag the surface before saving."
-              : null;
+            : null;
 
   async function save() {
     setBusy(true);
@@ -376,7 +372,6 @@ export function MockupTemplateIntake() {
     const form = new FormData();
     form.append("name", name.trim());
     form.append("pipelineType", pipeline);
-    form.append("surface", surface);
     form.append("blendMode", blend);
     form.append("fitMode", fit);
     if (sourceLink.trim()) form.append("sourceLink", sourceLink.trim());
@@ -396,7 +391,7 @@ export function MockupTemplateIntake() {
       setOpen(false);
       setName(""); setSourceLink(""); setPipeline(""); setBase(null); setDisplacement(null);
       setShadow(null); setHighlight(null); setQuad(DEFAULT_QUAD); setQuadTouched(false);
-      setBlend(DEFAULT_BLEND); setFit(DEFAULT_FIT); setSurface("");
+      setBlend(DEFAULT_BLEND); setFit(DEFAULT_FIT);
       router.refresh();
     }
     setBusy(false);
@@ -488,19 +483,6 @@ export function MockupTemplateIntake() {
             When artwork and area shapes disagree: fit shows the whole design (garments);
             fill covers edge-to-edge and crops the overflow (die-cuts, full-bleed). Never stretched.
           </span>
-        </div>
-      ) : null}
-
-      {pipeline ? (
-        <div className="field" style={{ maxWidth: 260 }}>
-          <label className="kicker" htmlFor="mt-surface">SURFACE</label>
-          <select id="mt-surface" className="select" value={surface} onChange={(e) => setSurface(e.target.value)}>
-            <option value="">What does the photo show?</option>
-            {SURFACE_TAGS.map((s) => (
-              <option key={s}>{s}</option>
-            ))}
-          </select>
-          <span className="hint">Filters templates against a design&apos;s garment compatibility.</span>
         </div>
       ) : null}
 

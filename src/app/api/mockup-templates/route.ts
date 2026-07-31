@@ -61,11 +61,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Pick a pipeline type first — it decides everything after." }, { status: 400 });
     }
 
-    const surface = str("surface");
-    if (!SURFACE_TAGS.includes(surface as (typeof SURFACE_TAGS)[number])) {
-      return NextResponse.json({ error: "Tag the surface — it filters templates by garment compatibility later." }, { status: 400 });
-    }
-
     const baseImage = fileOf("baseImage");
     const displacementMap = fileOf("displacementMap");
     const shadowLayer = fileOf("shadowLayer");
@@ -92,10 +87,15 @@ export async function POST(req: Request) {
     const values: Record<string, SimpleValue> = {
       Name: name,
       "Pipeline Type": pipelineType,
-      Surface: surface,
       "Blend Mode": BLEND_MODES.includes(blend as (typeof BLEND_MODES)[number]) ? blend : DEFAULT_BLEND,
       Fit: FIT_MODES.includes(fit as (typeof FIT_MODES)[number]) ? fit : DEFAULT_FIT,
     };
+    // Optional: one template serves every colourway of its product — the
+    // photo LAYOUT is the template, garment colour is a per-render variable.
+    // Kept as metadata for templates that genuinely are colour-locked.
+    if (SURFACE_TAGS.includes(str("surface") as (typeof SURFACE_TAGS)[number])) {
+      values["Surface"] = str("surface");
+    }
     if (str("sourceLink")) values["File Link"] = str("sourceLink");
     if (str("shotType")) values["Shot Type"] = str("shotType");
     if (quad) values["Print Area Quad (JSON)"] = JSON.stringify(quad);

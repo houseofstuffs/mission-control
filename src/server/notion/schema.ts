@@ -266,8 +266,10 @@ export const SCHEMA: DbSpec[] = [
       // letterboxed (garments) or edge-to-edge with overflow cropped
       // (die-cuts, full-bleed). Never stretched, in either mode.
       Fit: { type: "select", options: [...FIT_MODES] },
-      // What the photo shows — filters templates against the design's
-      // garment compatibility at offer time.
+      // OPTIONAL metadata. One template serves every colourway of its
+      // product — the photo LAYOUT is the template; garment colour is a
+      // per-render variable, and compatibility filtering happens at the
+      // colourway level. Set only for templates genuinely colour-locked.
       Surface: { type: "select", options: [...SURFACE_TAGS] },
       // How this template renders — auto-fills the slot's shot type when the
       // template is chosen (slot value set beforehand = the plan).

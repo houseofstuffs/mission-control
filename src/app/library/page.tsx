@@ -9,8 +9,31 @@ import { syncState } from "@/server/cache/db";
 import { RefreshButton } from "@/components/RefreshButton";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
+import { MockupTemplatesSection, type MockupTemplateCard } from "@/components/MockupTemplates";
+import type { SimpleRecord } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
+
+function templateCard(m: SimpleRecord): MockupTemplateCard {
+  const fileUrl = (prop: string): string | null => {
+    const v = m.props[prop];
+    if (!Array.isArray(v) || v.length === 0) return null;
+    return (v[0] as { url?: string })?.url || null;
+  };
+  return {
+    id: m.id,
+    name: m.title || "Untitled template",
+    pipelineType: String(m.props["Pipeline Type"] ?? ""),
+    surface: String(m.props["Surface"] ?? ""),
+    blend: String(m.props["Blend Mode"] ?? ""),
+    quadSet: String(m.props["Print Area Quad (JSON)"] ?? "").trim().length > 0,
+    baseImageUrl: fileUrl("Base Image"),
+    hasDisplacement: fileUrl("Displacement Map") != null,
+    hasShadow: fileUrl("Shadow Layer") != null,
+    hasHighlight: fileUrl("Highlight Layer") != null,
+    sourceLink: String(m.props["File Link"] ?? ""),
+  };
+}
 
 export default function LibraryPage() {
   const textures = cachedRecords("textures");
@@ -57,18 +80,7 @@ export default function LibraryPage() {
             </div>
           </section>
 
-          <section className="stack-12">
-            <Kicker>MOCKUP TEMPLATES · {mockups.length}</Kicker>
-            <div className="inbox-grid">
-              {mockups.map((m) => (
-                <div key={m.id} className="idea-card">
-                  <div className="title">{m.title}</div>
-                  <div className="hint">{String(m.props["Product Types"] ?? "")}</div>
-                </div>
-              ))}
-              {mockups.length === 0 ? <div className="hint">No mockup templates yet.</div> : null}
-            </div>
-          </section>
+          <MockupTemplatesSection templates={mockups.map(templateCard)} />
         </div>
       )}
     </div>

@@ -16,6 +16,7 @@
 
 import { GARMENT_COMPATIBILITY } from "@/config/design-prompt";
 import { CATEGORIES } from "@/config/product-categories";
+import { PIPELINE_TYPES, BLEND_MODES, SURFACE_TAGS } from "@/config/mockups";
 
 export type PropType =
   | "title"
@@ -236,13 +237,34 @@ export const SCHEMA: DbSpec[] = [
   {
     key: "mockup_templates",
     title: "Mockup Templates",
-    description: "Purchased or collected PSD mockup templates. Usage and license tracked.",
+    description:
+      "Purchased or collected mockup templates. Usage and license tracked. Pipeline Type is chosen once at intake and decides both the intake fields and the compositing method — render never asks.",
     properties: {
       Name: { type: "title" },
       Source: { type: "rich_text" },
       License: { type: "rich_text" },
       "File Link": { type: "url" },
       "Product Types": { type: "rich_text" },
+      // The one decision that branches everything: which fields intake asks
+      // for, and which compositing method render runs.
+      "Pipeline Type": { type: "select", options: [...PIPELINE_TYPES] },
+      // Required for BOTH pipelines — the photo everything lands on.
+      "Base Image": { type: "files" },
+      // Required ONLY for Full Displacement; unused under Simple Placement.
+      "Displacement Map": { type: "files" },
+      // Optional even under Full Displacement — composited only if present,
+      // skipped silently if not. Many sources don't ship them.
+      "Shadow Layer": { type: "files" },
+      "Highlight Layer": { type: "files" },
+      // Four corners, normalized 0–1, TL→TR→BR→BL. Required for Simple
+      // Placement (the corner-placement step); optional crop guide under
+      // Full Displacement.
+      "Print Area Quad (JSON)": { type: "rich_text" },
+      // Simple Placement's composite step. Multiply sinks ink into fabric.
+      "Blend Mode": { type: "select", options: [...BLEND_MODES] },
+      // What the photo shows — filters templates against the design's
+      // garment compatibility at offer time.
+      Surface: { type: "select", options: [...SURFACE_TAGS] },
       // How this template renders — auto-fills the slot's shot type when the
       // template is chosen (slot value set beforehand = the plan).
       "Shot Type": {
@@ -272,6 +294,9 @@ export const SCHEMA: DbSpec[] = [
       "Blueprint Brand": { type: "rich_text" },
       "Blueprint Model": { type: "rich_text" },
       "Print Provider Name": { type: "rich_text" },
+      // Printify's catalog photo for the blueprint — the card thumbnail.
+      // A CDN link, not a stored file: their image, their hosting.
+      "Blueprint Image": { type: "url" },
       // Not in Printify's public API — set once per product from their UI.
       "Print Technique": {
         type: "select",

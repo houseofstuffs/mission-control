@@ -11,12 +11,14 @@
 
 const MAX_EDGE = 1600;
 
-export async function downscaleImage(file: File): Promise<File> {
+/** maxEdge is overridable: mockup layers keep 2000px (Etsy's target), idea
+ *  snapshots stay at the 1600 default. */
+export async function downscaleImage(file: File, maxEdge: number = MAX_EDGE): Promise<File> {
   // Small files are already fine — don't re-encode and lose quality for nothing.
   if (file.size < 1_500_000) return file;
   try {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
     const w = Math.max(1, Math.round(bitmap.width * scale));
     const h = Math.max(1, Math.round(bitmap.height * scale));
 

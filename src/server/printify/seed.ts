@@ -22,7 +22,9 @@ export interface SeedResult {
 export async function seedProduct(
   blueprintId: number,
   providerId: number,
-  providerName: string
+  providerName: string,
+  /** explicit category from the seed modal — a person's choice, so it wins */
+  chosenCategory?: string | null
 ): Promise<SeedResult> {
   const blueprint = await getBlueprint(blueprintId);
   const variants = (await listVariants(blueprintId, providerId)) as VariantWithCost[];
@@ -48,6 +50,7 @@ export async function seedProduct(
     "Blueprint Brand": blueprint.brand ?? "",
     "Blueprint Model": blueprint.model ?? "",
     "Print Provider Name": providerName,
+    "Blueprint Image": blueprint.images?.[0] ?? null,
     "Physical/Digital": "Physical",
     "Print Areas (JSON)": JSON.stringify(canvas.areas),
     "Max Print Width px": canvas.maxWidth,
@@ -75,11 +78,14 @@ export async function seedProduct(
       p.props["Printify Print Provider ID"] === providerId
   );
 
-  // Never overwrite a category that's already there — like the two copy
-  // fields, a hand-set value outranks anything derived. Reseeding a product
-  // categorised by hand leaves it alone; one that's still unset gets another
-  // shot at the auto-map (the keyword list may have been tuned since).
-  if (category && !existing?.props["Category"]) {
+  // Category precedence: a choice made in the seed modal is a person's and
+  // always wins. The auto-map only fills a blank — never overwrites a value
+  // already on the record (same rule as the two copy fields). A still-unset
+  // product gets another shot at the map on reseed, since the keyword list
+  // may have been tuned.
+  if (chosenCategory) {
+    values["Category"] = chosenCategory;
+  } else if (category && !existing?.props["Category"]) {
     values["Category"] = category;
   }
 

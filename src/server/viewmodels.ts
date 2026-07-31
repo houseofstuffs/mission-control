@@ -273,6 +273,7 @@ export function productCards(): ProductCardData[] {
     variantCount: num(p.props["Variant Count"]),
     syncedAt: str(p.props["Synced At"]) || null,
     hasVoiceText: str(p.props["Shop Voice Text"]).trim().length > 0,
+    imageUrl: str(p.props["Blueprint Image"]) || null,
     category,
     estimatedCost: estimate.estimatedCost,
     sizeFilterApplied: estimate.sizeFilterApplied,

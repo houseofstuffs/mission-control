@@ -10,7 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
-import { CATEGORIES, CATEGORY_LABELS, type Category } from "@/config/product-categories";
+import { CATEGORIES, CATEGORY_LABELS, categoryFromTitle, type Category } from "@/config/product-categories";
 
 export interface ProductCardData {
   id: string;
@@ -31,6 +31,8 @@ export interface ProductCardData {
   variantCount: number | null;
   syncedAt: string | null;
   hasVoiceText: boolean;
+  /** Printify's catalog photo — CDN link stored at seed */
+  imageUrl: string | null;
   category: Category | null;
   estimatedCost: number | null;
   sizeFilterApplied: string;
@@ -74,19 +76,33 @@ function ProductCard({
 }) {
   return (
     <div className="card" style={{ padding: 22, gap: 12 }}>
-      {/* Exactly two lines: title on 1, vendor on 2. Both clamp with an
-          ellipsis rather than wrapping, so the vendor can never be
-          pushed to a third line. Full text on hover. */}
-      <Kicker>
-        <span style={CLAMP} title={p.blueprintTitle || p.name}>
-          {p.blueprintTitle || p.name}
-        </span>
-        <span style={{ ...CLAMP, color: "var(--status-done)" }} title={p.providerName}>
-          {p.providerName}
-        </span>
-      </Kicker>
-      <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
-        {p.shortName || p.name}
+      <div className="row-gap-12" style={{ alignItems: "flex-start" }}>
+        {p.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={p.imageUrl}
+            alt=""
+            width={100}
+            height={100}
+            style={{ borderRadius: 12, objectFit: "cover", background: "var(--surface-well)", flex: "0 0 auto" }}
+          />
+        ) : null}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {/* Exactly two lines: title on 1, vendor on 2. Both clamp with an
+              ellipsis rather than wrapping, so the vendor can never be
+              pushed to a third line. Full text on hover. */}
+          <Kicker>
+            <span style={CLAMP} title={p.blueprintTitle || p.name}>
+              {p.blueprintTitle || p.name}
+            </span>
+            <span style={{ ...CLAMP, color: "var(--status-done)" }} title={p.providerName}>
+              {p.providerName}
+            </span>
+          </Kicker>
+          <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
+            {p.shortName || p.name}
+          </div>
+        </div>
       </div>
       <div className="well">
         <Kicker>MASTER CANVAS</Kicker>
@@ -124,21 +140,27 @@ function ProductCard({
         {p.technique ? <span className="chip count">{p.technique}</span> : null}
         {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
         {!p.category ? <span className="chip stale">needs category</span> : null}
-        <select
-          className="select"
-          style={{ width: "auto", padding: "4px 8px", fontSize: 12, marginLeft: "auto" }}
-          value={p.category ?? ""}
-          disabled={busy}
-          aria-label="Category"
-          onChange={(e) => onCategory(e.target.value)}
-        >
-          <option value="">Set category…</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {CATEGORY_LABELS[c]}
-            </option>
-          ))}
-        </select>
+        {/* The dropdown exists only while the category is missing — new seeds
+            set it in the seed modal, so this is for the auto-map's misses and
+            products seeded before categories existed. Once set, the group
+            header carries the fact; a wrong one gets fixed in Notion. */}
+        {!p.category ? (
+          <select
+            className="select"
+            style={{ width: "auto", padding: "4px 8px", fontSize: 12, marginLeft: "auto" }}
+            value=""
+            disabled={busy}
+            aria-label="Category"
+            onChange={(e) => onCategory(e.target.value)}
+          >
+            <option value="">Set category…</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
     </div>
   );
@@ -156,6 +178,7 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
   const [chosen, setChosen] = useState<BlueprintOption | null>(null);
   const [providers, setProviders] = useState<Array<{ id: number; title: string }> | null>(null);
   const [providerId, setProviderId] = useState<number | null>(null);
+  const [seedCategory, setSeedCategory] = useState<string>("");
 
   const [filter, setFilter] = useState<GroupKey | "all">("all");
   const [collapsed, setCollapsed] = useState<Set<GroupKey>>(new Set());
@@ -204,6 +227,8 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
     if (!chosen) return;
     setProviders(null);
     setProviderId(null);
+    // pre-fill from the auto-map; a person can still overrule it here
+    setSeedCategory(categoryFromTitle(chosen.title) ?? "");
     fetch(`/api/printify/blueprints/${chosen.id}/providers`)
       .then((r) => r.json())
       .then((json) => {
@@ -231,6 +256,7 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
         blueprintId: chosen.id,
         providerId,
         providerName: provider?.title ?? "",
+        category: seedCategory || undefined,
       });
     const json = res.data;
     if (!res.ok) setError(res.error);
@@ -363,6 +389,21 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
                       ))}
                     </select>
                   )}
+                </div>
+                <div className="field">
+                  <label className="kicker" htmlFor="bp-category">CATEGORY</label>
+                  <select id="bp-category" className="select" value={seedCategory}
+                    onChange={(e) => setSeedCategory(e.target.value)}>
+                    <option value="">Not sure — decide later</option>
+                    {CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>
+                    ))}
+                  </select>
+                  <span className="hint">
+                    {seedCategory
+                      ? "Guessed from the blueprint name — change it if it's wrong."
+                      : "Nothing matched this blueprint name. Set it now or from the card later."}
+                  </span>
                 </div>
                 <div className="row-gap-12">
                   <button className="btn btn-primary" onClick={seed} disabled={!providerId || seeding}>

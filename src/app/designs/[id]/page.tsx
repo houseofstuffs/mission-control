@@ -9,6 +9,7 @@ import type { MasterAssetsData } from "@/components/MasterAssets";
 import type { TextTreatmentData } from "@/components/TextTreatment";
 import type { TextureData } from "@/components/TexturePick";
 import type { PrintCheckData } from "@/components/PrintCheck";
+import type { FanOutData } from "@/components/FanOutPanel";
 import { ProductPicker } from "@/components/ProductPicker";
 import { Kicker } from "@/components/ui";
 
@@ -59,6 +60,7 @@ export default async function DesignRunnerPage({ params }: { params: Promise<{ i
           textDetail: String(rec.props["Text Detail"] ?? ""),
         }}
         printCheck={printCheckData(rec)}
+        fanOut={fanOutData(rec)}
         texture={{
           designId: rec.id,
           textureId: (rec.props["Texture"] as string[] | null)?.[0] ?? null,
@@ -107,6 +109,56 @@ function printCheckData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Prin
     notes: String(rec.props["Print File Check Notes"] ?? ""),
     colors,
     productName: product?.title ?? null,
+  };
+}
+
+/** Ratio of a product's first print area, from its stored Print Areas JSON. */
+function frontRatio(raw: unknown): number | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  try {
+    const areas = JSON.parse(raw) as Array<{ maxWidth?: number; maxHeight?: number }>;
+    const a = areas?.[0];
+    return a?.maxWidth && a?.maxHeight ? a.maxWidth / a.maxHeight : null;
+  } catch {
+    return null;
+  }
+}
+
+function fanOutData(rec: NonNullable<ReturnType<typeof cachedRecord>>): FanOutData {
+  const listings = cachedRecords("etsy_listings").filter((l) =>
+    ((l.props["Designs"] as string[] | null) ?? []).includes(rec.id)
+  );
+  const primaryId = ((rec.props["Primary Product"] as string[] | null) ?? [])[0] ?? null;
+  // the master was composed for the PRIMARY product's shape — anything that
+  // deviates >12% needs recomposition, not scaling (same bar as the seed)
+  const masterRatio = frontRatio(rec.props["Master Canvas (JSON)"]);
+  const products = cachedRecords("products").map((p) => {
+    const listing = listings.find((l) =>
+      ((l.props["Product"] as string[] | null) ?? []).includes(p.id)
+    );
+    const ratio = frontRatio(p.props["Print Areas (JSON)"]);
+    return {
+      id: p.id,
+      label: String(p.props["Blueprint Title"] ?? "") || p.title,
+      category: String(p.props["Category"] ?? "") || null,
+      isPrimary: p.id === primaryId,
+      needsRecompose:
+        masterRatio != null && ratio != null && Math.abs(ratio - masterRatio) / masterRatio > 0.12,
+      listingId: listing?.id ?? null,
+      listingTitle: listing?.title ?? null,
+    };
+  });
+  // primary first, then already-listed, then alphabetical
+  products.sort((a, b) =>
+    Number(b.isPrimary) - Number(a.isPrimary) ||
+    Number(Boolean(b.listingId)) - Number(Boolean(a.listingId)) ||
+    a.label.localeCompare(b.label)
+  );
+  return {
+    designId: rec.id,
+    designTitle: rec.title || "Untitled design",
+    kind: String(rec.props["Physical/Digital"] ?? "Physical"),
+    products,
   };
 }
 

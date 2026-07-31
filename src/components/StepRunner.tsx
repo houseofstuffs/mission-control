@@ -21,6 +21,7 @@ import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
 import { TexturePick, type TextureData } from "./TexturePick";
 import { StandingConstraints } from "./StandingConstraints";
 import { ColorwaysPanel, type ColorwaysData } from "./ColorwaysPanel";
+import { FanOutPanel, type FanOutData } from "./FanOutPanel";
 import { PrintCheck, type PrintCheckData } from "./PrintCheck";
 
 export interface RunnerRecord {
@@ -52,6 +53,7 @@ export function StepRunner({
   texture,
   printCheck,
   colorways,
+  fanOut,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -65,6 +67,7 @@ export function StepRunner({
   texture?: TextureData;
   printCheck?: PrintCheckData;
   colorways?: ColorwaysData;
+  fanOut?: FanOutData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -285,6 +288,11 @@ export function StepRunner({
         {/* C7's output: PSD master, the PNG exported from it, final preview */}
         {record.workflowKey === "creative" && selected.id === "C7" && masterAssets ? (
           <MasterAssets data={masterAssets} />
+        ) : null}
+
+        {/* C9: graduate into listings — the fan-out decision itself */}
+        {record.workflowKey === "creative" && selected.id === "C9" && fanOut ? (
+          <FanOutPanel data={fanOut} />
         ) : null}
 
         {/* C8: the garment call, and the pixels the eye can't audit */}

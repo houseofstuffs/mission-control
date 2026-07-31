@@ -26,12 +26,15 @@ export const DEFAULT_BLEND: BlendMode = "Multiply";
  * How artwork meets the print area when their ratios disagree — a property
  * of the template's footprint, chosen at intake:
  *   Fit inside — whole artwork visible at its own ratio, leftover
- *                transparent. Garment print areas.
+ *                transparent. Garment print areas shown whole.
  *   Fill area  — artwork covers the area edge-to-edge, overflow cropped
  *                equally. Die-cuts, full-bleed frames, wraps.
- * Neither ever stretches the artwork.
+ *   Fill width, top-aligned — artwork spans the area's width, anchored at
+ *                the top, bottom cropped by the box. Folded garments and
+ *                any layout where the lower print disappears below a fold.
+ * None of them ever stretches the artwork.
  */
-export const FIT_MODES = ["Fit inside", "Fill area"] as const;
+export const FIT_MODES = ["Fit inside", "Fill area", "Fill width, top-aligned"] as const;
 export type FitMode = (typeof FIT_MODES)[number];
 export const DEFAULT_FIT: FitMode = "Fit inside";
 

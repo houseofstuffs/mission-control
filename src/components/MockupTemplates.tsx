@@ -486,8 +486,9 @@ export function MockupTemplateIntake() {
             ))}
           </select>
           <span className="hint">
-            When artwork and area shapes disagree: fit shows the whole design (garments);
-            fill covers edge-to-edge and crops the overflow (die-cuts, full-bleed). Never stretched.
+            When artwork and area shapes disagree: fit shows the whole design; fill covers
+            edge-to-edge, cropping equally; fill width anchors at the top and crops the bottom —
+            folded garments, where the lower print disappears into the fold. Never stretched.
           </span>
         </div>
       ) : null}

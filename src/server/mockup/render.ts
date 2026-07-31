@@ -138,7 +138,7 @@ function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number, fit
   // centred crop of the artwork, and sampling outside [0,1] never happens
   // because only u,v inside the quad are visited.
   let u0 = 0, v0 = 0, uw = 1, vh = 1;
-  if (fit === "Fill width, top-aligned") {
+  if (fit === "Fill width from top") {
     // span the width exactly; the art extends downward from the top edge
     // and whatever passes the box's bottom is cropped — a folded garment.
     // vh > 1 when the box is wider than the art: bottom cropped. vh < 1

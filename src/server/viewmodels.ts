@@ -236,6 +236,18 @@ function shortProductWord(blueprintTitle: string): string {
   return last.toUpperCase();
 }
 
+/** The house name for a product, one line: "Comfort Colors® SWEATSHIRT 1466".
+ * Same derivation as the product cards' two-line title. */
+export function productLabel(p: SimpleRecord): string {
+  const brand = cleanBrand(str(p.props["Blueprint Brand"])) || "Generic";
+  const line =
+    str(p.props["Short Name"]).trim() ||
+    [shortProductWord(str(p.props["Blueprint Title"]) || p.title), str(p.props["Blueprint Model"])]
+      .filter(Boolean)
+      .join(" ");
+  return `${brand} ${line}`.trim();
+}
+
 export function productCards(): ProductCardData[] {
   const products = cachedRecords("products");
   const variants = cachedRecords("product_variants");

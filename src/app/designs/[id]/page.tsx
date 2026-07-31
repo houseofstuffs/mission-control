@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cachedRecord, cachedRecords } from "@/server/notion/store";
-import { runnerRecord } from "@/server/viewmodels";
+import { runnerRecord, productLabel } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import type { ArtworkData } from "@/components/ArtworkCapture";
@@ -139,7 +139,7 @@ function fanOutData(rec: NonNullable<ReturnType<typeof cachedRecord>>): FanOutDa
     const ratio = frontRatio(p.props["Print Areas (JSON)"]);
     return {
       id: p.id,
-      label: String(p.props["Blueprint Title"] ?? "") || p.title,
+      label: productLabel(p),
       category: String(p.props["Category"] ?? "") || null,
       isPrimary: p.id === primaryId,
       needsRecompose:
@@ -148,10 +148,16 @@ function fanOutData(rec: NonNullable<ReturnType<typeof cachedRecord>>): FanOutDa
       listingTitle: listing?.title ?? null,
     };
   });
-  // primary first, then already-listed, then alphabetical
+  // primary first, then the Products page's group order (apparel, home,
+  // wall art, misc, uncategorised) — no headers, just the familiar sequence
+  const CAT_ORDER = ["apparel", "home", "wall_art", "misc"];
+  const catRank = (c: string | null) => {
+    const i = c ? CAT_ORDER.indexOf(c) : -1;
+    return i === -1 ? CAT_ORDER.length : i;
+  };
   products.sort((a, b) =>
     Number(b.isPrimary) - Number(a.isPrimary) ||
-    Number(Boolean(b.listingId)) - Number(Boolean(a.listingId)) ||
+    catRank(a.category) - catRank(b.category) ||
     a.label.localeCompare(b.label)
   );
   return {

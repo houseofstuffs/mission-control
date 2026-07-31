@@ -36,7 +36,9 @@ export interface SlotsData {
   /** tightest garment compatibility across this listing's designs */
   compatibility: string;
   slots: SlotRow[];
-  templates: Array<{ id: string; name: string; shotType: string }>;
+  templates: Array<{ id: string; name: string; shotType: string; garmentColor: string }>;
+  /** the listing's colourways — template offers filter against these */
+  colorways: string[];
 }
 
 export function ImageSlotsPanel({ data }: { data: SlotsData }) {
@@ -58,6 +60,16 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     call(id, `/api/image-slots/${id}`, "PATCH", body);
 
   const filled = data.slots.filter((s) => s.status === "Made" || s.status === "Placed");
+
+  // Offer colour-neutral templates always; colour-tagged ones only in the
+  // listing's colourways. No colourways recorded yet = no filtering, with a
+  // nudge to set them at L1.
+  const norm = (c: string) => c.trim().toLowerCase();
+  const sells = new Set(data.colorways.map(norm));
+  const offered = data.templates.filter(
+    (t) => !t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))
+  );
+  const hiddenCount = data.templates.length - offered.length;
 
   // coverage on both axes — filled/planned per bucket, spread per shot type
   const bucketLine = BUCKETS.map(
@@ -100,6 +112,13 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
         <div className="callout stale">
           Garment compatibility isn&apos;t set on this listing&apos;s designs, so the plan assumes
           five colourways. Set it at C8 and reseed if it turns out to be fewer.
+        </div>
+      ) : null}
+
+      {hiddenCount > 0 ? (
+        <div className="hint">
+          {hiddenCount} template{hiddenCount === 1 ? "" : "s"} not offered — other garment colours
+          than this listing&apos;s colorways (set at L1).
         </div>
       ) : null}
 
@@ -185,7 +204,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                   onChange={(e) => patch(s.id, { mockupTemplateId: e.target.value || null })}
                 >
                   <option value="">Template…</option>
-                  {data.templates.map((t) => (
+                  {offered.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>

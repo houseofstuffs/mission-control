@@ -38,6 +38,7 @@ export interface MockupTemplateCard {
   blend: string;
   quadSet: boolean;
   fit: string;
+  garmentColor: string;
   baseImageUrl: string | null;
   hasDisplacement: boolean;
   hasShadow: boolean;
@@ -335,6 +336,7 @@ export function MockupTemplateIntake() {
   const [quadTouched, setQuadTouched] = useState(false);
   const [blend, setBlend] = useState<string>(DEFAULT_BLEND);
   const [fit, setFit] = useState<string>(DEFAULT_FIT);
+  const [garmentColor, setGarmentColor] = useState("");
   const [basePreview, setBasePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export function MockupTemplateIntake() {
     form.append("pipelineType", pipeline);
     form.append("blendMode", blend);
     form.append("fitMode", fit);
+    if (garmentColor.trim()) form.append("garmentColor", garmentColor.trim());
     if (sourceLink.trim()) form.append("sourceLink", sourceLink.trim());
     if (simple || quadTouched) form.append("quad", JSON.stringify(quad));
     // Notion's free plan caps uploads around 5MB — shrink to Etsy's 2000px
@@ -391,7 +394,7 @@ export function MockupTemplateIntake() {
       setOpen(false);
       setName(""); setSourceLink(""); setPipeline(""); setBase(null); setDisplacement(null);
       setShadow(null); setHighlight(null); setQuad(DEFAULT_QUAD); setQuadTouched(false);
-      setBlend(DEFAULT_BLEND); setFit(DEFAULT_FIT);
+      setBlend(DEFAULT_BLEND); setFit(DEFAULT_FIT); setGarmentColor("");
       router.refresh();
     }
     setBusy(false);
@@ -486,6 +489,23 @@ export function MockupTemplateIntake() {
         </div>
       ) : null}
 
+      {pipeline ? (
+        <div className="field" style={{ maxWidth: 260 }}>
+          <label className="kicker" htmlFor="mt-color">GARMENT COLOR — AS PRINTIFY NAMES IT</label>
+          <input
+            id="mt-color"
+            className="input"
+            placeholder="e.g. Pepper (empty = colour-neutral)"
+            value={garmentColor}
+            onChange={(e) => setGarmentColor(e.target.value)}
+          />
+          <span className="hint">
+            Templates are offered to a listing only in the colours it sells. Leave empty for
+            posters and other colour-neutral layouts.
+          </span>
+        </div>
+      ) : null}
+
       {error ? <div className="callout blocked">{error}</div> : null}
       <div className="row-gap-12">
         <button className="btn btn-primary" onClick={save} disabled={busy || Boolean(blocked)} title={blocked ?? undefined}>
@@ -564,6 +584,7 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
       <div className="title">{t.name}</div>
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         <span className="chip count">{t.pipelineType || "no pipeline"}</span>
+        {t.garmentColor ? <span className="chip neutral">{t.garmentColor}</span> : null}
         {t.surface ? <span className="chip neutral">{t.surface}</span> : null}
         {t.pipelineType === "Full Displacement" ? (
           <span className="chip neutral">

@@ -20,6 +20,7 @@ import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
 import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
 import { TexturePick, type TextureData } from "./TexturePick";
 import { StandingConstraints } from "./StandingConstraints";
+import { ColorwaysPanel, type ColorwaysData } from "./ColorwaysPanel";
 import { PrintCheck, type PrintCheckData } from "./PrintCheck";
 
 export interface RunnerRecord {
@@ -50,6 +51,7 @@ export function StepRunner({
   textTreatment,
   texture,
   printCheck,
+  colorways,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -62,6 +64,7 @@ export function StepRunner({
   textTreatment?: TextTreatmentData;
   texture?: TextureData;
   printCheck?: PrintCheckData;
+  colorways?: ColorwaysData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -240,6 +243,12 @@ export function StepRunner({
             />
             <StyleCapture compact />
           </div>
+        ) : null}
+
+        {/* L1: record which colourways the Printify product actually enables —
+            downstream template offers filter against this list */}
+        {record.workflowKey === "listing" && selected.id === "L1" && colorways ? (
+          <ColorwaysPanel data={colorways} />
         ) : null}
 
         {/* L2 is where title and tags are written — attached keywords by

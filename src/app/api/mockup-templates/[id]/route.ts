@@ -39,6 +39,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
       values["Fit"] = String(body.fitMode);
     }
+    if (body.garmentColor !== undefined) {
+      values["Garment Color"] = String(body.garmentColor ?? "").trim();
+    }
     if (body.surface !== undefined) {
       if (!SURFACE_TAGS.includes(body.surface)) {
         return NextResponse.json({ error: `Unknown surface tag "${body.surface}"` }, { status: 400 });

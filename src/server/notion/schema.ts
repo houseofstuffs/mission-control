@@ -271,6 +271,12 @@ export const SCHEMA: DbSpec[] = [
       // per-render variable, and compatibility filtering happens at the
       // colourway level. Set only for templates genuinely colour-locked.
       Surface: { type: "select", options: [...SURFACE_TAGS] },
+      // Which colour the base PHOTO shows, as Printify names it ("Pepper").
+      // Until per-template colour variables exist, a template is offered to
+      // a listing only when this colour is one the listing sells (empty =
+      // colour-neutral, always offered). Free text: Printify's colour
+      // vocabulary is enormous.
+      "Garment Color": { type: "rich_text" },
       // How this template renders — auto-fills the slot's shot type when the
       // template is chosen (slot value set beforehand = the plan).
       "Shot Type": {
@@ -465,6 +471,10 @@ export const SCHEMA: DbSpec[] = [
       "Etsy State": { type: "select", options: ["Not pushed", "Draft", "Active", "Inactive", "Expired"] },
       Designs: { type: "relation", relation: "designs" },
       "Variant Design Map (JSON)": { type: "rich_text" },
+      // The colourways this listing actually sells (chosen in Printify at
+      // L1) — the set mockup templates are filtered against. JSON array of
+      // Printify colour names.
+      "Colorways (JSON)": { type: "rich_text" },
       // Customizable text (dad/mom/kid) or multiple garment types in one
       // listing — switches the image-slot seed and adds two publish gates.
       "Is Multi Variant": { type: "checkbox" },

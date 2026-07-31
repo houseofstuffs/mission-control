@@ -96,6 +96,7 @@ export async function POST(req: Request) {
     if (SURFACE_TAGS.includes(str("surface") as (typeof SURFACE_TAGS)[number])) {
       values["Surface"] = str("surface");
     }
+    if (str("garmentColor")) values["Garment Color"] = str("garmentColor");
     if (str("sourceLink")) values["File Link"] = str("sourceLink");
     if (str("shotType")) values["Shot Type"] = str("shotType");
     if (quad) values["Print Area Quad (JSON)"] = JSON.stringify(quad);

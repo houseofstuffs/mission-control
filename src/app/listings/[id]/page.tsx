@@ -6,6 +6,8 @@ import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
 import { compatForListing } from "@/server/imageSlots";
+import { variantAllowed } from "@/config/design-prompt";
+import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import { isStaleKeyword } from "@/config/keywords";
 import { Kicker } from "@/components/ui";
 
@@ -27,13 +29,45 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       <StepRunner
         record={runnerRecord(rec)}
         seo={seoData(rec.id, String(rec.props["Tags"] ?? ""))}
-        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec))}
+        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec), selectedColorways(rec))}
+        colorways={colorwaysData(rec)}
       />
     </div>
   );
 }
 
-function slotsData(listingId: string, isMultiVariant: boolean, compatibility: string): SlotsData {
+function selectedColorways(rec: NonNullable<ReturnType<typeof cachedRecord>>): string[] {
+  try {
+    const parsed = JSON.parse(String(rec.props["Colorways (JSON)"] ?? "[]"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The product's colour list, annotated with what garment compat rules out. */
+function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): ColorwaysData {
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const colors = productId
+    ? Array.from(
+        new Set(
+          cachedRecords("product_variants")
+            .filter((v) => ((v.props["Product"] as string[] | null) ?? []).includes(productId))
+            .map((v) => String(v.props["Color"] ?? "").trim())
+            .filter(Boolean)
+        )
+      ).sort()
+    : [];
+  const compat = compatForListing(rec);
+  return {
+    listingId: rec.id,
+    colors,
+    excluded: colors.filter((c) => !variantAllowed(compat, c)),
+    selected: selectedColorways(rec),
+  };
+}
+
+function slotsData(listingId: string, isMultiVariant: boolean, compatibility: string, colorways: string[]): SlotsData {
   const slots: SlotRow[] = cachedRecords("image_slots")
     .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(listingId))
     .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))
@@ -51,8 +85,9 @@ function slotsData(listingId: string, isMultiVariant: boolean, compatibility: st
     id: t.id,
     name: t.title,
     shotType: String(t.props["Shot Type"] ?? ""),
+    garmentColor: String(t.props["Garment Color"] ?? ""),
   }));
-  return { listingId, isMultiVariant, compatibility, slots, templates };
+  return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
 }
 
 function seoData(listingId: string, tags: string): SeoData {

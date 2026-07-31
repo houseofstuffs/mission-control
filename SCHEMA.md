@@ -24,11 +24,11 @@ Generated 2026-07-31 · 17 databases
 | 6 | `ideas` | Ideas | 14 |
 | 7 | `styles` | Styles | 16 |
 | 8 | `textures` | Textures | 7 |
-| 9 | `mockup_templates` | Mockup Templates | 16 |
+| 9 | `mockup_templates` | Mockup Templates | 17 |
 | 10 | `products` | Products | 31 |
 | 11 | `product_variants` | Product Variants | 10 |
 | 12 | `designs` | Designs | 42 |
-| 13 | `etsy_listings` | Etsy Listings | 31 |
+| 13 | `etsy_listings` | Etsy Listings | 32 |
 | 14 | `change_log` | Change Log | 7 |
 | 15 | `workflow_log` | Workflow Log | 9 |
 | 16 | `keywords` | Keywords | 15 |
@@ -209,6 +209,7 @@ Purchased or collected mockup templates. Usage and license tracked. Pipeline Typ
 | Blend Mode | select | Multiply · Normal |
 | Fit | select | Fit inside · Fill area |
 | Surface | select | Dark garment · Light garment · Any garment · Non-garment surface |
+| Garment Color | rich_text |  |
 | Shot Type | select | Artwork Only · Flat Lay · Flat Lay Styled · On Model · Ghost Mannequin · Hanging · Folded · Closeup Print · Closeup Fabric · Lifestyle Scene · Grid Composite · Graphic Card · Video |
 | Notes | rich_text |  |
 
@@ -338,6 +339,7 @@ Market offerings referencing one or more Designs — named EtsyListing deliberat
 | Etsy State | select | Not pushed · Draft · Active · Inactive · Expired |
 | Designs | relation | → Designs |
 | Variant Design Map (JSON) | rich_text |  |
+| Colorways (JSON) | rich_text |  |
 | Is Multi Variant | checkbox |  |
 | Product | relation | → Products |
 | Shop Section | relation | → Shop Sections |

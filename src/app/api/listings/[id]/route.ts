@@ -18,6 +18,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // the colourways this listing sells — template offers filter against it
+    if (body.colorways !== undefined) {
+      const list = Array.isArray(body.colorways)
+        ? body.colorways.map((c: unknown) => String(c).trim()).filter(Boolean)
+        : [];
+      values["Colorways (JSON)"] = JSON.stringify(list);
+    }
 
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

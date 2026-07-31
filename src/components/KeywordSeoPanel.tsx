@@ -51,7 +51,8 @@ export interface SeoData {
   /** saved copy fields, editable here */
   title: string;
   hook: string;
-  bodyCopySet: boolean;
+  /** the saved Body Copy text — previewable in place, stitched under the hook */
+  bodyCopy: string;
   attributes: Array<{ name: string; value: string }>;
   /** the product whose boilerplate gets stitched under the hook */
   product: { id: string; name: string; hasVoice: boolean; voiceText: string } | null;
@@ -179,6 +180,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const parkedCount = parkedGroups.reduce((n, g) => n + g.items.length, 0);
   const [showParked, setShowParked] = useState(false);
   const [showAllInherited, setShowAllInherited] = useState(false);
+  const [showBody, setShowBody] = useState(false);
+  const bodyCopySet = seo.bodyCopy.trim().length > 0;
 
   // ONE bucket lookup for the whole panel — attached, inherited, imported
   // and AI-suggested tags all resolve through the same bank map, so the
@@ -748,13 +751,33 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               }
             >
               {busy === "body" ? <span className="spinner" /> : null}
-              {seo.bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
+              {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
             </button>
-            {seo.bodyCopySet ? <span className="chip done">body copy set</span> : null}
+            {bodyCopySet ? <span className="chip done">body copy set</span> : null}
+            {bodyCopySet ? (
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12, padding: "4px 10px" }}
+                onClick={() => setShowBody((v) => !v)}
+              >
+                {showBody ? "Collapse" : "Read it"}
+              </button>
+            ) : null}
             <span className="hint">
               Stitches {seo.product.name}&apos;s fit/fabric/care copy under the hook — same text on
               every listing that sells this garment.
             </span>
+            {/* the description as a buyer reads it: hook, then boilerplate */}
+            {showBody ? (
+              <div className="well" style={{ flexBasis: "100%", whiteSpace: "pre-wrap" }}>
+                {seo.hook.trim() ? (
+                  <>{seo.hook.trim()}{"\n\n"}</>
+                ) : (
+                  <span className="hint">(no hook saved yet — it opens the description){"\n\n"}</span>
+                )}
+                {seo.bodyCopy}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="callout stale">

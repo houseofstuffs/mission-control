@@ -170,7 +170,7 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
     bankBuckets,
     title: String(rec.props["Title"] ?? ""),
     hook: String(rec.props["Description Hook"] ?? ""),
-    bodyCopySet: String(rec.props["Body Copy"] ?? "").trim().length > 0,
+    bodyCopy: String(rec.props["Body Copy"] ?? ""),
     attributes,
     product: productRec
       ? {

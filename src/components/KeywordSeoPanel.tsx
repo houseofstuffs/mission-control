@@ -1020,22 +1020,27 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
     setBusy(null);
   }
 
-  const SHORT_BUCKET: Record<string, string> = {
-    Visibility: "vis",
-    Reach: "reach",
-    "Best Seller": "best",
-    Unknown: "?",
-    Dead: "dead",
-  };
+  // The target bands, as sections. min is when the ✓ lights; the range in
+  // the label is the whole guidance. Bankless/unmeasured words gather
+  // under OTHER (only rendered when occupied).
+  const BANDS: Array<{ bucket: string | null; label: string; min: number | null; max: number | null }> = [
+    { bucket: "Visibility", label: "VISIBILITY (6–7)", min: 6, max: 7 },
+    { bucket: "Reach", label: "REACH (4–5)", min: 4, max: 5 },
+    { bucket: "Best Seller", label: "BEST SELLER (1–2)", min: 1, max: 2 },
+    { bucket: null, label: "OTHER", min: null, max: null },
+  ];
+  const bandItems = (band: (typeof BANDS)[number]) =>
+    band.bucket
+      ? sortedTags.filter((t) => bucketOf(t) === band.bucket)
+      : sortedTags.filter((t) => {
+          const b = bucketOf(t);
+          return !b || b === "Unknown" || b === "Dead";
+        });
 
   return (
     <div className="gate-panel">
       <div className="panel-title">
         Selected tags · {tags.length}/{TAG_COUNT}
-      </div>
-      <div className="hint">target {TARGET_MIX}</div>
-      <div>
-        <TagMixTally tags={tags} bucketOf={bucketOf} />
       </div>
       {tags.length > TAG_COUNT ? (
         <span className="chip stale" style={{ alignSelf: "flex-start" }}>
@@ -1045,19 +1050,32 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
       {error ? <div className="field-error">{error}</div> : null}
       {tags.length === 0 ? (
         <div className="hint">Nothing selected yet — tap + on the shortlist.</div>
-      ) : (
-        <div className="stack-12" style={{ gap: 6 }}>
-          {sortedTags.map((t) => {
-            const bucket = bucketOf(t);
-            return (
+      ) : null}
+      {BANDS.map((band) => {
+        const items = bandItems(band);
+        if (items.length === 0 && band.min == null) return null;
+        // ✓ once the band's minimum is met; a count toward it until then;
+        // over the top of the range flips to the caution treatment
+        const status =
+          band.min == null ? null : items.length >= band.min ? (
+            band.max != null && items.length > band.max ? (
+              <span className="chip stale" title={`Over the ${band.label.toLowerCase()} range`}>
+                {items.length} — over
+              </span>
+            ) : (
+              <span className="chip done" title="Target met">✓ {items.length}</span>
+            )
+          ) : (
+            <span className="hint">{items.length} of {band.min}</span>
+          );
+        return (
+          <div key={band.label} className="stack-12" style={{ gap: 4, marginTop: 6 }}>
+            <div className="row-gap-8" style={{ alignItems: "center" }}>
+              <span className="kicker" style={{ flex: 1 }}>{band.label}</span>
+              {status}
+            </div>
+            {items.map((t) => (
               <div key={t} className="row-gap-8" style={{ alignItems: "center" }}>
-                <span
-                  className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
-                  style={{ flex: "0 0 auto" }}
-                  title={bucket ?? "not in the keyword bank"}
-                >
-                  {bucket ? SHORT_BUCKET[bucket] ?? "?" : "new"}
-                </span>
                 <span
                   className="body-sm"
                   style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
@@ -1076,10 +1094,10 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
                   ✕
                 </button>
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
+        );
+      })}
       <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
         <button className="btn btn-secondary" onClick={save} disabled={busy !== null || !dirty}>
           {busy === "save" ? <span className="spinner" /> : null}

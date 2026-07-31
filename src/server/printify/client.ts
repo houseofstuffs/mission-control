@@ -87,3 +87,51 @@ export async function listVariants(
 export interface VariantWithCost extends CatalogVariant {
   cost?: number; // cents
 }
+
+/* ---------- shop-scoped calls (the cost probe) ---------- */
+
+async function send<T>(method: "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: headers(),
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Printify ${res.status} on ${method} ${path}: ${text.slice(0, 300)}`);
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+export async function listShops(): Promise<Array<{ id: number; title: string }>> {
+  return get<Array<{ id: number; title: string }>>("/shops.json");
+}
+
+export async function uploadImageBase64(fileName: string, base64: string): Promise<{ id: string }> {
+  return send<{ id: string }>("POST", "/uploads/images.json", {
+    file_name: fileName,
+    contents: base64,
+  });
+}
+
+export interface ShopProductVariantCost {
+  id: number;
+  cost: number; // cents, account-priced — this is where plan discounts land
+}
+
+export async function createShopProduct(
+  shopId: number,
+  payload: unknown
+): Promise<{ id: string; variants: ShopProductVariantCost[] }> {
+  return send<{ id: string; variants: ShopProductVariantCost[] }>(
+    "POST",
+    `/shops/${shopId}/products.json`,
+    payload
+  );
+}
+
+export async function deleteShopProduct(shopId: number, productId: string): Promise<void> {
+  await send<unknown>("DELETE", `/shops/${shopId}/products/${productId}.json`);
+}

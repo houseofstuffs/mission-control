@@ -5,7 +5,7 @@
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState, unmetRequirement } from "@/server/steps";
 import { compatForListing } from "@/server/imageSlots";
-import { estimateCost } from "@/server/cost-estimate";
+import { estimateFor, variantCostsFor } from "@/server/productCost";
 import { asCategory } from "@/config/product-categories";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
@@ -240,25 +240,23 @@ export function productCards(): ProductCardData[] {
   // changes the moment the category does, and a stale number on a card is
   // worse than no number.
   const category = asCategory(str(p.props["Category"]));
-  const estimate = estimateCost(
-    variants
-      .filter((v) => rel(v.props["Product"]).includes(p.id))
-      .map((v) => ({ size: str(v.props["Size"]) || null, baseCost: num(v.props["Base Cost"]) })),
-    category
-  );
+  const repId = rel(p.props["Representative Variant"])[0] ?? null;
+  const probed = variantCostsFor(p);
+  const own = variants.filter((v) => rel(v.props["Product"]).includes(p.id));
+  const needsRepresentative = category === "wall_art" && !repId;
+  // brand on line one, the specific product on line two — a hand-typed
+  // Short Name goes whole onto line two under the blueprint's brand
+  const brandLine = cleanBrand(str(p.props["Blueprint Brand"])) || "Generic";
+  const productLine =
+    str(p.props["Short Name"]).trim() ||
+    [shortProductWord(str(p.props["Blueprint Title"]) || p.title), str(p.props["Blueprint Model"])]
+      .filter(Boolean)
+      .join(" ");
   return {
     id: p.id,
     name: p.title || "Untitled product",
-    // A "Short Name" typed in Notion always wins over the derived label.
-    shortName:
-      str(p.props["Short Name"]).trim() ||
-      [
-        cleanBrand(str(p.props["Blueprint Brand"])),
-        shortProductWord(str(p.props["Blueprint Title"]) || p.title),
-        str(p.props["Blueprint Model"]),
-      ]
-        .filter(Boolean)
-        .join(" "),
+    brandLine,
+    productLine,
     blueprintTitle: str(p.props["Blueprint Title"]),
     technique: str(p.props["Print Technique"]) || null,
     blueprintId: num(p.props["Printify Blueprint ID"]),
@@ -275,10 +273,37 @@ export function productCards(): ProductCardData[] {
     hasVoiceText: str(p.props["Shop Voice Text"]).trim().length > 0,
     imageUrl: str(p.props["Blueprint Image"]) || null,
     category,
-    estimatedCost: estimate.estimatedCost,
-    sizeFilterApplied: estimate.sizeFilterApplied,
-    costSampleSize: estimate.sampleSize,
-    costReason: estimate.reason,
+    // stored, not recomputed at render — Notion carries the estimate and the
+    // method that produced it; estimateFor() only runs when inputs change
+    estimatedCost: num(p.props["Estimated Cost"]),
+    costMethod: str(p.props["Cost Calc Method"]) || null,
+    costVariantCount: num(p.props["Estimated Cost Variant Count"]),
+    costPulledAt: str(p.props["Cost Pulled At"]) || null,
+    costReason: num(p.props["Estimated Cost"]) != null ? null : estimateFor(p).reason,
+    needsRepresentative,
+    representativeVariantId: repId,
+    hasCosts: probed.size > 0 || own.some((v) => num(v.props["Base Cost"]) != null),
+    // the picker's options — only wall_art cards render it
+    variantOptions:
+      category === "wall_art"
+        ? own
+            .map((v) => ({
+              id: v.id,
+              label: [
+                str(v.props["Size"]) || v.title,
+                (() => {
+                  const cost =
+                    num(v.props["Base Cost"]) ??
+                    probed.get(String(v.props["Printify Variant ID"] ?? "")) ??
+                    null;
+                  return cost != null ? `$${cost.toFixed(2)}` : null;
+                })(),
+              ]
+                .filter(Boolean)
+                .join(" — "),
+            }))
+            .filter((v, i, arr) => arr.findIndex((x) => x.label === v.label) === i)
+        : [],
   };
   });
 }
@@ -350,6 +375,16 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       label: compat === "Unset" ? "Garment compatibility not set." : `Garment compatibility: ${compat}`,
       ok: compat !== "Unset",
     });
+    // wall_art without its anchor size has no honest cost — hard block
+    const gateProductId = rel(rec.props["Product"])[0];
+    const gateProduct = gateProductId ? cachedRecords("products").find((p) => p.id === gateProductId) : null;
+    if (gateProduct && str(gateProduct.props["Category"]) === "wall_art") {
+      const hasRep = rel(gateProduct.props["Representative Variant"]).length > 0;
+      gates.push({
+        label: hasRep ? "Representative size chosen" : "Needs representative size (product card).",
+        ok: hasRep,
+      });
+    }
     // Image-slot hard gates. Belief-bucket coverage stays advisory — only
     // the thumbnail, size/care, and the multi-variant pair block.
     const slots = cachedRecords("image_slots")

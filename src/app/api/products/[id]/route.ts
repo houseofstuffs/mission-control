@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
 import { CATEGORIES } from "@/config/product-categories";
+import { computeAndStoreCost } from "@/server/productCost";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -29,10 +30,35 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       values["Category"] = value || null;
     }
 
+    // wall_art's cost anchor — must be one of THIS product's variants
+    if (body.representativeVariantId !== undefined) {
+      if (body.representativeVariantId) {
+        const variant = cachedRecord(String(body.representativeVariantId));
+        const belongs =
+          variant?.dbKey === "product_variants" &&
+          ((variant.props["Product"] as string[] | null) ?? []).includes(id);
+        if (!belongs) {
+          return NextResponse.json(
+            { error: "That variant doesn't belong to this product — refresh and retry." },
+            { status: 400 }
+          );
+        }
+        values["Representative Variant"] = [variant.id];
+      } else {
+        values["Representative Variant"] = [];
+      }
+    }
+
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
-    const record = await updateRecord("products", id, values);
+    let record = await updateRecord("products", id, values);
+    // both fields feed the estimate — recompute so the stored number never
+    // disagrees with the inputs sitting next to it
+    if (body.category !== undefined || body.representativeVariantId !== undefined) {
+      await computeAndStoreCost(id);
+      record = cachedRecord(id) ?? record;
+    }
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

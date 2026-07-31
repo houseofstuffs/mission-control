@@ -111,6 +111,19 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
     if ((stepId === "L6" || stepId === "L7") && compatForListing(rec) === "Unset") {
       return "Garment compatibility not set.";
     }
+    // Dimensional products have no honest cost without their anchor size —
+    // and a listing priced without a cost is a margin decided by accident.
+    if (stepId === "L6" || stepId === "L7") {
+      const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+      const product = productId ? cachedRecord(productId) : null;
+      if (
+        product &&
+        String(product.props["Category"] ?? "") === "wall_art" &&
+        ((product.props["Representative Variant"] as string[] | null) ?? []).length === 0
+      ) {
+        return "Needs representative size — pick it on the product card.";
+      }
+    }
     return null;
   }
   if (rec.dbKey !== "designs") return null;

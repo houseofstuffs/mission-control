@@ -10,6 +10,7 @@ import { getBlueprint, listVariants, type VariantWithCost } from "./client";
 import { computeMasterCanvas } from "./canvas";
 import { cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
 import { categoryFromTitle } from "@/config/product-categories";
+import { computeAndStoreCost } from "@/server/productCost";
 import type { SimpleValue } from "@/server/notion/props";
 
 export interface SeedResult {
@@ -123,6 +124,10 @@ export async function seedProduct(
       await createRecord("product_variants", vValues);
     }
   }
+
+  // Estimate rides every seed: a reseed may have changed the variant set,
+  // and category may have arrived with this call.
+  await computeAndStoreCost(productPageId);
 
   return {
     productPageId,

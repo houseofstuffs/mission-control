@@ -25,7 +25,7 @@ Generated 2026-07-31 · 17 databases
 | 7 | `styles` | Styles | 16 |
 | 8 | `textures` | Textures | 7 |
 | 9 | `mockup_templates` | Mockup Templates | 15 |
-| 10 | `products` | Products | 25 |
+| 10 | `products` | Products | 31 |
 | 11 | `product_variants` | Product Variants | 10 |
 | 12 | `designs` | Designs | 42 |
 | 13 | `etsy_listings` | Etsy Listings | 31 |
@@ -238,6 +238,12 @@ Blueprint × print provider pairs — NOT product types (§3.3). Auto-seeded fro
 | Recomposition Flag | checkbox |  |
 | Base Cost Min | number |  |
 | Base Cost Max | number |  |
+| Estimated Cost | number |  |
+| Estimated Cost Variant Count | number |  |
+| Cost Calc Method | select | Core size average · Representative size · Full average |
+| Cost Source | select | Probe · Live product |
+| Cost Pulled At | date |  |
+| Variant Costs (JSON) | rich_text |  |
 | Currency | select | USD |
 | Variant Count | number |  |
 | Vendor Text Raw | rich_text |  |
@@ -438,6 +444,7 @@ Written after every database exists — self-relations and forward references. `
 | Database | Property | Target | Reverse |
 | --- | --- | --- | --- |
 | Etsy Listings | Parent Listing | Etsy Listings | one-way |
+| Products | Representative Variant | Product Variants | one-way |
 | Niches | Product Fit | Products | Niche Fit |
 
 ## Renamed properties

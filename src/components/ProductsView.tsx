@@ -15,8 +15,10 @@ import { CATEGORIES, CATEGORY_LABELS, categoryFromTitle, type Category } from "@
 export interface ProductCardData {
   id: string;
   name: string;
-  /** {Brand} {SHORT WORD} {Model} — the dashboard headline */
-  shortName: string;
+  /** line one of the card title — the garment brand */
+  brandLine: string;
+  /** line two — the specific product ("SWEATSHIRT 1466") */
+  productLine: string;
   blueprintTitle: string;
   technique: string | null;
   blueprintId: number | null;
@@ -34,11 +36,19 @@ export interface ProductCardData {
   /** Printify's catalog photo — CDN link stored at seed */
   imageUrl: string | null;
   category: Category | null;
+  /** stored on the record, with the method that produced it */
   estimatedCost: number | null;
-  sizeFilterApplied: string;
-  costSampleSize: number;
+  costMethod: string | null;
+  costVariantCount: number | null;
+  costPulledAt: string | null;
   /** why there's no estimate, when there isn't one */
   costReason: string | null;
+  needsRepresentative: boolean;
+  representativeVariantId: string | null;
+  /** true once probe or hand-entered costs exist */
+  hasCosts: boolean;
+  /** wall_art only: options for the representative-size picker */
+  variantOptions: Array<{ id: string; label: string }>;
 }
 
 /** Uncategorised products still have to land somewhere — last, and named. */
@@ -69,11 +79,22 @@ function ProductCard({
   p,
   busy,
   onCategory,
+  onRepresentative,
 }: {
   p: ProductCardData;
   busy: boolean;
   onCategory: (category: string) => void;
+  onRepresentative: (variantId: string) => void;
 }) {
+  // the method means something different per value — say so on hover
+  const methodTitle =
+    p.costMethod === "Representative size"
+      ? "One chosen size's cost, used directly — sizes on this product are different products."
+      : p.costMethod === "Core size average"
+        ? "Average of S–2XL only — the sizes that carry apparel volume."
+        : p.costMethod === "Full average"
+          ? "Average across every variant."
+          : undefined;
   return (
     <div className="card" style={{ padding: 22, gap: 12 }}>
       <div className="row-gap-12" style={{ alignItems: "flex-start" }}>
@@ -99,8 +120,10 @@ function ProductCard({
               {p.providerName}
             </span>
           </Kicker>
+          {/* brand on its own line, the specific product under it */}
           <div className="panel-title" style={{ color: "var(--text-primary)", fontSize: 16 }}>
-            {p.shortName || p.name}
+            <span style={CLAMP} title={p.brandLine}>{p.brandLine}</span>
+            <span style={CLAMP} title={p.productLine}>{p.productLine}</span>
           </div>
         </div>
       </div>
@@ -122,20 +145,41 @@ function ProductCard({
         {p.variantCount ?? 0} variants
         {p.estimatedCost != null ? (
           <>
-            {" · est. "}${p.estimatedCost.toFixed(2)}
+            {" · est. "}
+            <strong style={{ color: "var(--text-primary)" }}>${p.estimatedCost.toFixed(2)}</strong>
             {p.costMin != null && p.costMax != null && p.costMax !== p.costMin
               ? ` · range $${p.costMin.toFixed(2)}–$${p.costMax.toFixed(2)}`
               : ""}
           </>
         ) : null}
       </div>
-      {/* Never a bare number: the averaging rule travels with the estimate,
-          and when there isn't one, why not. */}
-      <div className="hint" style={{ marginTop: -6 }}>
+      {/* Never a bare number: the method travels with the estimate (hover for
+          what it means), and when there's no estimate, why not. */}
+      <div className="hint" style={{ marginTop: -6 }} title={methodTitle}>
         {p.estimatedCost != null
-          ? `${p.sizeFilterApplied} · ${p.costSampleSize} variants`
+          ? `${p.costMethod}${p.costVariantCount ? ` · ${p.costVariantCount} variant${p.costVariantCount === 1 ? "" : "s"}` : ""}${p.costPulledAt ? ` · pulled ${p.costPulledAt}` : ""}`
           : p.costReason}
       </div>
+      {/* wall_art without its anchor: same treatment as needs-shop-voice,
+          plus the picker that resolves it in place */}
+      {p.needsRepresentative ? (
+        <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <span className="chip stale">needs representative size</span>
+          <select
+            className="select"
+            style={{ width: "auto", padding: "4px 8px", fontSize: 12 }}
+            value=""
+            disabled={busy}
+            aria-label="Representative size"
+            onChange={(e) => e.target.value && onRepresentative(e.target.value)}
+          >
+            <option value="">Pick the size this sells as…</option>
+            {p.variantOptions.map((v) => (
+              <option key={v.id} value={v.id}>{v.label}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
         {p.technique ? <span className="chip count">{p.technique}</span> : null}
         {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
@@ -213,13 +257,36 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
     });
   }
 
-  async function setCategory(id: string, category: string) {
+  async function patchProduct(id: string, body: Record<string, unknown>) {
     setSavingId(id);
     setError(null);
-    const res = await apiJson(`/api/products/${id}`, "PATCH", { category });
+    const res = await apiJson(`/api/products/${id}`, "PATCH", body);
     if (!res.ok) setError(res.error);
     else router.refresh();
     setSavingId(null);
+  }
+
+  const [pulling, setPulling] = useState(false);
+
+  /** One product per request — a 231-variant catalog probes in chunks and
+   *  would time out as a single batch. Sequential, with running progress. */
+  async function pullAllCosts() {
+    setPulling(true);
+    setError(null);
+    const targets = products.filter((p) => p.blueprintId && p.providerId);
+    let done = 0;
+    for (const t of targets) {
+      setNotice(`Pulling costs ${done + 1}/${targets.length} — ${t.productLine}…`);
+      const res = await apiJson(`/api/printify/pull-costs`, "POST", { productId: t.id });
+      if (!res.ok) {
+        setError(`${t.productLine}: ${res.error}`);
+        break;
+      }
+      done++;
+    }
+    setNotice(done > 0 ? `Pulled account-level costs for ${done} product${done === 1 ? "" : "s"}.` : null);
+    router.refresh();
+    setPulling(false);
   }
 
   // Fixed order — Apparel, Home, Wall Art, Miscellaneous, then anything the
@@ -297,6 +364,12 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
         <button className="btn btn-primary" onClick={() => setShowSeed(true)} disabled={!printifyReady}>
           Seed a product from Printify
         </button>
+        {printifyReady && products.length > 0 ? (
+          <button className="btn btn-secondary" onClick={pullAllCosts} disabled={pulling}>
+            {pulling ? <span className="spinner" /> : null}
+            {products.some((p) => p.hasCosts) ? "Re-pull costs" : "Pull costs from Printify"}
+          </button>
+        ) : null}
         {/* only exists while a product lacks its catalog photo — products
             seeded before thumbnails. One click, then it disappears. */}
         {printifyReady && products.some((p) => !p.imageUrl) ? (
@@ -362,7 +435,10 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
                   key={p.id}
                   p={p}
                   busy={savingId === p.id}
-                  onCategory={(category) => setCategory(p.id, category)}
+                  onCategory={(category) => patchProduct(p.id, { category })}
+                  onRepresentative={(variantId) =>
+                    patchProduct(p.id, { representativeVariantId: variantId })
+                  }
                 />
               ))}
             </div>

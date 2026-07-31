@@ -314,6 +314,28 @@ export const SCHEMA: DbSpec[] = [
       "Recomposition Flag": { type: "checkbox" },
       "Base Cost Min": { type: "number" },
       "Base Cost Max": { type: "number" },
+      // The single displayed cost, plus how it was produced — method and
+      // count travel with the number so an average is never mistaken for a
+      // representative size (or vice versa). Recomputed on seed, on category
+      // change, on representative-variant change, and after a cost pull.
+      "Estimated Cost": { type: "number" },
+      "Estimated Cost Variant Count": { type: "number" },
+      "Cost Calc Method": {
+        type: "select",
+        options: ["Core size average", "Representative size", "Full average"],
+      },
+      // Where the costs came from: Probe = temporary product created in the
+      // shop to read account-level pricing, then deleted. Live product =
+      // read off a real product once one exists.
+      "Cost Source": { type: "select", options: ["Probe", "Live product"] },
+      "Cost Pulled At": { type: "date" },
+      // Per-variant costs from the probe, keyed by Printify Variant ID.
+      // Stored on the product as JSON rather than as ~200 per-variant writes:
+      // one throttled write instead of a five-minute sync per product. The
+      // per-variant Base Cost field still wins when set by hand.
+      "Variant Costs (JSON)": { type: "rich_text" },
+      // Representative Variant relation is patched in provisioning pass 2 —
+      // product_variants doesn't exist yet when products is created.
       Currency: { type: "select", options: ["USD"] },
       "Variant Count": { type: "number" },
       "Vendor Text Raw": { type: "rich_text" },
@@ -570,6 +592,9 @@ export const SECOND_PASS_RELATIONS: Array<{
   dual?: string;
 }> = [
   { dbKey: "etsy_listings", propName: "Parent Listing", targetKey: "etsy_listings" },
+  // wall_art cost anchor: the ONE size whose cost is the estimate — poster
+  // sizes are different products, not a range to average away.
+  { dbKey: "products", propName: "Representative Variant", targetKey: "product_variants" },
   // Niche-level product-line fit: which seeded Products this niche wants.
   // Two-way so the Products side shows which niches point at it.
   { dbKey: "niches", propName: "Product Fit", targetKey: "products", dual: "Niche Fit" },

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import {
@@ -15,6 +16,23 @@ import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // up to four file uploads, throttled
+
+/**
+ * Layers are photos, and PNG is the wrong codec for photos: a 2000px base
+ * shot lands ~8MB as PNG and Notion's free plan caps uploads at 5MB. WebP
+ * keeps alpha where a layer has it and photo-compression where it doesn't —
+ * 2000px comes out a few hundred KB, safely under the cap. Render quality
+ * is untouched at these settings; the master artwork never passes through
+ * here anyway.
+ */
+async function compressLayer(file: File): Promise<File> {
+  const raw = Buffer.from(await file.arrayBuffer());
+  const out = await sharp(raw)
+    .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toBuffer();
+  return new File([out], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });
+}
 
 /**
  * Mockup template intake — ONE save, validated whole (spec §4).
@@ -90,7 +108,7 @@ export async function POST(req: Request) {
     if (shadowLayer) uploads.push(["Shadow Layer", shadowLayer]);
     if (highlightLayer) uploads.push(["Highlight Layer", highlightLayer]);
     for (const [prop, file] of uploads) {
-      const up = await uploadFileToNotion(file);
+      const up = await uploadFileToNotion(await compressLayer(file));
       values[prop] = [{ name: file.name, uploadId: up.id }];
     }
 

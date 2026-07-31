@@ -544,17 +544,34 @@ a:hover { color: var(--candy); }
 }
 /* same rule as every other preview: square, centre-cropped. A 4:3 frame
    guillotined the top and bottom of square artwork. */
+/* A ratio box the old-fashioned way: height comes from padding, which is
+   always computed from WIDTH — the box is a perfect square no matter what's
+   inside it. aspect-ratio let the empty "no artwork yet" state come out a
+   different height than the image state. */
 .kanban-card .art {
-  aspect-ratio: 1 / 1;
+  position: relative;
+  height: 0;
+  padding-bottom: 100%;
   background: var(--surface-well);
   border-radius: 14px 14px 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: var(--text-muted);
   overflow: hidden;
 }
-.kanban-card .art img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.kanban-card .art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+.kanban-card .art > .hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .kanban-card .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 .kanban-card .title {
   font-family: var(--font-display);

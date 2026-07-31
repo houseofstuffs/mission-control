@@ -82,6 +82,27 @@ export async function POST(req: Request) {
       if (c.styleId) values["Style"] = [c.styleId];
 
       const record = await createRecord("designs", values);
+      // Mark the source candidate as spun off — ON THE RECORD, not in page
+      // state, so coming back to the board still shows which prompt left.
+      const rawCandidates = String(design.props["Prompt Candidates (JSON)"] ?? "");
+      if (rawCandidates.trim()) {
+        try {
+          const list = JSON.parse(rawCandidates);
+          if (Array.isArray(list)) {
+            const idx = list.findIndex(
+              (x) => x?.imagePrompt === c.imagePrompt && x?.styleName === c.styleName
+            );
+            if (idx >= 0) {
+              list[idx].spunOffTo = { id: record.id, title: record.title };
+              await updateRecord("designs", design.id, {
+                "Prompt Candidates (JSON)": JSON.stringify(list),
+              });
+            }
+          }
+        } catch {
+          /* unparseable candidates — the spin-off itself still stands */
+        }
+      }
       await createRecord("workflow_log", {
         Name: `${record.title} — Created new`,
         Event: "Created new",

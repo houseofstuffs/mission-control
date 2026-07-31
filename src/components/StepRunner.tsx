@@ -12,7 +12,7 @@ import { apiJson } from "@/lib/api";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
-import { ApplyPanel, CandidatesBoard, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
+import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
@@ -283,8 +283,11 @@ export function StepRunner({
           <PrintCheck data={printCheck} />
         ) : null}
 
-        {/* the candidate set follows the design to C2— generate each image
-            prompt there, then crown the winner */}
+        {/* the candidate set follows the design to C2 — generate each image
+            prompt there, then crown the winner. A design with a committed
+            pair but NO candidates (a spin-off) gets the editable pair
+            directly: the carried prompts must be visible and revisable
+            wherever the design is worked on, and edits save to the record. */}
         {record.workflowKey === "creative" &&
         (selected.id === "C1" || selected.id === "C2") &&
         (candidates ?? []).length > 0 ? (
@@ -295,6 +298,11 @@ export function StepRunner({
             focusWinner={selected.id === "C2"}
             saved={savedPair}
           />
+        ) : record.workflowKey === "creative" &&
+          (selected.id === "C1" || selected.id === "C2") &&
+          savedPair &&
+          (savedPair.imagePrompt || savedPair.textPrompt) ? (
+          <WinnerEditor designId={record.id} saved={savedPair} />
         ) : null}
         </div>
 

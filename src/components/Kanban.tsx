@@ -31,6 +31,25 @@ export function Kanban({ cards }: { cards: KanbanCardData[] }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // inline rename — the card is a Link, so every editing interaction has to
+  // stop the navigation and the drag underneath it
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  async function saveName(id: string) {
+    const name = nameDraft.trim();
+    if (!name) return setEditingId(null);
+    setRenaming(true);
+    const res = await apiJson(`/api/designs/${id}`, "PATCH", { name });
+    if (!res.ok) setError(res.error);
+    else {
+      setError(null);
+      setEditingId(null);
+      router.refresh();
+    }
+    setRenaming(false);
+  }
 
   const stageOrder = KANBAN_STAGES.map((s) => s.key);
 
@@ -94,9 +113,12 @@ export function Kanban({ cards }: { cards: KanbanCardData[] }) {
                   key={card.id}
                   href={`/designs/${card.id}`}
                   className={`kanban-card${dragId === card.id ? " dragging" : ""}`}
-                  draggable
+                  draggable={editingId !== card.id}
                   onDragStart={() => setDragId(card.id)}
                   onDragEnd={() => setDragId(null)}
+                  onClick={(e) => {
+                    if (editingId === card.id) e.preventDefault();
+                  }}
                 >
                   <div className="art">
                     {card.artworkUrl ? (
@@ -107,9 +129,52 @@ export function Kanban({ cards }: { cards: KanbanCardData[] }) {
                     )}
                   </div>
                   <div className="body">
-                    <div className={`title${card.gate === "Killed" ? " killed-title" : ""}`}>
-                      {card.title}
-                    </div>
+                    {editingId === card.id ? (
+                      <input
+                        className="input input-compact"
+                        value={nameDraft}
+                        autoFocus
+                        disabled={renaming}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        onClick={(e) => e.preventDefault()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveName(card.id);
+                          if (e.key === "Escape") setEditingId(null);
+                        }}
+                        onBlur={() => saveName(card.id)}
+                      />
+                    ) : (
+                      <div className="row-gap-8" style={{ alignItems: "baseline" }}>
+                        <div
+                          className={`title${card.gate === "Killed" ? " killed-title" : ""}`}
+                          style={{ flex: 1, minWidth: 0 }}
+                        >
+                          {card.title}
+                        </div>
+                        <button
+                          aria-label={`Rename ${card.title}`}
+                          title="Rename"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setNameDraft(card.title);
+                            setEditingId(card.id);
+                          }}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            cursor: "pointer",
+                            padding: 2,
+                            color: "var(--text-secondary, #8a7a5c)",
+                            flex: "0 0 auto",
+                          }}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                            <path d="M11.1 2.4a1.6 1.6 0 0 1 2.3 2.3l-7.3 7.2-3 .8.8-3 7.2-7.3Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
                     <div className="meta">{card.meta}</div>
                     <div className="chips">
                       {card.hasBlocked ? <StatusChip kind="blocked">blocked</StatusChip> : null}

@@ -39,6 +39,8 @@ export interface CandidateData {
   textureNote: string;
   screeningPhrases: string;
   notes: string;
+  /** set on the record when this candidate left as its own design */
+  spunOffTo?: { id: string; title: string } | null;
 }
 
 const CATEGORY_ORDER = ["Humor", "Minimalist", "Retro", "Illustrative", "Moody", ""];
@@ -307,14 +309,16 @@ export function ApplyPanel({
  * Copy each image prompt into Kittl at C2; whichever generation wins,
  * "This one won" commits that candidate's pair to the design.
  */
-/** The winner at C2 — full width, every field editable, saves via commit. */
-function WinnerEditor({
+/** The committed pair — full width, every field editable, saves via commit.
+ * `winner` is the candidate it came from when one exists; a spun-off design
+ * has no candidate board, only the pair, and renders this exact surface. */
+export function WinnerEditor({
   designId,
   winner,
   saved,
 }: {
   designId: string;
-  winner: CandidateData;
+  winner?: CandidateData | null;
   saved: SavedPair;
 }) {
   const router = useRouter();
@@ -331,7 +335,11 @@ function WinnerEditor({
     setError(null);
     const res = await apiJson("/api/prompts/compose", "POST", {
       designId,
-      commit: { styleId: winner.styleId, styleName: winner.styleName, imagePrompt, textPrompt, textureNote },
+      commit: {
+        styleId: winner?.styleId ?? saved.styleId,
+        styleName: winner?.styleName ?? "revised",
+        imagePrompt, textPrompt, textureNote,
+      },
     });
     if (!res.ok) setError(res.error);
     else router.refresh();
@@ -341,9 +349,9 @@ function WinnerEditor({
   return (
     <div className="card supporting stack-12">
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
-        <span className="card-title">{winner.styleName}</span>
-        {winner.suggested ? <span className="chip stale">new direction</span> : null}
-        <span className="chip done">✓ winner</span>
+        <span className="card-title">{winner?.styleName ?? "Prompt set"}</span>
+        {winner?.suggested ? <span className="chip stale">new direction</span> : null}
+        <span className="chip done">{winner ? "✓ winner" : "✓ carried from spin-off"}</span>
       </div>
       {error ? <div className="callout blocked">{error}</div> : null}
       <div className="field">
@@ -367,7 +375,7 @@ function WinnerEditor({
         </div>
         <AutoTextarea id="win-tex" placeholder="no texture — clean style" value={textureNote} onChange={setTextureNote} />
       </div>
-      {winner.screeningPhrases ? (
+      {winner?.screeningPhrases ? (
         <div className="field">
           <span className="kicker">TRADEMARK-SCREEN THIS TEXT</span>
           <div className="body-sm">{winner.screeningPhrases}</div>
@@ -466,6 +474,17 @@ export function CandidatesBoard({
                 <span className="title" style={{ fontSize: 14 }}>{c.styleName}</span>
                 {c.suggested ? <span className="chip stale">new direction</span> : null}
                 {chosen ? <span className="chip done">✓ winner</span> : null}
+                {/* persisted on the record — survives every revisit; links to
+                    the design this prompt became */}
+                {c.spunOffTo || spunOff[i] ? (
+                  <a
+                    className="chip done"
+                    href={`/designs/${(c.spunOffTo ?? spunOff[i]).id}`}
+                    title={`→ ${(c.spunOffTo ?? spunOff[i]).title}`}
+                  >
+                    ✓ spun off
+                  </a>
+                ) : null}
               </div>
               {c.notes ? <div className="hint">{c.notes}</div> : null}
               <div className="field">
@@ -498,11 +517,7 @@ export function CandidatesBoard({
                 {/* ONE button per card: crown first; once a winner exists,
                     the others' button converts to Spin off (a second winner
                     is a second design). */}
-                {spunOff[i] ? (
-                  <a className="chip done" href={`/designs/${spunOff[i].id}`}>
-                    → {spunOff[i].title}
-                  </a>
-                ) : chosen ? null : winnerChosen ? (
+                {c.spunOffTo || spunOff[i] ? null : chosen ? null : winnerChosen ? (
                   <button
                     className="btn btn-secondary"
                     disabled={busy !== null}

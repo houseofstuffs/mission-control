@@ -95,6 +95,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     } else {
       const body = await req.json();
+      // rename from the board — empty never overwrites a title
+      if (body.name !== undefined) {
+        const name = String(body.name).trim();
+        if (!name) return NextResponse.json({ error: "A design needs a name." }, { status: 400 });
+        values["Name"] = name;
+      }
       if (body.artworkLink !== undefined) values["Master PNG Link"] = body.artworkLink ? String(body.artworkLink) : null;
       if (body.winningModel !== undefined) values["Winning Model"] = body.winningModel ? String(body.winningModel) : null;
       if (body.masterWidth !== undefined) values["Master Width"] = toNum(body.masterWidth);

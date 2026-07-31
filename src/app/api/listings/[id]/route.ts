@@ -15,6 +15,14 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
 
     const values: Record<string, SimpleValue> = {};
+    // Name = the record's internal label (renameable anytime, IDs carry all
+    // relations). Title = the Etsy-facing listing title written at L2 with
+    // its own <15-words gate. Two different fields on purpose.
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) return NextResponse.json({ error: "A listing needs a name." }, { status: 400 });
+      values["Name"] = name;
+    }
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);

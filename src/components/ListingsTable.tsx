@@ -7,6 +7,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiJson } from "@/lib/api";
 
 export interface ListingRow {
   id: string;
@@ -25,6 +26,24 @@ export interface ListingRow {
 export function ListingsTable({ rows }: { rows: ListingRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const router = useRouter();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveName(id: string) {
+    const name = nameDraft.trim();
+    if (!name) return setEditingId(null);
+    setRenaming(true);
+    const res = await apiJson(`/api/listings/${id}`, "PATCH", { name });
+    if (!res.ok) setError(res.error);
+    else {
+      setError(null);
+      setEditingId(null);
+      router.refresh();
+    }
+    setRenaming(false);
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -39,6 +58,7 @@ export function ListingsTable({ rows }: { rows: ListingRow[] }) {
 
   return (
     <>
+      {error ? <div className="callout blocked">{error}</div> : null}
       <table className="table">
         <thead>
           <tr>
@@ -84,7 +104,43 @@ export function ListingsTable({ rows }: { rows: ListingRow[] }) {
                     {isSel ? "✓" : ""}
                   </span>
                 </td>
-                <td style={{ fontWeight: 600, color: "var(--text-primary)" }}>{row.title}</td>
+                <td style={{ fontWeight: 600, color: "var(--text-primary)" }} onClick={(e) => {
+                  if (editingId === row.id) e.stopPropagation();
+                }}>
+                  {editingId === row.id ? (
+                    <input
+                      className="input input-compact"
+                      value={nameDraft}
+                      autoFocus
+                      disabled={renaming}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveName(row.id);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      onBlur={() => saveName(row.id)}
+                    />
+                  ) : (
+                    <span className="row-gap-8" style={{ alignItems: "baseline" }}>
+                      {row.title}
+                      <button
+                        aria-label={`Rename ${row.title}`}
+                        title="Rename (the internal label — the Etsy title lives at L2)"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setNameDraft(row.title);
+                          setEditingId(row.id);
+                        }}
+                        style={{ border: "none", background: "transparent", cursor: "pointer", padding: 2, color: "var(--text-secondary, #8a7a5c)" }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M11.1 2.4a1.6 1.6 0 0 1 2.3 2.3l-7.3 7.2-3 .8.8-3 7.2-7.3Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </span>
+                  )}
+                </td>
                 <td>{row.currentStep}</td>
                 <td>{row.etsyState}</td>
                 <td>{row.originType}</td>

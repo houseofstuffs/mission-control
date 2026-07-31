@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiJson } from "@/lib/api";
+import { apiCall, apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
 import { CATEGORIES, CATEGORY_LABELS, categoryFromTitle, type Category } from "@/config/product-categories";
 
@@ -183,6 +183,26 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
   const [filter, setFilter] = useState<GroupKey | "all">("all");
   const [collapsed, setCollapsed] = useState<Set<GroupKey>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+
+  async function backfillImages() {
+    setBackfilling(true);
+    setError(null);
+    const res = await apiCall<{ filled?: number; skipped?: string[] }>(
+      "/api/printify/backfill-images",
+      { method: "POST" }
+    );
+    if (!res.ok) setError(res.error);
+    else {
+      const skipped = res.data.skipped ?? [];
+      setNotice(
+        `Fetched ${res.data.filled ?? 0} thumbnail${res.data.filled === 1 ? "" : "s"} from the Printify catalog.` +
+          (skipped.length ? ` No catalog photo for: ${skipped.join(", ")}.` : "")
+      );
+      router.refresh();
+    }
+    setBackfilling(false);
+  }
 
   function toggle(key: GroupKey) {
     setCollapsed((prev) => {
@@ -273,10 +293,18 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
 
   return (
     <div className="stack-22">
-      <div className="row-gap-12">
+      <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={() => setShowSeed(true)} disabled={!printifyReady}>
           Seed a product from Printify
         </button>
+        {/* only exists while a product lacks its catalog photo — products
+            seeded before thumbnails. One click, then it disappears. */}
+        {printifyReady && products.some((p) => !p.imageUrl) ? (
+          <button className="btn btn-secondary" onClick={backfillImages} disabled={backfilling}>
+            {backfilling ? <span className="spinner" /> : null}
+            Fetch missing thumbnails
+          </button>
+        ) : null}
         {!printifyReady ? (
           <span className="hint">Set PRINTIFY_API_TOKEN to browse the catalog.</span>
         ) : null}

@@ -36,7 +36,7 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Array<{ id: string; title: string }> | null>(null);
 
-  async function pullFromPrintify(printifyProductId?: string) {
+  async function pullFromPrintify(printifyProductId?: string, reconnect = false) {
     setBusy(true);
     setError(null);
     setCandidates(null);
@@ -44,10 +44,12 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
       colorways?: string[];
       changed?: boolean;
       candidates?: Array<{ id: string; title: string }>;
-    }>(`/api/listings/${data.listingId}/printify-sync`, "POST", { printifyProductId });
+      note?: string | null;
+    }>(`/api/listings/${data.listingId}/printify-sync`, "POST", { printifyProductId, reconnect });
     if (!res.ok) setError(res.error);
     else if (res.data.candidates) {
       setCandidates(res.data.candidates);
+      if (res.data.note) setNotice(res.data.note);
     } else {
       setPicked(new Set(res.data.colorways ?? []));
       setNotice(
@@ -96,6 +98,17 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
             {data.connected ? "Re-sync from Printify" : "Pull from Printify"}
           </button>
           {data.connected ? <span className="chip done">✓ connected</span> : null}
+          {data.connected ? (
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "5px 10px" }}
+              disabled={busy}
+              onClick={() => pullFromPrintify(undefined, true)}
+              title="Picked the wrong Printify product, or replaced it? Choose again."
+            >
+              Change product…
+            </button>
+          ) : null}
           {notice ? <span className="hint">{notice}</span> : null}
         </div>
       ) : null}
@@ -109,7 +122,7 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
             disabled={busy}
             onChange={(e) => e.target.value && pullFromPrintify(e.target.value)}
           >
-            <option value="">Pick once — the ID is stored for good</option>
+            <option value="">Pick the product — the ID is stored until you change it</option>
             {candidates.map((c) => (
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}

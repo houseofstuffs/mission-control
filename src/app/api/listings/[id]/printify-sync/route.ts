@@ -37,8 +37,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const providerId = Number(productRec.props["Printify Print Provider ID"]);
 
     const shop = await printifyShopId();
-    let pid = String(body.printifyProductId ?? "") || String(listing.props["Printify Product ID"] ?? "");
+    // reconnect = deliberate re-pick: ignore the stored ID and show matches
+    const reconnect = Boolean(body.reconnect);
+    let pid = reconnect
+      ? String(body.printifyProductId ?? "")
+      : String(body.printifyProductId ?? "") || String(listing.props["Printify Product ID"] ?? "");
     let shopProduct: ShopProduct | null = null;
+    let note: string | null = null;
+
+    // A stored ID can go stale — the product deleted in Printify. Detect it,
+    // clear the connection, and fall through to a fresh search instead of
+    // mirroring a ghost.
+    if (pid && !body.printifyProductId) {
+      try {
+        shopProduct = await getShopProduct(shop, pid);
+      } catch (err) {
+        if (/Printify 404 /.test((err as Error).message)) {
+          await updateRecord("etsy_listings", id, { "Printify Product ID": null });
+          pid = "";
+          shopProduct = null;
+          note = "The connected Printify product no longer exists — pick its replacement.";
+        } else {
+          throw err;
+        }
+      }
+    }
 
     if (!pid) {
       // find it: same blueprint × provider, skipping anything probe-shaped
@@ -62,10 +85,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           { status: 404 }
         );
       }
-      if (matches.length > 1) {
-        // a one-time pick; the chosen id is stored and never asked again
+      if (matches.length > 1 || reconnect) {
+        // a pick; the chosen id is stored until deliberately changed
         return NextResponse.json({
           candidates: matches.map((m) => ({ id: m.id, title: m.title })),
+          note,
         });
       }
       shopProduct = matches[0];
@@ -73,6 +97,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     if (!shopProduct) shopProduct = await getShopProduct(shop, pid);
+
+    // Never adopt a product of the wrong shape — an accidental pick of some
+    // other blueprint would silently mirror the wrong colour list forever.
+    if (shopProduct.blueprint_id !== blueprintId || shopProduct.print_provider_id !== providerId) {
+      return NextResponse.json(
+        {
+          error:
+            `"${shopProduct.title}" is blueprint ${shopProduct.blueprint_id} × provider ${shopProduct.print_provider_id}, ` +
+            `but this listing's product is blueprint ${blueprintId} × provider ${providerId}. ` +
+            `Use "Change product" to pick the right one.`,
+        },
+        { status: 400 }
+      );
+    }
 
     // enabled variant ids → colour names, via the seeded variant records
     const enabled = new Set(
@@ -119,7 +157,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       await markStepsStale(id, ["L4", "L5"], "Colorways changed on Printify sync — re-check images and slots.");
     }
 
-    return NextResponse.json({ record, colorways, changed, printifyProductId: pid });
+    return NextResponse.json({ record, colorways, changed, printifyProductId: pid, note });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

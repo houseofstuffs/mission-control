@@ -48,7 +48,14 @@ fit, fabric, sizing, care — under a per-design hook written elsewhere. It
 must read the same no matter which artwork ends up printed on the garment,
 so never reference a design. Facts come from the vendor text; the voice
 comes from the shop. Rewrite, don't embellish: a fabric weight is a fact,
-not a punchline, but the sentence carrying it can still sound like STUFFS.`;
+not a punchline, but the sentence carrying it can still sound like STUFFS.
+
+FIT SECTION, for garments: say "unisex fit" whenever the garment is unisex
+(most blanks are — the vendor text or product name says so), and ALWAYS end
+the fit section with a pointer to the size chart: "see the size chart photo
+for exact measurements" (reworded into the voice is fine, the instruction
+isn't). Non-garment products (posters, mugs, banners) have no fit section
+and skip both.`;
 
 export async function draftProductVoice(
   input: ProductVoiceInput

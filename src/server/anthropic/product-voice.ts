@@ -27,7 +27,7 @@ const VOICE_SCHEMA = {
     voiceText: {
       type: "string",
       description:
-        "The boilerplate: fabric/material, fit and how it runs, sizing guidance, and care instructions, rewritten in the shop voice. Plain text with short labelled sections separated by blank lines (Etsy descriptions render plain text — no markdown, no HTML). Every FACT must come from the vendor text or the product name; where the vendor text is silent on something (e.g. how it runs), leave it out rather than inventing it. Never mention any design, artwork or print subject.",
+        "The boilerplate: fabric/material, fit and how it runs, sizing guidance, and care instructions, rewritten in the shop voice. Plain text with short labelled sections separated by blank lines (Etsy descriptions render plain text — no markdown, no HTML). Every section/paragraph opens with exactly one fitting emoji (the shop's paragraph-marker convention), none mid-sentence. Every FACT must come from the vendor text or the product name; where the vendor text is silent on something (e.g. how it runs), leave it out rather than inventing it. Never mention any design, artwork or print subject.",
     },
     notes: {
       type: "string",

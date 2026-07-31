@@ -55,7 +55,7 @@ const DRAFT_SCHEMA = {
     hook: {
       type: "string",
       description:
-        "The description OPENER only: 1-3 short sentences in the shop voice, reacting to THIS design's phrase/theme — the thing a buyer reads first. No fit, fabric, sizing or care copy (that's product boilerplate, stitched separately). No 'welcome to our shop' throat-clearing.",
+        "The description OPENER only: 1-3 short sentences in the shop voice, reacting to THIS design's phrase/theme — the thing a buyer reads first. Opens with exactly one fitting emoji (the shop's paragraph-marker convention), none mid-sentence. No fit, fabric, sizing or care copy (that's product boilerplate, stitched separately). No 'welcome to our shop' throat-clearing.",
     },
     attributes: {
       type: "array",

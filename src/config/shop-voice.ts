@@ -11,5 +11,10 @@ export const SHOP_VOICE = `STUFFS is a small Etsy print-on-demand shop with a di
 quirky, weird, whimsical, and wholehearted. It talks like a funny friend, not
 a brand — playful and a little off-kilter, but never mean, never edgy for its
 own sake, and never salesy. Short sentences. No exclamation-point pileups, no
-emoji spam, no "elevate your wardrobe" catalogue-speak. Sincerity is allowed
-to peek through the weirdness.`;
+"elevate your wardrobe" catalogue-speak. Sincerity is allowed to peek through
+the weirdness.
+
+Emojis are paragraph markers, not confetti: in DESCRIPTION copy, every
+paragraph OPENS with exactly one fitting emoji (🧵 fabric, 📏 sizing,
+🧼 care — that register; pick what fits the paragraph), and none appear
+mid-sentence. Titles and tags never carry emojis — they're search text.`;

@@ -112,10 +112,32 @@ function sample(src: Raw, x: number, y: number, out: [number, number, number, nu
  * Perspective-place artwork into `quad` on a transparent canvas of the base's
  * size. Inverse mapping: for every canvas pixel, ask which artwork pixel
  * lands there — no holes, no double-writes.
+ *
+ * The artwork is CONTAIN-fit, never stretched: if the quad's shape doesn't
+ * match the artwork's, the artwork centres inside it at its own ratio and
+ * the leftover stays transparent. The quad marks the print AREA; the
+ * artwork's proportions are not negotiable.
  */
 function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number): Raw {
   const px: Quad = quad.map((p) => ({ x: p.x * (width - 1), y: p.y * (height - 1) })) as Quad;
   const inv = invert(squareToQuad(px));
+
+  // quad's pixel shape, approximated by average edge lengths — exact for
+  // rectangles, close enough under perspective
+  const edge = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(b.x - a.x, b.y - a.y);
+  const quadAspect =
+    (edge(px[0], px[1]) + edge(px[3], px[2])) / Math.max(1, edge(px[0], px[3]) + edge(px[1], px[2]));
+  const artAspect = artwork.width / artwork.height;
+  // the centred band of the unit square the artwork actually occupies
+  let u0 = 0, v0 = 0, uw = 1, vh = 1;
+  if (artAspect > quadAspect) {
+    vh = quadAspect / artAspect;
+    v0 = (1 - vh) / 2;
+  } else if (artAspect < quadAspect) {
+    uw = artAspect / quadAspect;
+    u0 = (1 - uw) / 2;
+  }
   const out = Buffer.alloc(width * height * 4);
   const rgba: [number, number, number, number] = [0, 0, 0, 0];
 
@@ -131,7 +153,11 @@ function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number): Ra
       const u = (inv[0] * x + inv[1] * y + inv[2]) / w;
       const v = (inv[3] * x + inv[4] * y + inv[5]) / w;
       if (u < 0 || u > 1 || v < 0 || v > 1) continue;
-      sample(artwork, u * (artwork.width - 1), v * (artwork.height - 1), rgba);
+      // remap through the contain band; outside it stays transparent
+      const au = (u - u0) / uw;
+      const av = (v - v0) / vh;
+      if (au < 0 || au > 1 || av < 0 || av > 1) continue;
+      sample(artwork, au * (artwork.width - 1), av * (artwork.height - 1), rgba);
       const i = (y * width + x) * 4;
       out[i] = rgba[0]; out[i + 1] = rgba[1]; out[i + 2] = rgba[2]; out[i + 3] = rgba[3];
     }

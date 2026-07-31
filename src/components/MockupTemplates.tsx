@@ -43,31 +43,147 @@ export interface MockupTemplateCard {
 
 /* ---------- corner placement ---------- */
 
+const MIN_SIDE = 0.04; // a quad can't collapse smaller than 4% of the image
+
+function isRectangle(q: Quad): boolean {
+  const e = 0.002;
+  return (
+    Math.abs(q[0].y - q[1].y) < e &&
+    Math.abs(q[3].y - q[2].y) < e &&
+    Math.abs(q[0].x - q[3].x) < e &&
+    Math.abs(q[1].x - q[2].x) < e
+  );
+}
+
+function rectQuad(x: number, y: number, w: number, h: number): Quad {
+  return [
+    { x, y },
+    { x: x + w, y },
+    { x: x + w, y: y + h },
+    { x, y: y + h },
+  ];
+}
+
 /**
- * Four draggable corners over the base image. Coordinates are normalized
- * 0–1 so the quad survives every resize between preview and render.
+ * The print-area editor, two modes:
+ *
+ * LOCKED (default) — the area is a rectangle. Drag inside to move it; pull a
+ * corner to resize, and both dimensions scale together so the shape's ratio
+ * never drifts mid-adjustment. Between that and the renderer's contain-fit
+ * (artwork keeps its own proportions inside the area), artwork can't be
+ * squashed by an editing slip.
+ *
+ * FREE — each corner independent, for genuinely angled shots. A saved quad
+ * that isn't a rectangle opens here.
+ *
+ * Coordinates normalized 0–1 so the quad survives every resize between
+ * preview and render.
  */
 function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange: (q: Quad) => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const [drag, setDrag] = useState<number | null>(null);
+  const [locked, setLocked] = useState(() => isRectangle(quad));
+  // drag session — captured at pointerdown so mid-drag math has a stable base
+  const session = useRef<
+    | { kind: "corner"; index: number }
+    | { kind: "resize"; anchor: { x: number; y: number }; sx: 1 | -1; sy: 1 | -1; w0: number; h0: number }
+    | { kind: "move"; offX: number; offY: number; w: number; h: number }
+    | null
+  >(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
-    if (drag == null) return;
+    if (!dragging) return;
     function move(e: PointerEvent) {
       const box = boxRef.current?.getBoundingClientRect();
-      if (!box) return;
-      const x = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
-      const y = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height));
-      onChange(quad.map((p, i) => (i === drag ? { x, y } : p)) as Quad);
+      const s = session.current;
+      if (!box || !s) return;
+      const px = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+      const py = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height));
+
+      if (s.kind === "corner") {
+        onChange(quad.map((p, i) => (i === s.index ? { x: px, y: py } : p)) as Quad);
+        return;
+      }
+      if (s.kind === "move") {
+        const x = Math.min(1 - s.w, Math.max(0, px - s.offX));
+        const y = Math.min(1 - s.h, Math.max(0, py - s.offY));
+        onChange(rectQuad(x, y, s.w, s.h));
+        return;
+      }
+      // resize: uniform scale about the opposite corner — ratio can't drift
+      const roomX = s.sx > 0 ? 1 - s.anchor.x : s.anchor.x;
+      const roomY = s.sy > 0 ? 1 - s.anchor.y : s.anchor.y;
+      const sMax = Math.min(roomX / s.w0, roomY / s.h0);
+      const sMin = MIN_SIDE / Math.min(s.w0, s.h0);
+      const dx = Math.max(0, (px - s.anchor.x) * s.sx) / s.w0;
+      const dy = Math.max(0, (py - s.anchor.y) * s.sy) / s.h0;
+      const k = Math.min(sMax, Math.max(sMin, Math.max(dx, dy)));
+      const w = s.w0 * k;
+      const h = s.h0 * k;
+      onChange(
+        rectQuad(s.sx > 0 ? s.anchor.x : s.anchor.x - w, s.sy > 0 ? s.anchor.y : s.anchor.y - h, w, h)
+      );
     }
-    const stop = () => setDrag(null);
+    const stop = () => {
+      session.current = null;
+      setDragging(false);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
     return () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
     };
-  }, [drag, quad, onChange]);
+  }, [dragging, quad, onChange]);
+
+  function startCorner(index: number) {
+    if (!locked) {
+      session.current = { kind: "corner", index };
+    } else {
+      const anchor = quad[(index + 2) % 4];
+      const corner = quad[index];
+      session.current = {
+        kind: "resize",
+        anchor: { ...anchor },
+        sx: corner.x >= anchor.x ? 1 : -1,
+        sy: corner.y >= anchor.y ? 1 : -1,
+        w0: Math.max(MIN_SIDE, Math.abs(corner.x - anchor.x)),
+        h0: Math.max(MIN_SIDE, Math.abs(corner.y - anchor.y)),
+      };
+    }
+    setDragging(true);
+  }
+
+  function startMove(e: React.PointerEvent) {
+    if (!locked) return;
+    const box = boxRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const px = (e.clientX - box.left) / box.width;
+    const py = (e.clientY - box.top) / box.height;
+    const x = Math.min(...quad.map((p) => p.x));
+    const y = Math.min(...quad.map((p) => p.y));
+    session.current = {
+      kind: "move",
+      offX: px - x,
+      offY: py - y,
+      w: Math.max(...quad.map((p) => p.x)) - x,
+      h: Math.max(...quad.map((p) => p.y)) - y,
+    };
+    setDragging(true);
+  }
+
+  function toggleMode() {
+    if (locked) {
+      setLocked(false);
+      return;
+    }
+    // locking a skewed quad squares it up to its bounding box — visible,
+    // deliberate, and exactly what "stop letting me skew this" means
+    const x = Math.min(...quad.map((p) => p.x));
+    const y = Math.min(...quad.map((p) => p.y));
+    onChange(rectQuad(x, y, Math.max(...quad.map((p) => p.x)) - x, Math.max(...quad.map((p) => p.y)) - y));
+    setLocked(true);
+  }
 
   const LABELS = ["TL", "TR", "BR", "BL"];
   return (
@@ -88,13 +204,27 @@ function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange
             vectorEffect="non-scaling-stroke"
           />
         </svg>
+        {/* the move surface — the rectangle's own interior */}
+        {locked ? (
+          <div
+            onPointerDown={startMove}
+            style={{
+              position: "absolute",
+              left: `${Math.min(...quad.map((p) => p.x)) * 100}%`,
+              top: `${Math.min(...quad.map((p) => p.y)) * 100}%`,
+              width: `${(Math.max(...quad.map((p) => p.x)) - Math.min(...quad.map((p) => p.x))) * 100}%`,
+              height: `${(Math.max(...quad.map((p) => p.y)) - Math.min(...quad.map((p) => p.y))) * 100}%`,
+              cursor: "move",
+            }}
+          />
+        ) : null}
         {quad.map((p, i) => (
           <button
             key={i}
-            aria-label={`Corner ${LABELS[i]}`}
+            aria-label={locked ? `Resize from ${LABELS[i]}` : `Corner ${LABELS[i]}`}
             onPointerDown={(e) => {
               e.preventDefault();
-              setDrag(i);
+              startCorner(i);
             }}
             style={{
               position: "absolute",
@@ -109,7 +239,7 @@ function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange
               color: "#fff",
               fontSize: 8,
               fontWeight: 700,
-              cursor: "grab",
+              cursor: locked ? "nwse-resize" : "grab",
               padding: 0,
             }}
           >
@@ -117,7 +247,16 @@ function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange
           </button>
         ))}
       </div>
-      <span className="hint">Drag the four corners onto the print area — TL, TR, BR, BL.</span>
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <span className="hint" style={{ flex: 1 }}>
+          {locked
+            ? "Drag inside to position · pull a corner to resize (ratio stays put)."
+            : "Each corner moves free — for angled shots. TL, TR, BR, BL."}
+        </span>
+        <button type="button" className="chip count" style={{ cursor: "pointer", border: "none" }} onClick={toggleMode}>
+          {locked ? "unlock corners" : "lock ratio"}
+        </button>
+      </div>
     </div>
   );
 }

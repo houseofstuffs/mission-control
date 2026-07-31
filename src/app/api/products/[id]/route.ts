@@ -49,6 +49,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
+    // the shop-voice boilerplate — operator-approved text, stamped when saved
+    if (body.shopVoiceText !== undefined) {
+      const text = String(body.shopVoiceText).trim();
+      if (!text) {
+        return NextResponse.json({ error: "Boilerplate can't be saved empty." }, { status: 400 });
+      }
+      values["Shop Voice Text"] = text;
+      values["Voice Generated At"] = new Date().toISOString().slice(0, 10);
+    }
+
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }

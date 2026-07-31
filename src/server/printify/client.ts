@@ -36,6 +36,8 @@ export interface Blueprint {
   brand: string;
   model: string;
   images: string[];
+  /** Printify's vendor copy — HTML; present on the single-blueprint endpoint */
+  description?: string;
 }
 
 export interface PrintProvider {

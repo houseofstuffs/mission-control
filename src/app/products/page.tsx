@@ -1,5 +1,6 @@
 import { productCards } from "@/server/viewmodels";
 import { printifyConfigured } from "@/server/printify/client";
+import { anthropicConfigured } from "@/server/anthropic/client";
 import { syncState } from "@/server/cache/db";
 import { ProductsView } from "@/components/ProductsView";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -21,7 +22,7 @@ export default function ProductsPage() {
       </div>
       {products.length === 0 ? (
         <>
-          <ProductsView products={[]} printifyReady={ready} />
+          <ProductsView products={[]} printifyReady={ready} anthropicReady={anthropicConfigured()} />
           <EmptyState
             title="Seed your first product"
             copy="Blueprint × print provider, straight from the Printify catalog — print areas, ratios and costs land automatically. You supply nothing."
@@ -31,7 +32,7 @@ export default function ProductsPage() {
           />
         </>
       ) : (
-        <ProductsView products={products} printifyReady={ready} />
+        <ProductsView products={products} printifyReady={ready} anthropicReady={anthropicConfigured()} />
       )}
     </div>
   );

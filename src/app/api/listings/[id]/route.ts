@@ -27,6 +27,20 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // L2 copy fields — drafts land here only after the operator saves them
+    if (body.descriptionHook != null) values["Description Hook"] = String(body.descriptionHook);
+    if (body.bodyCopy != null) values["Body Copy"] = String(body.bodyCopy);
+    if (body.attributes !== undefined) {
+      const list = Array.isArray(body.attributes)
+        ? body.attributes
+            .map((a: unknown) => {
+              const o = a as { name?: unknown; value?: unknown };
+              return { name: String(o?.name ?? "").trim(), value: String(o?.value ?? "").trim() };
+            })
+            .filter((a: { name: string; value: string }) => a.name && a.value)
+        : [];
+      values["Attributes (JSON)"] = JSON.stringify(list);
+    }
     // the colourways this listing sells — template offers filter against it
     let colorwaysChanged = false;
     if (body.colorways !== undefined) {

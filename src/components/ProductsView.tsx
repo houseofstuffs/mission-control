@@ -33,6 +33,8 @@ export interface ProductCardData {
   variantCount: number | null;
   syncedAt: string | null;
   hasVoiceText: boolean;
+  /** the saved boilerplate itself — prefills the voice editor */
+  voiceText: string;
   /** Printify's catalog photo — CDN link stored at seed */
   imageUrl: string | null;
   category: Category | null;
@@ -80,11 +82,13 @@ function ProductCard({
   busy,
   onCategory,
   onRepresentative,
+  onVoice,
 }: {
   p: ProductCardData;
   busy: boolean;
   onCategory: (category: string) => void;
   onRepresentative: (variantId: string) => void;
+  onVoice: () => void;
 }) {
   // the method means something different per value — say so on hover
   const methodExplained =
@@ -184,7 +188,22 @@ function ProductCard({
       ) : null}
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
         {p.technique ? <span className="chip count">{p.technique}</span> : null}
-        {!p.hasVoiceText ? <span className="chip stale">needs shop voice</span> : <span className="chip done">voice written</span>}
+        {/* the badge is now the door: it opens the voice editor, where the
+            boilerplate gets generated once and reused by every listing */}
+        <button
+          type="button"
+          className={`chip ${p.hasVoiceText ? "done" : "stale"}`}
+          style={{ cursor: "pointer" }}
+          disabled={busy}
+          title={
+            p.hasVoiceText
+              ? "Edit the fit/fabric/care boilerplate every listing on this garment reuses"
+              : "Generate the fit/fabric/care boilerplate — once per product, reused by every listing"
+          }
+          onClick={onVoice}
+        >
+          {p.hasVoiceText ? "voice written ✎" : "needs shop voice — write it"}
+        </button>
         {!p.category ? <span className="chip stale">needs category</span> : null}
         {/* The dropdown exists only while the category is missing — new seeds
             set it in the seed modal, so this is for the auto-map's misses and
@@ -212,7 +231,15 @@ function ProductCard({
   );
 }
 
-export function ProductsView({ products, printifyReady }: { products: ProductCardData[]; printifyReady: boolean }) {
+export function ProductsView({
+  products,
+  printifyReady,
+  anthropicReady,
+}: {
+  products: ProductCardData[];
+  printifyReady: boolean;
+  anthropicReady: boolean;
+}) {
   const router = useRouter();
   const [seeding, setSeeding] = useState(false);
   const [showSeed, setShowSeed] = useState(false);
@@ -266,6 +293,49 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
     if (!res.ok) setError(res.error);
     else router.refresh();
     setSavingId(null);
+  }
+
+  // the voice editor — one modal, whichever card opened it
+  const [voiceFor, setVoiceFor] = useState<ProductCardData | null>(null);
+  const [voiceDraft, setVoiceDraft] = useState("");
+  const [voiceNotes, setVoiceNotes] = useState<string | null>(null);
+  const [voiceBusy, setVoiceBusy] = useState<"generate" | "save" | null>(null);
+
+  function openVoice(p: ProductCardData) {
+    setVoiceFor(p);
+    setVoiceDraft(p.voiceText);
+    setVoiceNotes(null);
+    setError(null);
+  }
+
+  async function generateVoice() {
+    if (!voiceFor) return;
+    setVoiceBusy("generate");
+    setError(null);
+    const res = await apiCall<{ draft?: string; notes?: string }>(
+      `/api/products/${voiceFor.id}/generate-voice`,
+      { method: "POST" }
+    );
+    if (!res.ok) setError(res.error);
+    else {
+      setVoiceDraft(res.data.draft ?? "");
+      setVoiceNotes(res.data.notes || null);
+    }
+    setVoiceBusy(null);
+  }
+
+  async function saveVoice() {
+    if (!voiceFor || !voiceDraft.trim()) return;
+    setVoiceBusy("save");
+    setError(null);
+    const res = await apiJson(`/api/products/${voiceFor.id}`, "PATCH", { shopVoiceText: voiceDraft.trim() });
+    if (!res.ok) setError(res.error);
+    else {
+      setNotice(`Shop voice saved for ${voiceFor.brandLine} ${voiceFor.productLine} — every listing on this garment reuses it.`);
+      setVoiceFor(null);
+      router.refresh();
+    }
+    setVoiceBusy(null);
   }
 
   const [pulling, setPulling] = useState(false);
@@ -451,12 +521,59 @@ export function ProductsView({ products, printifyReady }: { products: ProductCar
                   onRepresentative={(variantId) =>
                     patchProduct(p.id, { representativeVariantId: variantId })
                   }
+                  onVoice={() => openVoice(p)}
                 />
               ))}
             </div>
           )}
         </div>
       ))}
+
+      {voiceFor ? (
+        <div className="modal-scrim" onClick={() => voiceBusy === null && setVoiceFor(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <div className="card-title">
+              {voiceFor.brandLine} {voiceFor.productLine}
+            </div>
+            <Kicker>SHOP VOICE BOILERPLATE</Kicker>
+            <span className="hint">
+              Fit, fabric, sizing and care in the STUFFS voice — written once per product, stitched
+              under every listing&apos;s hook. Never mentions a design.
+            </span>
+            <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+              {anthropicReady ? (
+                <button className="btn btn-secondary" onClick={generateVoice} disabled={voiceBusy !== null}>
+                  {voiceBusy === "generate" ? <span className="spinner" /> : null}
+                  {voiceDraft.trim() ? "Regenerate draft" : "Generate draft"}
+                </button>
+              ) : (
+                <span className="hint">Set ANTHROPIC_API_KEY to generate — or write it by hand below.</span>
+              )}
+              {voiceNotes ? <span className="hint">{voiceNotes}</span> : null}
+            </div>
+            <textarea
+              className="input"
+              rows={12}
+              value={voiceDraft}
+              placeholder="Fabric, fit, sizing, care — true of this garment whatever's printed on it."
+              onChange={(e) => setVoiceDraft(e.target.value)}
+            />
+            <div className="row-gap-12">
+              <button
+                className="btn btn-primary"
+                onClick={saveVoice}
+                disabled={voiceBusy !== null || !voiceDraft.trim()}
+              >
+                {voiceBusy === "save" ? <span className="spinner" /> : null}
+                Save shop voice
+              </button>
+              <button className="btn btn-tertiary" disabled={voiceBusy !== null} onClick={() => setVoiceFor(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showSeed ? (
         <div className="modal-scrim" onClick={() => setShowSeed(false)}>

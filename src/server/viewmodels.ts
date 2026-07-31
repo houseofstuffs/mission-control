@@ -322,6 +322,7 @@ export function productCards(): ProductCardData[] {
     variantCount: num(p.props["Variant Count"]),
     syncedAt: str(p.props["Synced At"]) || null,
     hasVoiceText: str(p.props["Shop Voice Text"]).trim().length > 0,
+    voiceText: str(p.props["Shop Voice Text"]),
     imageUrl: str(p.props["Blueprint Image"]) || null,
     category,
     // stored, not recomputed at render — Notion carries the estimate and the

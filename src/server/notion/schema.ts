@@ -352,6 +352,9 @@ export const SCHEMA: DbSpec[] = [
       "Variant Count": { type: "number" },
       "Vendor Text Raw": { type: "rich_text" },
       "Shop Voice Text": { type: "rich_text" },
+      // When the shop-voice rewrite was generated/approved — a freshness
+      // stamp, not a gate. Empty Shop Voice Text is what the badge reads.
+      "Voice Generated At": { type: "date" },
       Status: { type: "select", options: ["Active", "Retired"] },
       "Synced At": { type: "date" },
     },

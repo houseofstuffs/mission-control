@@ -7,6 +7,7 @@ import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
 import { compatForListing } from "@/server/imageSlots";
 import { printifyConfigured } from "@/server/printify/client";
+import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import { isStaleKeyword } from "@/config/keywords";
@@ -29,7 +30,7 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       </div>
       <StepRunner
         record={runnerRecord(rec)}
-        seo={seoData(rec.id, String(rec.props["Tags"] ?? ""))}
+        seo={seoData(rec)}
         slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec), selectedColorways(rec))}
         colorways={colorwaysData(rec)}
       />
@@ -95,7 +96,8 @@ function slotsData(listingId: string, isMultiVariant: boolean, compatibility: st
   return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
 }
 
-function seoData(listingId: string, tags: string): SeoData {
+function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
+  const listingId = rec.id;
   const all = cachedRecords("keywords");
   const rows: KeywordRow[] = all.map((k) => ({
     id: k.id,
@@ -109,17 +111,64 @@ function seoData(listingId: string, tags: string): SeoData {
       typeof k.props["Tag Eligible"] === "boolean" ? k.props["Tag Eligible"] : k.title.length <= 20,
     stale: isStaleKeyword(typeof k.props["Pulled At"] === "string" ? k.props["Pulled At"] : null),
   }));
+  const rowById = new Map(rows.map((r) => [r.id, r]));
   const attachedIds = new Set(
     all
       .filter((k) => ((k.props["Etsy Listings"] as string[] | null) ?? []).includes(listingId))
       .map((k) => k.id)
   );
+  // keyword work already done on the Design — pre-populated at L2, not retyped
+  const designId = ((rec.props["Designs"] as string[] | null) ?? [])[0] ?? null;
+  const inherited = designId
+    ? all
+        .filter(
+          (k) =>
+            ((k.props["Designs"] as string[] | null) ?? []).includes(designId) && !attachedIds.has(k.id)
+        )
+        .map((k) => rowById.get(k.id)!)
+    : [];
+  // one lookup for the tally and the suggestion chips — the whole bank
+  const bankBuckets: Record<string, string> = {};
+  for (const r of rows) bankBuckets[r.name.trim().toLowerCase()] = r.bucket;
+
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const productRec = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
+  const voiceText = String(productRec?.props["Shop Voice Text"] ?? "").trim();
+
+  let attributes: Array<{ name: string; value: string }> = [];
+  try {
+    const parsed = JSON.parse(String(rec.props["Attributes (JSON)"] ?? "[]"));
+    if (Array.isArray(parsed)) {
+      attributes = parsed
+        .map((a) => ({ name: String(a?.name ?? ""), value: String(a?.value ?? "") }))
+        .filter((a) => a.name || a.value);
+    }
+  } catch {
+    /* unreadable JSON renders as empty — saving rewrites it clean */
+  }
+
   return {
     listingId,
     attached: rows.filter((r) => attachedIds.has(r.id)),
+    inherited,
     available: rows
-      .filter((r) => !attachedIds.has(r.id))
+      .filter((r) => !attachedIds.has(r.id) && !inherited.some((i) => i.id === r.id))
       .map((r) => ({ id: r.id, name: r.name, bucket: r.bucket })),
-    tags,
+    tags: String(rec.props["Tags"] ?? ""),
+    bankBuckets,
+    title: String(rec.props["Title"] ?? ""),
+    hook: String(rec.props["Description Hook"] ?? ""),
+    bodyCopySet: String(rec.props["Body Copy"] ?? "").trim().length > 0,
+    attributes,
+    product: productRec
+      ? {
+          id: productRec.id,
+          name: productLabel(productRec),
+          hasVoice: voiceText.length > 0,
+          voiceText,
+        }
+      : null,
+    hasDesign: Boolean(designId),
+    aiReady: anthropicConfigured(),
   };
 }

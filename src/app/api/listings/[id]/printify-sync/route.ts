@@ -125,6 +125,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({
           candidates: matches.map((m) => ({ id: m.id, title: m.title })),
           note,
+          lookingFor: `${String(productRec.props["Blueprint Brand"] ?? "")} ${String(
+            productRec.props["Blueprint Model"] ?? ""
+          )} · ${String(productRec.props["Print Provider Name"] ?? "")}`.trim(),
         });
       }
       shopProduct = matches[0];

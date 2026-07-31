@@ -35,6 +35,7 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Array<{ id: string; title: string }> | null>(null);
+  const [lookingFor, setLookingFor] = useState<string | null>(null);
 
   async function pullFromPrintify(printifyProductId?: string, reconnect = false) {
     setBusy(true);
@@ -45,10 +46,12 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
       changed?: boolean;
       candidates?: Array<{ id: string; title: string }>;
       note?: string | null;
+      lookingFor?: string;
     }>(`/api/listings/${data.listingId}/printify-sync`, "POST", { printifyProductId, reconnect });
     if (!res.ok) setError(res.error);
     else if (res.data.candidates) {
       setCandidates(res.data.candidates);
+      setLookingFor(res.data.lookingFor ?? null);
       if (res.data.note) setNotice(res.data.note);
     } else {
       setPicked(new Set(res.data.colorways ?? []));
@@ -115,6 +118,9 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
       {candidates ? (
         <div className="field" style={{ maxWidth: 420 }}>
           <label className="kicker" htmlFor="cw-candidate">WHICH PRINTIFY PRODUCT IS THIS LISTING?</label>
+          {lookingFor ? (
+            <span className="hint">Showing your {lookingFor} products — this listing&apos;s garment.</span>
+          ) : null}
           <select
             id="cw-candidate"
             className="select"

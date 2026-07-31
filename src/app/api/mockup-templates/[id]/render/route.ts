@@ -59,6 +59,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const quadOverrideRaw = form.get("quadOverride");
+    const opacityRaw = Number(form.get("artworkOpacity") ?? 1);
+    const artworkOpacity = Number.isFinite(opacityRaw) ? Math.min(1, Math.max(0.05, opacityRaw)) : 1;
     const png = await renderMockup(
       {
         pipelineType,
@@ -73,7 +75,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         highlight: await fetchLayer(firstFileUrl(template.props["Highlight Layer"]), "highlight layer"),
       },
       Buffer.from(await artwork.arrayBuffer()),
-      typeof quadOverrideRaw === "string" && quadOverrideRaw ? parseQuad(quadOverrideRaw) : null
+      typeof quadOverrideRaw === "string" && quadOverrideRaw ? parseQuad(quadOverrideRaw) : null,
+      artworkOpacity
     );
 
     return new NextResponse(new Uint8Array(png), {

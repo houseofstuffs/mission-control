@@ -218,15 +218,26 @@ async function resizedPng(buf: Buffer, width: number, height: number): Promise<B
 /**
  * The dispatcher. `quadOverride` exists for design-specific placement
  * (spec: quad_override) — same machinery, different corners.
+ *
+ * `artworkOpacity` (0–1) MULTIPLIES the artwork's own alpha before
+ * compositing — a preview knob for matching what ink actually does with
+ * soft-alpha art on fabric, never stored, never applied to real exports.
  */
 export async function renderMockup(
   spec: TemplateSpec,
   layers: TemplateLayers,
   artworkBuf: Buffer,
-  quadOverride?: Quad | null
+  quadOverride?: Quad | null,
+  artworkOpacity = 1
 ): Promise<Buffer> {
   const base = await loadRaw(layers.base);
   const artwork = await loadRaw(artworkBuf, 2400);
+  if (artworkOpacity < 1) {
+    const k = Math.max(0.05, artworkOpacity);
+    for (let i = 3; i < artwork.data.length; i += 4) {
+      artwork.data[i] = Math.round(artwork.data[i] * k);
+    }
+  }
   const quad = quadOverride ?? spec.quad;
   const fit = spec.fit ?? DEFAULT_FIT;
 

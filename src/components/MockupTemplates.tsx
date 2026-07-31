@@ -531,20 +531,23 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
   const [result, setResult] = useState<string | null>(null);
   const [editingQuad, setEditingQuad] = useState(false);
   const [quad, setQuad] = useState<Quad>(DEFAULT_QUAD);
+  // kept downscaled so opacity tweaks re-render without re-picking the file
+  const [artFile, setArtFile] = useState<File | null>(null);
+  const [opacity, setOpacity] = useState(100);
 
   useEffect(() => () => {
     if (result) URL.revokeObjectURL(result);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function testRender(file: File) {
+  async function testRender(file: File, opacityPct: number) {
     setBusy(true);
     setError(null);
     const form = new FormData();
-    // a full-res master is 20-40MB and gets truncated in transit ("Failed to
-    // parse body as FormData"); the renderer samples artwork at 2400px max,
-    // so shrink to that before upload — PNG out, alpha intact
-    form.append("artwork", await downscaleImage(file, 2400));
+    form.append("artwork", file);
+    // preview knob: multiplies the artwork's own alpha, matching what ink
+    // does with soft-alpha art on fabric. Never touches real exports.
+    form.append("artworkOpacity", String(opacityPct / 100));
     // raw fetch: the response is a PNG, not the JSON apiCall expects
     try {
       const res = await fetch(`/api/mockup-templates/${t.id}/render`, { method: "POST", body: form });
@@ -619,8 +622,28 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
             disabled={busy}
             onClick={() => inputRef.current?.click()}
           >
-            {busy ? "Rendering…" : "Test render"}
+            {busy ? "Rendering…" : artFile ? "New artwork" : "Test render"}
           </button>
+          {artFile ? (
+            <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              ink
+              <input
+                type="range"
+                min={20}
+                max={100}
+                step={5}
+                value={opacity}
+                disabled={busy}
+                onChange={(e) => setOpacity(Number(e.target.value))}
+                onPointerUp={() => artFile && testRender(artFile, opacity)}
+                onKeyUp={(e) => {
+                  if (e.key === "ArrowLeft" || e.key === "ArrowRight") testRender(artFile!, opacity);
+                }}
+                style={{ width: 90 }}
+              />
+              {opacity}%
+            </label>
+          ) : null}
           {t.baseImageUrl && t.pipelineType === "Simple Placement" ? (
             <button
               className="btn btn-tertiary"
@@ -650,9 +673,15 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
         type="file"
         accept="image/*"
         style={{ display: "none" }}
-        onChange={(e) => {
+        onChange={async (e) => {
           const f = e.target.files?.[0];
-          if (f) testRender(f);
+          if (f) {
+            // a full-res master is 20-40MB and truncates in transit; the
+            // renderer samples at 2400px max — shrink once, reuse after
+            const small = await downscaleImage(f, 2400);
+            setArtFile(small);
+            testRender(small, opacity);
+          }
           e.target.value = "";
         }}
       />

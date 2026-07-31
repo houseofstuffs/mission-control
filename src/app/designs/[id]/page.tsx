@@ -167,8 +167,15 @@ function parseCandidates(rec: NonNullable<ReturnType<typeof cachedRecord>>): Can
 }
 
 function savedPair(rec: NonNullable<ReturnType<typeof cachedRecord>>): SavedPair {
+  const styleId = (rec.props["Style"] as string[] | null)?.[0] ?? null;
+  // The style's library title; a suggested-direction spin-off has no Style
+  // relation, but its name was minted "<source> — <style>" — use the suffix.
+  const fromLibrary = styleId ? cachedRecords("styles").find((s) => s.id === styleId)?.title : null;
+  const parts = (rec.title ?? "").split(" — ");
+  const fromTitle = parts.length > 1 ? parts[parts.length - 1] : null;
   return {
-    styleId: (rec.props["Style"] as string[] | null)?.[0] ?? null,
+    styleId,
+    styleName: fromLibrary || fromTitle || null,
     imagePrompt: String(rec.props["Image Prompt"] ?? ""),
     textPrompt: String(rec.props["Text Prompt"] ?? ""),
     textureNote: String(rec.props["Texture Note"] ?? ""),

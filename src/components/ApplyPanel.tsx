@@ -26,6 +26,8 @@ export interface StyleOption {
 
 export interface SavedPair {
   styleId: string | null;
+  /** resolved style title — the header when no candidate carries the name */
+  styleName?: string | null;
   imagePrompt: string;
   textPrompt: string;
   textureNote: string;
@@ -356,7 +358,7 @@ export function WinnerEditor({
       designId,
       commit: {
         styleId: winner?.styleId ?? saved.styleId,
-        styleName: winner?.styleName ?? "revised",
+        styleName: winner?.styleName ?? saved.styleName ?? "revised",
         imagePrompt, textPrompt, textureNote,
       },
     });
@@ -368,7 +370,7 @@ export function WinnerEditor({
   return (
     <div className="card supporting stack-12">
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
-        <span className="card-title">{winner?.styleName ?? "Prompt set"}</span>
+        <span className="card-title">{winner?.styleName ?? saved.styleName ?? "Prompt set"}</span>
         {winner?.suggested ? <span className="chip stale">new direction</span> : null}
         <span className="chip done">{winner ? "✓ winner" : "✓ carried from spin-off"}</span>
       </div>

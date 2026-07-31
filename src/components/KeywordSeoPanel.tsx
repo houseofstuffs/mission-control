@@ -478,23 +478,35 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           {!showAllInherited && recommendedInherited.length === 0 ? (
             <span className="hint">Nothing left to recommend — browse the full pool below.</span>
           ) : null}
-          {/* two columns — the candidate names are short enough to pair up */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
-            {inheritedShown.map((k) => (
-              <button
-                key={k.id}
-                type="button"
-                className="chip neutral"
-                style={{ cursor: "pointer", textAlign: "left" }}
-                disabled={busy !== null}
-                title={`${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
-                onClick={() => pickKeyword(k)}
-              >
-                + {k.name} · {(k.bucket || "unknown").toLowerCase()}
-                {k.momentum === "Selling now" ? " 🔥" : ""}
-              </button>
-            ))}
-          </div>
+          {/* sectioned by bucket — visibility first so the backbone gets
+              locked in before the stretches; the bucket lives in the header
+              now, not on every pill */}
+          {BUCKETS.map((b) => {
+            const items = inheritedShown.filter((k) => (k.bucket || "Unknown") === b);
+            if (items.length === 0) return null;
+            return (
+              <div key={b} className="stack-12" style={{ gap: 6, marginTop: 4 }}>
+                <span className="kicker">{b.toUpperCase()} · {items.length}</span>
+                {/* two columns — the candidate names are short enough to pair up */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
+                  {items.map((k) => (
+                    <button
+                      key={k.id}
+                      type="button"
+                      className="chip neutral"
+                      style={{ cursor: "pointer", textAlign: "left" }}
+                      disabled={busy !== null}
+                      title={`${b} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
+                      onClick={() => pickKeyword(k)}
+                    >
+                      + {k.name}
+                      {k.momentum === "Selling now" ? " 🔥" : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
           {pool.length > recommendedInherited.length ? (
             <button
               className="btn btn-tertiary"

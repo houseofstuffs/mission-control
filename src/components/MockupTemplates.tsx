@@ -541,7 +541,10 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
     setBusy(true);
     setError(null);
     const form = new FormData();
-    form.append("artwork", file);
+    // a full-res master is 20-40MB and gets truncated in transit ("Failed to
+    // parse body as FormData"); the renderer samples artwork at 2400px max,
+    // so shrink to that before upload — PNG out, alpha intact
+    form.append("artwork", await downscaleImage(file, 2400));
     // raw fetch: the response is a PNG, not the JSON apiCall expects
     try {
       const res = await fetch(`/api/mockup-templates/${t.id}/render`, { method: "POST", body: form });

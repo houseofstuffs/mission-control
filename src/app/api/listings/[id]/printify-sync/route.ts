@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
-import { listShopProducts, getShopProduct, type ShopProduct } from "@/server/printify/client";
+import {
+  listShopProducts,
+  getShopProduct,
+  getBlueprint,
+  listVariants,
+  type ShopProduct,
+} from "@/server/printify/client";
 import { printifyShopId } from "@/server/printify/probe";
 import { markStepsStale } from "@/server/steps";
 
@@ -12,12 +18,14 @@ export const maxDuration = 60;
  * UI — Printify owns creation, this app never makes one) and mirror its
  * enabled variant colours into Colorways.
  *
- * First call finds the product by blueprint × provider; one match is adopted
- * outright, several come back as candidates for a one-time pick. The chosen
- * ID is stored (external IDs on every synced record — non-negotiable), so
- * every later call is a straight re-sync.
+ * Matching is by GARMENT, not by raw blueprint id: Printify's catalog holds
+ * duplicate blueprint entries for the same physical product (all "Comfort
+ * Colors 1466", different catalog ids), so a product created from a sibling
+ * entry — same brand + model, same print provider — is the same garment and
+ * connects fine. Colour mapping goes through the live catalog when the
+ * blueprint ids differ, because variant ids don't carry across entries.
  *
- * Colorways feed L4/L5 — when a re-sync CHANGES them after those steps are
+ * Colorways feed L4/L5 — when a sync CHANGES them after those steps are
  * done, the steps go stale rather than silently lying.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -35,6 +43,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     const blueprintId = Number(productRec.props["Printify Blueprint ID"]);
     const providerId = Number(productRec.props["Printify Print Provider ID"]);
+    const wantBrand = String(productRec.props["Blueprint Brand"] ?? "").trim().toLowerCase();
+    const wantModel = String(productRec.props["Blueprint Model"] ?? "").trim().toLowerCase();
+
+    // Same garment? Exact blueprint match, or a sibling catalog entry with
+    // the same brand + model on the same provider.
+    const blueprintMemo = new Map<number, { brand: string; model: string } | null>();
+    async function sameGarment(p: ShopProduct): Promise<boolean> {
+      if (p.print_provider_id !== providerId) return false;
+      if (p.blueprint_id === blueprintId) return true;
+      if (!wantBrand || !wantModel) return false;
+      if (!blueprintMemo.has(p.blueprint_id)) {
+        try {
+          const bp = await getBlueprint(p.blueprint_id);
+          blueprintMemo.set(p.blueprint_id, {
+            brand: (bp.brand ?? "").trim().toLowerCase(),
+            model: (bp.model ?? "").trim().toLowerCase(),
+          });
+        } catch {
+          blueprintMemo.set(p.blueprint_id, null);
+        }
+      }
+      const bp = blueprintMemo.get(p.blueprint_id);
+      return Boolean(bp && bp.brand === wantBrand && bp.model === wantModel);
+    }
 
     const shop = await printifyShopId();
     // reconnect = deliberate re-pick: ignore the stored ID and show matches
@@ -64,46 +96,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     if (!pid) {
-      // find it: same blueprint × provider, skipping anything probe-shaped.
-      // Everything ELSE in the shop is collected too — a product made with a
-      // different print provider (Printify's UI loves "Printify Choice")
-      // exists, is visible, and would otherwise be dropped silently, which
-      // reads as "the dropdown can't see my product".
       const matches: ShopProduct[] = [];
       const rejected: ShopProduct[] = [];
       for (let page = 1; page <= 4; page++) {
         const batch = await listShopProducts(shop, page);
         for (const p of batch) {
           if (p.title.includes("cost probe")) continue;
-          if (p.blueprint_id === blueprintId && p.print_provider_id === providerId) matches.push(p);
+          if (await sameGarment(p)) matches.push(p);
           else rejected.push(p);
         }
         if (batch.length < 50) break;
       }
-      // name the shapes of what was rejected, so a provider mismatch is
-      // visible instead of mysterious. Provider names come from any seeded
-      // product sharing the pair; ids otherwise.
-      const shapeOf = (p: ShopProduct) => {
-        const twin = cachedRecords("products").find(
-          (r) =>
-            r.props["Printify Blueprint ID"] === p.blueprint_id &&
-            r.props["Printify Print Provider ID"] === p.print_provider_id
-        );
-        const provider = twin
-          ? String(twin.props["Print Provider Name"] ?? `provider #${p.print_provider_id}`)
-          : `provider #${p.print_provider_id}`;
-        return `"${p.title}" (blueprint ${p.blueprint_id} × ${provider})`;
-      };
-      const otherShapes = rejected.slice(0, 3).map(shapeOf);
-
       if (matches.length === 0) {
+        const shapes = rejected
+          .slice(0, 3)
+          .map((p) => `"${p.title}" (blueprint ${p.blueprint_id} × provider #${p.print_provider_id})`);
         return NextResponse.json(
           {
             error:
-              `No product in your Printify shop matches blueprint ${blueprintId} × provider ${providerId} (this listing's product).` +
-              (otherShapes.length
-                ? ` Found with a DIFFERENT shape: ${otherShapes.join(" · ")}. A product made with another print provider can't connect — recreate it in Printify with the right provider, or seed that provider as a Product and point the listing at it.`
-                : " Create it in Printify first."),
+              `No product in your Printify shop is this garment (${productRec.title}).` +
+              (shapes.length ? ` Closest non-matches: ${shapes.join(" · ")}.` : " Create it in Printify first."),
           },
           { status: 404 }
         );
@@ -121,36 +133,50 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     if (!shopProduct) shopProduct = await getShopProduct(shop, pid);
 
-    // Never adopt a product of the wrong shape — an accidental pick of some
-    // other blueprint would silently mirror the wrong colour list forever.
-    if (shopProduct.blueprint_id !== blueprintId || shopProduct.print_provider_id !== providerId) {
+    // Never adopt a different garment — an accidental pick would silently
+    // mirror the wrong colour list forever.
+    if (!(await sameGarment(shopProduct))) {
       return NextResponse.json(
         {
           error:
-            `"${shopProduct.title}" is blueprint ${shopProduct.blueprint_id} × provider ${shopProduct.print_provider_id}, ` +
-            `but this listing's product is blueprint ${blueprintId} × provider ${providerId}. ` +
-            `Use "Change product" to pick the right one.`,
+            `"${shopProduct.title}" (blueprint ${shopProduct.blueprint_id} × provider #${shopProduct.print_provider_id}) ` +
+            `isn't this listing's garment (${productRec.title}). Use "Change product" to pick the right one.`,
         },
         { status: 400 }
       );
     }
 
-    // enabled variant ids → colour names, via the seeded variant records
+    // enabled variant ids → colour names. Cached variant records cover the
+    // seeded blueprint; a sibling catalog entry has different variant ids,
+    // so those map through the live catalog instead.
     const enabled = new Set(
       (shopProduct.variants ?? []).filter((v) => v.is_enabled).map((v) => v.id)
     );
-    const colorways = Array.from(
-      new Set(
-        cachedRecords("product_variants")
-          .filter(
-            (v) =>
-              ((v.props["Product"] as string[] | null) ?? []).includes(productRec.id) &&
-              enabled.has(Number(v.props["Printify Variant ID"]))
-          )
-          .map((v) => String(v.props["Color"] ?? "").trim())
-          .filter(Boolean)
-      )
-    ).sort();
+    let colorways: string[];
+    if (shopProduct.blueprint_id === blueprintId) {
+      colorways = Array.from(
+        new Set(
+          cachedRecords("product_variants")
+            .filter(
+              (v) =>
+                ((v.props["Product"] as string[] | null) ?? []).includes(productRec.id) &&
+                enabled.has(Number(v.props["Printify Variant ID"]))
+            )
+            .map((v) => String(v.props["Color"] ?? "").trim())
+            .filter(Boolean)
+        )
+      ).sort();
+    } else {
+      const live = await listVariants(shopProduct.blueprint_id, shopProduct.print_provider_id);
+      colorways = Array.from(
+        new Set(
+          live
+            .filter((v) => enabled.has(v.id))
+            .map((v) => (v.options?.color ?? "").trim())
+            .filter(Boolean)
+        )
+      ).sort();
+    }
 
     const before = (() => {
       try {

@@ -27,6 +27,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // shortlist dismissals — keyword ids ✕'d out of consideration at L2
+    if (body.dismissedKeywords !== undefined) {
+      const list = Array.isArray(body.dismissedKeywords)
+        ? body.dismissedKeywords.map((x: unknown) => String(x)).filter(Boolean)
+        : [];
+      values["Dismissed Keywords (JSON)"] = JSON.stringify(list);
+    }
     // L2 copy fields — drafts land here only after the operator saves them
     if (body.descriptionHook != null) values["Description Hook"] = String(body.descriptionHook);
     if (body.bodyCopy != null) values["Body Copy"] = String(body.bodyCopy);

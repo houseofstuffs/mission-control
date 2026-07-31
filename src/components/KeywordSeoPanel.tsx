@@ -48,6 +48,8 @@ export interface SeoData {
   tags: string;
   /** lowercased keyword name → bucket, across the whole bank — the tally's lookup */
   bankBuckets: Record<string, string>;
+  /** keyword ids ✕'d off the shortlist — persisted, excluded from recommendations */
+  dismissed: string[];
   /** saved copy fields, editable here */
   title: string;
   hook: string;
@@ -213,6 +215,18 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
 
   const inTagList = (name: string) => tags.some((t) => t.toLowerCase() === name.toLowerCase());
 
+  // ✕'d off the shortlist — persisted on the listing, optimistic locally.
+  // Dismissal is "not for this listing": the word stays in the bank and
+  // the full pool, and picking it from Show-all un-dismisses it.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set(seo.dismissed));
+  async function persistDismissed(next: Set<string>) {
+    setDismissed(new Set(next));
+    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", {
+      dismissedKeywords: [...next],
+    });
+    if (!res.ok) setError(res.error);
+  }
+
   // Tier 3 — the full candidate pool: everything researched for this
   // Design (imports land here) plus any legacy attachments not yet tagged.
   const pool: Array<KeywordRow & { attached: boolean }> = [
@@ -227,7 +241,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   for (const bucket of ["Visibility", "Reach", "Best Seller"]) {
     recommendedInherited.push(
       ...pool
-        .filter((k) => k.bucket === bucket && k.tagEligible && !inTagList(k.name))
+        .filter(
+          (k) => k.bucket === bucket && k.tagEligible && !inTagList(k.name) && !dismissed.has(k.id)
+        )
         .sort(keywordRank)
         .slice(0, SHORTLIST_PER_BUCKET[bucket])
     );
@@ -293,9 +309,16 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     return res.ok;
   }
 
-  /** pick a shortlist candidate into the Selected panel. No relation write
-   *  here — saving the selection syncs attachments server-side. */
+  /** pick a candidate into the Selected panel. No relation write here —
+   *  saving the selection syncs attachments server-side. Picking a
+   *  dismissed word (from Show-all) un-dismisses it: choosing it IS the
+   *  reversal. */
   function pickKeyword(k: KeywordRow) {
+    if (dismissed.has(k.id)) {
+      const next = new Set(dismissed);
+      next.delete(k.id);
+      void persistDismissed(next);
+    }
     if (k.tagEligible) addTag(k.name);
   }
 
@@ -489,20 +512,39 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                 <span className="kicker">{b.toUpperCase()} · {items.length}</span>
                 {/* two columns — the candidate names are short enough to pair up */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
-                  {items.map((k) => (
-                    <button
-                      key={k.id}
-                      type="button"
-                      className="chip neutral"
-                      style={{ cursor: "pointer", textAlign: "left" }}
-                      disabled={busy !== null}
-                      title={`${b} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
-                      onClick={() => pickKeyword(k)}
-                    >
-                      + {k.name}
-                      {k.momentum === "Selling now" ? " 🔥" : ""}
-                    </button>
-                  ))}
+                  {items.map((k) => {
+                    const out = dismissed.has(k.id);
+                    return (
+                      <span key={k.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <button
+                          type="button"
+                          className="chip neutral"
+                          style={{ cursor: "pointer", textAlign: "left", opacity: out ? 0.45 : 1 }}
+                          disabled={busy !== null}
+                          title={`${b} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}${out ? " · dismissed — picking it brings it back" : ""}`}
+                          onClick={() => pickKeyword(k)}
+                        >
+                          + {k.name}
+                          {k.momentum === "Selling now" ? " 🔥" : ""}
+                        </button>
+                        {!out ? (
+                          <button
+                            type="button"
+                            aria-label={`Dismiss ${k.name}`}
+                            title="Remove from consideration — the next-best candidate takes its place"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
+                            onClick={() => {
+                              const next = new Set(dismissed);
+                              next.add(k.id);
+                              void persistDismissed(next);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        ) : null}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -921,6 +963,15 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const bucketOf = (tag: string): string | null =>
     seo.bankBuckets[tag.trim().toLowerCase()] ?? null;
 
+  // display AND save in bucket order — visibility block on top, additions
+  // slot into their section instead of appending to the bottom
+  const bucketPos = (tag: string) => {
+    const b = bucketOf(tag);
+    const i = b ? BUCKETS.indexOf(b as Bucket) : -1;
+    return i === -1 ? 2.5 : i; // bankless "new" words sit after Best Seller
+  };
+  const sortedTags = tags.slice().sort((a, b) => bucketPos(a) - bucketPos(b));
+
   function remove(tag: string) {
     setDirty(true);
     setTags((cur) => cur.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
@@ -929,7 +980,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   async function save() {
     setBusy("save");
     setError(null);
-    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", { tags: tags.join(", ") });
+    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", { tags: sortedTags.join(", ") });
     if (!res.ok) setError(res.error);
     else {
       setDirty(false);
@@ -996,7 +1047,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
         <div className="hint">Nothing selected yet — tap + on the shortlist.</div>
       ) : (
         <div className="stack-12" style={{ gap: 6 }}>
-          {tags.map((t) => {
+          {sortedTags.map((t) => {
             const bucket = bucketOf(t);
             return (
               <div key={t} className="row-gap-8" style={{ alignItems: "center" }}>
@@ -1035,7 +1086,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
           Save tags to listing
         </button>
         {dirty ? <span className="hint">Unsaved</span> : null}
-        {tags.length > 0 ? <CopyIconButton text={tags.join(", ")} label="tags" /> : null}
+        {tags.length > 0 ? <CopyIconButton text={sortedTags.join(", ")} label="tags" /> : null}
       </div>
       {excess > 5 ? (
         <div className="stack-12" style={{ gap: 6, marginTop: 10 }}>

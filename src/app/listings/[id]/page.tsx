@@ -147,6 +147,14 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
   const productRec = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
   const voiceText = String(productRec?.props["Shop Voice Text"] ?? "").trim();
 
+  let dismissed: string[] = [];
+  try {
+    const parsed = JSON.parse(String(rec.props["Dismissed Keywords (JSON)"] ?? "[]"));
+    if (Array.isArray(parsed)) dismissed = parsed.map(String);
+  } catch {
+    /* unreadable renders as none dismissed — the next ✕ rewrites it clean */
+  }
+
   let attributes: Array<{ name: string; value: string }> = [];
   try {
     const parsed = JSON.parse(String(rec.props["Attributes (JSON)"] ?? "[]"));
@@ -168,6 +176,7 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
       .map((r) => ({ id: r.id, name: r.name, bucket: r.bucket })),
     tags: String(rec.props["Tags"] ?? ""),
     bankBuckets,
+    dismissed,
     title: String(rec.props["Title"] ?? ""),
     hook: String(rec.props["Description Hook"] ?? ""),
     bodyCopy: String(rec.props["Body Copy"] ?? ""),

@@ -479,6 +479,11 @@ export const SCHEMA: DbSpec[] = [
       // L1) — the set mockup templates are filtered against. JSON array of
       // Printify colour names.
       "Colorways (JSON)": { type: "rich_text" },
+      // Keyword ids ✕'d off the L2 shortlist — "not for this listing",
+      // persisted so the shortlist doesn't re-offer them every visit.
+      // They stay in the bank and the full pool; picking one from
+      // "Show all" un-dismisses it.
+      "Dismissed Keywords (JSON)": { type: "rich_text" },
       // Customizable text (dad/mom/kid) or multiple garment types in one
       // listing — switches the image-slot seed and adds two publish gates.
       "Is Multi Variant": { type: "checkbox" },

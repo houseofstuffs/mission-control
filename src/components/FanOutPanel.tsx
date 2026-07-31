@@ -40,7 +40,12 @@ export interface FanOutData {
 
 export function FanOutPanel({ data }: { data: FanOutData }) {
   const router = useRouter();
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  // The primary product starts selected — it's the one product this design
+  // was validated against, so its listing is never optional. Deselectable
+  // for the rare case, but the default is the obvious path.
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(data.products.filter((p) => p.isPrimary && !p.listingId).map((p) => p.id))
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

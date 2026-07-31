@@ -72,19 +72,54 @@ export function listingRows(): ListingRow[] {
   const listings = cachedRecords("etsy_listings");
   const products = cachedRecords("products");
   const sections = cachedRecords("shop_sections");
-  return listings.map((l) => ({
-    id: l.id,
-    title: l.title || "Untitled listing",
-    currentStep: str(l.props["Current Step"]) || "L1",
-    etsyState: str(l.props["Etsy State"]) || "Not pushed",
-    originType: str(l.props["Origin Type"]) || "—",
-    productName: titleOf(products, rel(l.props["Product"])[0]) || "—",
-    sectionName: titleOf(sections, rel(l.props["Shop Section"])[0]) || "—",
-    price: num(l.props["Price"]),
-    costAtCreation: num(l.props["Cost At Creation"]),
-    hasStale: Boolean(l.props["Has Stale"]),
-    hasBlocked: Boolean(l.props["Has Blocked"]),
-  }));
+  const designs = cachedRecords("designs");
+
+  const entries = listings.map((l) => {
+    const designId = rel(l.props["Designs"])[0];
+    const design = designs.find((d) => d.id === designId);
+    const productId = rel(l.props["Product"])[0];
+    const isPrimaryProduct = Boolean(
+      design && productId && rel(design.props["Primary Product"])[0] === productId
+    );
+    return {
+      group: design?.title || l.title || "",
+      lastEdited: l.lastEdited,
+      isPrimaryProduct,
+      row: {
+        id: l.id,
+        title: l.title || "Untitled listing",
+        currentStep: str(l.props["Current Step"]) || "L1",
+        etsyState: str(l.props["Etsy State"]) || "Not pushed",
+        originType: str(l.props["Origin Type"]) || "—",
+        productName: titleOf(products, productId) || "—",
+        sectionName: titleOf(sections, rel(l.props["Shop Section"])[0]) || "—",
+        price: num(l.props["Price"]),
+        costAtCreation: num(l.props["Cost At Creation"]),
+        hasStale: Boolean(l.props["Has Stale"]),
+        hasBlocked: Boolean(l.props["Has Blocked"]),
+        isPrimaryProduct,
+      } satisfies ListingRow,
+    };
+  });
+
+  // Fan-out siblings stay TOGETHER, grouped by their design; the group
+  // you've touched most recently floats to the top (big-list friendly);
+  // within a group the primary product's listing leads, then the rest
+  // alphabetically. Raw last-edited order made the twins swap places on
+  // every save.
+  const groupAt = new Map<string, string>();
+  for (const e of entries) {
+    const cur = groupAt.get(e.group);
+    if (!cur || e.lastEdited > cur) groupAt.set(e.group, e.lastEdited);
+  }
+  entries.sort(
+    (a, b) =>
+      (groupAt.get(b.group) ?? "").localeCompare(groupAt.get(a.group) ?? "") ||
+      a.group.localeCompare(b.group) ||
+      Number(b.isPrimaryProduct) - Number(a.isPrimaryProduct) ||
+      a.row.title.localeCompare(b.row.title)
+  );
+  return entries.map((e) => e.row);
 }
 
 /* ---------- inbox ---------- */

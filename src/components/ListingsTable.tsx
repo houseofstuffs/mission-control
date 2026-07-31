@@ -21,6 +21,8 @@ export interface ListingRow {
   costAtCreation: number | null;
   hasStale: boolean;
   hasBlocked: boolean;
+  /** this listing carries its design's primary product */
+  isPrimaryProduct: boolean;
 }
 
 export function ListingsTable({ rows }: { rows: ListingRow[] }) {
@@ -144,7 +146,12 @@ export function ListingsTable({ rows }: { rows: ListingRow[] }) {
                 <td>{row.currentStep}</td>
                 <td>{row.etsyState}</td>
                 <td>{row.originType}</td>
-                <td>{row.productName}</td>
+                <td>
+                  <span className="row-gap-8" style={{ alignItems: "baseline" }}>
+                    {row.productName}
+                    {row.isPrimaryProduct ? <span className="chip done">primary</span> : null}
+                  </span>
+                </td>
                 <td>{row.sectionName}</td>
                 <td>{row.price != null ? `$${row.price.toFixed(2)}` : "—"}</td>
                 <td>{row.costAtCreation != null ? `$${row.costAtCreation.toFixed(2)}` : "—"}</td>

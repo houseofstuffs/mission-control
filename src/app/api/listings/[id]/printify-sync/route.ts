@@ -94,7 +94,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           : `provider #${p.print_provider_id}`;
         return `"${p.title}" (blueprint ${p.blueprint_id} × ${provider})`;
       };
-      const otherShapes = rejected.slice(0, 8).map(shapeOf);
+      const otherShapes = rejected.slice(0, 3).map(shapeOf);
 
       if (matches.length === 0) {
         return NextResponse.json(
@@ -113,7 +113,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         return NextResponse.json({
           candidates: matches.map((m) => ({ id: m.id, title: m.title })),
           note,
-          otherShapes,
         });
       }
       shopProduct = matches[0];

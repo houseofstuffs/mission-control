@@ -35,7 +35,6 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Array<{ id: string; title: string }> | null>(null);
-  const [otherShapes, setOtherShapes] = useState<string[]>([]);
 
   async function pullFromPrintify(printifyProductId?: string, reconnect = false) {
     setBusy(true);
@@ -46,12 +45,10 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
       changed?: boolean;
       candidates?: Array<{ id: string; title: string }>;
       note?: string | null;
-      otherShapes?: string[];
     }>(`/api/listings/${data.listingId}/printify-sync`, "POST", { printifyProductId, reconnect });
     if (!res.ok) setError(res.error);
     else if (res.data.candidates) {
       setCandidates(res.data.candidates);
-      setOtherShapes(res.data.otherShapes ?? []);
       if (res.data.note) setNotice(res.data.note);
     } else {
       setPicked(new Set(res.data.colorways ?? []));
@@ -130,12 +127,6 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
               <option key={c.id} value={c.id}>{c.title}</option>
             ))}
           </select>
-          {otherShapes.length > 0 ? (
-            <span className="hint">
-              In your shop but a different blueprint or print provider, so not connectable here:{" "}
-              {otherShapes.join(" · ")}
-            </span>
-          ) : null}
         </div>
       ) : null}
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>

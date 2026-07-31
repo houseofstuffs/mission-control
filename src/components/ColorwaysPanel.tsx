@@ -22,6 +22,10 @@ export interface ColorwaysData {
   excluded: string[];
   /** current selection on the record */
   selected: string[];
+  /** PRINTIFY_API_TOKEN present — the pull button needs it */
+  printifyReady: boolean;
+  /** already connected to a real Printify product */
+  connected: boolean;
 }
 
 export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
@@ -29,6 +33,31 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
   const [picked, setPicked] = useState<Set<string>>(new Set(data.selected));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Array<{ id: string; title: string }> | null>(null);
+
+  async function pullFromPrintify(printifyProductId?: string) {
+    setBusy(true);
+    setError(null);
+    setCandidates(null);
+    const res = await apiJson<{
+      colorways?: string[];
+      changed?: boolean;
+      candidates?: Array<{ id: string; title: string }>;
+    }>(`/api/listings/${data.listingId}/printify-sync`, "POST", { printifyProductId });
+    if (!res.ok) setError(res.error);
+    else if (res.data.candidates) {
+      setCandidates(res.data.candidates);
+    } else {
+      setPicked(new Set(res.data.colorways ?? []));
+      setNotice(
+        `Connected — mirroring ${res.data.colorways?.length ?? 0} colourways from Printify.` +
+          (res.data.changed ? " Images and slots were marked stale to re-check." : "")
+      );
+      router.refresh();
+    }
+    setBusy(false);
+  }
   const dirty =
     picked.size !== data.selected.length || data.selected.some((c) => !picked.has(c));
 
@@ -60,6 +89,33 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
       <div className="hint">
         Mirror the variants you enabled in Printify. Mockup templates are offered in these colours only.
       </div>
+      {data.printifyReady ? (
+        <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn btn-secondary" onClick={() => pullFromPrintify()} disabled={busy}>
+            <Spinner active={busy} />
+            {data.connected ? "Re-sync from Printify" : "Pull from Printify"}
+          </button>
+          {data.connected ? <span className="chip done">✓ connected</span> : null}
+          {notice ? <span className="hint">{notice}</span> : null}
+        </div>
+      ) : null}
+      {candidates ? (
+        <div className="field" style={{ maxWidth: 420 }}>
+          <label className="kicker" htmlFor="cw-candidate">WHICH PRINTIFY PRODUCT IS THIS LISTING?</label>
+          <select
+            id="cw-candidate"
+            className="select"
+            value=""
+            disabled={busy}
+            onChange={(e) => e.target.value && pullFromPrintify(e.target.value)}
+          >
+            <option value="">Pick once — the ID is stored for good</option>
+            {candidates.map((c) => (
+              <option key={c.id} value={c.id}>{c.title}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         {data.colors.map((color) => {
           const out = data.excluded.includes(color);

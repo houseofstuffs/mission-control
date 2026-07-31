@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
+import { markStepsStale } from "@/server/steps";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -27,17 +28,31 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
     // the colourways this listing sells — template offers filter against it
+    let colorwaysChanged = false;
     if (body.colorways !== undefined) {
       const list = Array.isArray(body.colorways)
         ? body.colorways.map((c: unknown) => String(c).trim()).filter(Boolean)
         : [];
       values["Colorways (JSON)"] = JSON.stringify(list);
+      try {
+        const prior = JSON.parse(String(listing.props["Colorways (JSON)"] ?? "[]"));
+        colorwaysChanged =
+          JSON.stringify((Array.isArray(prior) ? prior : []).slice().sort()) !==
+          JSON.stringify(list.slice().sort());
+      } catch {
+        colorwaysChanged = true;
+      }
     }
 
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
     const record = await updateRecord("etsy_listings", id, values);
+    // colourways feed L4/L5 — changing them after those steps are done makes
+    // the images a lie until re-checked. Stale, never silent.
+    if (colorwaysChanged) {
+      await markStepsStale(id, ["L4", "L5"], "Colorways changed — re-check images and slots.");
+    }
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

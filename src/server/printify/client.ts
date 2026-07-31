@@ -135,3 +135,24 @@ export async function createShopProduct(
 export async function deleteShopProduct(shopId: number, productId: string): Promise<void> {
   await send<unknown>("DELETE", `/shops/${shopId}/products/${productId}.json`);
 }
+
+/* ---------- reading REAL shop products (the ones made in Printify's UI) ---------- */
+
+export interface ShopProduct {
+  id: string;
+  title: string;
+  blueprint_id: number;
+  print_provider_id: number;
+  variants: Array<{ id: number; is_enabled: boolean }>;
+}
+
+export async function listShopProducts(shopId: number, page = 1): Promise<ShopProduct[]> {
+  const res = await get<{ data?: ShopProduct[] }>(
+    `/shops/${shopId}/products.json?limit=50&page=${page}`
+  );
+  return res.data ?? [];
+}
+
+export async function getShopProduct(shopId: number, productId: string): Promise<ShopProduct> {
+  return get<ShopProduct>(`/shops/${shopId}/products/${productId}.json`);
+}

@@ -6,6 +6,7 @@ import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
 import { compatForListing } from "@/server/imageSlots";
+import { printifyConfigured } from "@/server/printify/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import { isStaleKeyword } from "@/config/keywords";
@@ -64,6 +65,8 @@ function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Color
     colors,
     excluded: colors.filter((c) => !variantAllowed(compat, c)),
     selected: selectedColorways(rec),
+    printifyReady: printifyConfigured(),
+    connected: String(rec.props["Printify Product ID"] ?? "").trim().length > 0,
   };
 }
 

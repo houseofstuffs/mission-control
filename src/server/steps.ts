@@ -141,6 +141,28 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
   return null;
 }
 
+/**
+ * Mark specific DONE steps stale without moving the current pointer — for
+ * when an upstream INPUT changes through an edit rather than a backtrack
+ * (e.g. colourways change after images were made). Pending/blocked steps
+ * are left alone; nothing is ever unchecked.
+ */
+export async function markStepsStale(pageId: string, stepIds: string[], note: string): Promise<void> {
+  const rec = requireRecord(pageId);
+  const state = parseStepState(rec);
+  const now = new Date().toISOString();
+  const staled: string[] = [];
+  for (const id of stepIds) {
+    if (state.steps[id]?.status === "done") {
+      state.steps[id] = { status: "stale", at: now, note };
+      staled.push(id);
+    }
+  }
+  if (staled.length === 0) return;
+  await persist(rec, state);
+  await log(rec, "Marked stale", { reason: note, stale: staled });
+}
+
 /** Mark the current (or given) step done and advance to the next actionable step. */
 export async function markStepDone(pageId: string, stepId?: string): Promise<SimpleRecord> {
   const rec = requireRecord(pageId);

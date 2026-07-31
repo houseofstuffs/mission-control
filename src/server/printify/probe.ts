@@ -25,7 +25,7 @@ import type { CostEstimate } from "@/server/cost-estimate";
 const CHUNK = 100; // Printify's variants-per-product cap
 const PROBE_TITLE = "STUFFS cost probe — auto-deleted";
 
-async function shopId(): Promise<number> {
+export async function printifyShopId(): Promise<number> {
   const cached = getMeta("printify_shop_id");
   if (cached) return Number(cached);
   const shops = await listShops();
@@ -85,7 +85,7 @@ export async function pullCosts(productId: string): Promise<PullResult> {
     /* front is the overwhelming default */
   }
 
-  const shop = await shopId();
+  const shop = await printifyShopId();
   const image = await probeImageId();
 
   const costs: Record<string, number> = {}; // printify variant id → dollars

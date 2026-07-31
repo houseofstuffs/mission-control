@@ -110,9 +110,14 @@ function printCheckData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Prin
   };
 }
 
-function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): MasterAssetsData {
+/** Snapshot preview through the thumb proxy — card-sized, stable, cacheable. */
+function thumbUrl(rec: NonNullable<ReturnType<typeof cachedRecord>>): string | null {
   const snap = rec.props["Artwork Snapshot"];
-  const first = Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }) : null;
+  const has = Array.isArray(snap) && snap.length > 0 && (snap[0] as { url?: string }).url;
+  return has ? `/api/designs/${rec.id}/thumb?v=${encodeURIComponent(rec.lastEdited)}` : null;
+}
+
+function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): MasterAssetsData {
   // biggest print area on the primary product — the bar the master must clear
   let requiredWidth: number | null = null;
   let requiredHeight: number | null = null;
@@ -133,7 +138,7 @@ function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Ma
     psdLink: String(rec.props["PSD Master Link"] ?? ""),
     psdSavedAt: String(rec.props["PSD Saved At"] ?? "") || null,
     masterPngLink: String(rec.props["Master PNG Link"] ?? ""),
-    snapshotUrl: first?.url || null,
+    snapshotUrl: thumbUrl(rec),
     masterWidth: typeof rec.props["Master Width"] === "number" ? rec.props["Master Width"] : null,
     masterHeight: typeof rec.props["Master Height"] === "number" ? rec.props["Master Height"] : null,
     requiredWidth,
@@ -142,11 +147,9 @@ function masterAssetsData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Ma
 }
 
 function artworkData(rec: NonNullable<ReturnType<typeof cachedRecord>>): ArtworkData {
-  const snap = rec.props["Artwork Snapshot"];
-  const first = Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }) : null;
   return {
     designId: rec.id,
-    snapshotUrl: first?.url || null,
+    snapshotUrl: thumbUrl(rec),
     artworkLink: String(rec.props["Master PNG Link"] ?? ""),
     winningModel: String(rec.props["Winning Model"] ?? ""),
   };

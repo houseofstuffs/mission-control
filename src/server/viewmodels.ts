@@ -40,12 +40,16 @@ export function designKanbanCards(): KanbanCardData[] {
     const nicheId = rel(d.props["Niche"])[0];
     const niche = niches.find((n) => n.id === nicheId);
     const inListings = listings.filter((l) => rel(l.props["Designs"]).includes(d.id)).length;
-    // snapshot first (a real image, uploaded at C2); Artwork Link is the
-    // master-file fallback and may not be a directly renderable image
+    // snapshot first (a real image, uploaded at C2), served through the
+    // thumb proxy: card-sized, and a STABLE url the browser can cache —
+    // Notion's signed links rotate every sync and cache as misses. Master
+    // PNG Link is the fallback and may not be directly renderable.
     const snap = d.props["Artwork Snapshot"];
     const snapUrl =
       Array.isArray(snap) && snap.length > 0 ? (snap[0] as { url?: string }).url || null : null;
-    const files = snapUrl ?? d.props["Master PNG Link"];
+    const files = snapUrl
+      ? `/api/designs/${d.id}/thumb?v=${encodeURIComponent(d.lastEdited)}`
+      : d.props["Master PNG Link"];
     return {
       id: d.id,
       title: d.title || "Untitled design",

@@ -402,14 +402,34 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       {notice ? <div className="hint">{notice}</div> : null}
 
       {/* tier 1 — the bucket-balanced shortlist; the selected set lives in
-          the rail on the right */}
-      {pool.length > 0 ? (
-        <div className="field">
-          <span className="kicker">
-            {showAllInherited
-              ? `FULL KEYWORD POOL · ${pool.length}`
-              : `SHORTLIST · ${recommendedInherited.length}`}
-          </span>
+          the rail on the right. Always rendered: an empty pool SAYS so
+          instead of silently vanishing (a listing whose design holds no
+          research yet would otherwise show nothing at all). */}
+      <div className="field">
+        <span className="kicker">
+          {showAllInherited
+            ? `FULL KEYWORD POOL · ${pool.length}`
+            : `SHORTLIST · ${recommendedInherited.length}`}
+        </span>
+        {/* the pool's shape, always visible — when a bucket is thin, the
+            shortlist is thin for a data reason, not a rendering one */}
+        <span className="hint">
+          pool {pool.length}: {pool.filter((k) => k.bucket === "Visibility").length} visibility ·{" "}
+          {pool.filter((k) => k.bucket === "Reach").length} reach ·{" "}
+          {pool.filter((k) => k.bucket === "Best Seller").length} best seller ·{" "}
+          {pool.filter((k) => k.bucket === "Dead" || k.bucket === "Unknown" || !k.bucket).length} dead/unmeasured
+        </span>
+        {pool.length === 0 ? (
+          <div className="callout stale">
+            No keyword candidates reachable from this listing. The pool is keywords linked to this
+            listing&apos;s Design (CSV imports land there) plus this listing&apos;s own shortlist.{" "}
+            {seo.hasDesign
+              ? "Drop a CSV below, or run the cleanup on the sibling listing holding the research — design-pool keywords appear on every listing of the design."
+              : "This listing has no Design attached — set that first; research has nowhere to land without it."}
+          </div>
+        ) : null}
+        {pool.length > 0 ? (
+          <>
           <span className="hint">
             {showAllInherited
               ? "Everything from this Design and your imports, best first — dead and unmeasured included down here."
@@ -444,8 +464,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               {showAllInherited ? "Show recommended only" : `Show all ${pool.length}`}
             </button>
           ) : null}
-        </div>
-      ) : null}
+          </>
+        ) : null}
+      </div>
 
       {/* CSV import — eRank/Everbee exports through the same bucket math */}
       <div className="field">

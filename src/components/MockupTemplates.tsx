@@ -32,6 +32,8 @@ import {
 export interface MockupTemplateCard {
   id: string;
   name: string;
+  /** base photo through the thumb proxy — card-sized, cacheable */
+  thumbUrl: string | null;
   pipelineType: string;
   surface: string;
   blend: string;
@@ -573,6 +575,10 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
 
   return (
     <div className="idea-card">
+      {t.thumbUrl && !editingQuad ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={t.thumbUrl} alt="" className="idea-thumb" />
+      ) : null}
       <div className="title">{t.name}</div>
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         <span className="chip count">{t.pipelineType || "no pipeline"}</span>

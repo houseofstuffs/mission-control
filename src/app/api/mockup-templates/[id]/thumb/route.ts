@@ -4,16 +4,16 @@ import { thumbFor, ThumbSourceExpiredError, THUMB_HEADERS } from "@/server/thumb
 
 export const dynamic = "force-dynamic";
 
-/** Design card thumbnail — the C2 snapshot, card-sized and cacheable. */
+/** Template card thumbnail — the base photo, card-sized and cacheable. */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const design = cachedRecord(id);
-    if (!design || design.dbKey !== "designs") {
+    const template = cachedRecord(id);
+    if (!template || template.dbKey !== "mockup_templates") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const version = new URL(req.url).searchParams.get("v") ?? design.lastEdited;
-    const thumb = await thumbFor(design, "Artwork Snapshot", version);
+    const version = new URL(req.url).searchParams.get("v") ?? template.lastEdited;
+    const thumb = await thumbFor(template, "Base Image", version);
     return new NextResponse(new Uint8Array(thumb), { headers: THUMB_HEADERS });
   } catch (err) {
     const expired = err instanceof ThumbSourceExpiredError;

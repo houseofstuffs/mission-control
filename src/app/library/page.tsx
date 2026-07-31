@@ -23,6 +23,9 @@ function templateCard(m: SimpleRecord): MockupTemplateCard {
   return {
     id: m.id,
     name: m.title || "Untitled template",
+    thumbUrl: fileUrl("Base Image")
+      ? `/api/mockup-templates/${m.id}/thumb?v=${encodeURIComponent(m.lastEdited)}`
+      : null,
     pipelineType: String(m.props["Pipeline Type"] ?? ""),
     surface: String(m.props["Surface"] ?? ""),
     blend: String(m.props["Blend Mode"] ?? ""),

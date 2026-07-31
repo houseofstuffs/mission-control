@@ -19,6 +19,26 @@ drawn in dark warm charcoal-brown (#241C14). Every element must have its own
 opaque fill color — no element may rely on the background showing through to
 form part of its shape.`;
 
+/**
+ * Shared boilerplate — the phrasing EVERY image prompt starts with, across
+ * every design. Lives in code, not Notion, on purpose: it's edited here
+ * (with Claude) and is JOINED AT COPY TIME rather than baked into stored
+ * prompts — so a phrasing change applies to every design instantly,
+ * including ones spun off months ago. The design's own Image Prompt is the
+ * per-design layer on top.
+ *
+ * Distinct from STANDING_PROMPT_CONSTRAINTS above: that block is the
+ * technical print contract (knockout colours) and stays a separate
+ * copy-paste block at C2. This is the shared creative preamble.
+ */
+export const IMAGE_PROMPT_BOILERPLATE = `Professional print artwork: flat illustration, bold shapes and clean edges that read from across a room. Self-contained composition — no garment, no mockup, no frame, no watermark, no text unless the prompt names it. Every element fully rendered with its own solid fill.`;
+
+/** The full image-gen paste: shared preamble + this design's prompt. */
+export function withBoilerplate(prompt: string): string {
+  const body = prompt.trim();
+  return body ? `${IMAGE_PROMPT_BOILERPLATE}\n\n${body}` : IMAGE_PROMPT_BOILERPLATE;
+}
+
 /** Garment compatibility — how the artwork constrains which garments it can print on. */
 export const GARMENT_COMPATIBILITY = ["Any", "Dark only", "Light only", "Unset"] as const;
 export type GarmentCompatibility = (typeof GARMENT_COMPATIBILITY)[number];

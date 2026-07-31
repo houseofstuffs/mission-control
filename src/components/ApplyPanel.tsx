@@ -15,6 +15,7 @@ import { Kicker } from "./ui";
 import { AutoTextarea } from "./AutoTextarea";
 import { CopyIconButton } from "./CopyIconButton";
 import { apiCall, apiJson } from "@/lib/api";
+import { IMAGE_PROMPT_BOILERPLATE, withBoilerplate } from "@/config/design-prompt";
 
 export interface StyleOption {
   id: string;
@@ -309,6 +310,24 @@ export function ApplyPanel({
  * Copy each image prompt into Kittl at C2; whichever generation wins,
  * "This one won" commits that candidate's pair to the design.
  */
+/** The shared preamble every image prompt inherits — read-only here; the
+ * phrasing is edited in config (with Claude) and applies everywhere at
+ * once, old designs included, because it's joined at copy time. */
+function BoilerplateBlock() {
+  return (
+    <div className="well">
+      <div className="row-gap-8" style={{ alignItems: "center" }}>
+        <span className="kicker">SHARED BOILERPLATE — EVERY DESIGN</span>
+        <CopyIconButton text={IMAGE_PROMPT_BOILERPLATE} label="boilerplate" />
+      </div>
+      <div className="body-sm" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{IMAGE_PROMPT_BOILERPLATE}</div>
+      <div className="hint" style={{ marginTop: 6 }}>
+        Copying any image prompt below includes this automatically. Phrasing changes happen in config — ask Claude.
+      </div>
+    </div>
+  );
+}
+
 /** The committed pair — full width, every field editable, saves via commit.
  * `winner` is the candidate it came from when one exists; a spun-off design
  * has no candidate board, only the pair, and renders this exact surface. */
@@ -354,10 +373,11 @@ export function WinnerEditor({
         <span className="chip done">{winner ? "✓ winner" : "✓ carried from spin-off"}</span>
       </div>
       {error ? <div className="callout blocked">{error}</div> : null}
+      <BoilerplateBlock />
       <div className="field">
         <div className="row-gap-8" style={{ alignItems: "center" }}>
           <label className="kicker" htmlFor="win-img">IMAGE PROMPT</label>
-          <CopyIconButton text={imagePrompt} label="image prompt" />
+          <CopyIconButton text={withBoilerplate(imagePrompt)} label="image prompt with boilerplate" />
         </div>
         <AutoTextarea id="win-img" value={imagePrompt} onChange={setImagePrompt} />
       </div>
@@ -459,6 +479,7 @@ export function CandidatesBoard({
           : `CANDIDATES · ${candidates.length} — GENERATE EACH AT C2, THEN CROWN THE WINNER`}
       </Kicker>
       {error ? <div className="callout blocked">{error}</div> : null}
+      <BoilerplateBlock />
       <div
         style={{
           display: "grid",
@@ -490,7 +511,7 @@ export function CandidatesBoard({
               <div className="field">
                 <div className="row-gap-8" style={{ alignItems: "center" }}>
                   <span className="kicker">IMAGE PROMPT</span>
-                  <CopyIconButton text={c.imagePrompt} label={`${c.styleName} image prompt`} />
+                  <CopyIconButton text={withBoilerplate(c.imagePrompt)} label={`${c.styleName} image prompt with boilerplate`} />
                 </div>
                 <div className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{c.imagePrompt}</div>
               </div>

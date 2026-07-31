@@ -161,6 +161,11 @@ export async function POST(req: Request) {
       if (product) parts.push(`primary product "${product.title}"`);
     }
     if (design.props["Occasion"]) parts.push(`occasion ${String(design.props["Occasion"])}`);
+    // Every image prompt gets a standing preamble prepended at copy time —
+    // candidates shouldn't spend words restating it.
+    parts.push(
+      `NOTE: a shared boilerplate is automatically prepended to every image prompt (it covers: flat illustration, bold readable shapes, self-contained composition, no garment/mockup/frame/watermark, solid fills). Do not repeat those directives — spend the image prompt entirely on this design's specific subject, style and palette.`
+    );
 
     // Job-based: a multi-candidate compose runs for minutes — far past what
     // one web request survives. The job finishes server-side and writes the

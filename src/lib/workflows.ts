@@ -123,10 +123,10 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       id: "C8",
       label: "validate",
       title: "Validation gate",
-      needs: ["PSD master", "Primary Product print specs"],
-      produces: ["Printify product for primary product", "Verified print mock (bleed + margins)", "Sample decision"],
+      needs: ["PSD master", "Primary product print specs"],
+      produces: ["Printify listing for primary product", "Verified print mock (bleed + margins)", "Order sample or skip"],
       dependsOn: ["C7"],
-      note: "Primary product ONLY. Validate before you multiply — a backtrack invalidates one retrofit instead of six.",
+      note: "Primary product ONLY. Validate before you multiply.",
     },
     {
       id: "C9",

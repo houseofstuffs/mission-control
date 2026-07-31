@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cachedRecord, cachedRecords } from "@/server/notion/store";
-import { runnerRecord } from "@/server/viewmodels";
+import { runnerRecord, productLabel } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
@@ -49,6 +49,7 @@ function selectedColorways(rec: NonNullable<ReturnType<typeof cachedRecord>>): s
 /** The product's colour list, annotated with what garment compat rules out. */
 function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): ColorwaysData {
   const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const productRec = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
   const colors = productId
     ? Array.from(
         new Set(
@@ -62,6 +63,7 @@ function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Color
   const compat = compatForListing(rec);
   return {
     listingId: rec.id,
+    productName: productRec ? productLabel(productRec) : "No product set",
     colors,
     excluded: colors.filter((c) => !variantAllowed(compat, c)),
     selected: selectedColorways(rec),

@@ -16,6 +16,8 @@ import { apiJson } from "@/lib/api";
 
 export interface ColorwaysData {
   listingId: string;
+  /** the house product name, as on the product card — the panel's title */
+  productName: string;
   /** every colour the product offers */
   colors: string[];
   /** colours the design's garment compatibility rules out */
@@ -90,7 +92,9 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>COLORWAYS — WHAT THIS LISTING SELLS</Kicker>
+      {/* the garment first — two fan-out listings differ by exactly this */}
+      <div className="card-title">{data.productName}</div>
+      <Kicker>COLORWAYS</Kicker>
       <div className="hint">
         Mirror the variants you enabled in Printify. Mockup templates are offered in these colours only.
       </div>

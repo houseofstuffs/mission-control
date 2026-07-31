@@ -158,7 +158,9 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
           <Spinner active={busy} />
           Save colorways
         </button>
-        <span className="hint">{picked.size} selected</span>
+        <span className="hint">
+          {picked.size} selected{dirty ? " — unsaved" : " · saved"}
+        </span>
       </div>
       {error ? <div className="callout blocked">{error}</div> : null}
     </div>

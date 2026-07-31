@@ -21,12 +21,14 @@ export interface ImportConflict {
  * through the same shapes as manual entry (KeywordInput → keywordValues).
  *
  * Two file kinds share this door, detected by header shape:
- *   - KEYWORD exports (a Keyword column + metrics) → rows into the bank.
- *     Dedupe is by keyword TEXT (case-insensitive): a keyword that already
- *     exists is attached to the listing, never duplicated. Metrics on an
- *     existing row are only written when they fill a blank or match what's
- *     there — a row whose numbers DISAGREE comes back as a conflict for
- *     the operator to resolve, never a silent overwrite.
+ *   - KEYWORD exports (a Keyword column + metrics) → rows into the bank,
+ *     linked to the listing's DESIGN so they feed the recommendation pool.
+ *     NEVER attached to the listing itself: attachment is the operator's
+ *     hand-picked shortlist (~13), and a 900-row export is research, not a
+ *     shortlist. Dedupe is by keyword TEXT (case-insensitive). Metrics on
+ *     an existing row are only written when they fill a blank or match
+ *     what's there — a row whose numbers DISAGREE comes back as a conflict
+ *     for the operator to resolve, never a silent overwrite.
  *   - LISTING-RESEARCH exports (per-listing sales + age, no Keyword
  *     column) → aggregated into a momentum read on ONE keyword; the
  *     client supplies keywordId, or gets needsKeyword back and asks.
@@ -74,8 +76,13 @@ export async function POST(req: Request) {
     const bank = cachedRecords("keywords");
     const byName = new Map(bank.map((k) => [k.title.trim().toLowerCase(), k]));
 
+    // the research lands on the DESIGN — every listing of this design
+    // (and every future fan-out) recommends from the same pool
+    const listing = listingId ? cachedRecord(listingId) : null;
+    const designId = listing ? (((listing.props["Designs"] as string[] | null) ?? [])[0] ?? null) : null;
+
     let created = 0;
-    let attached = 0;
+    let linked = 0;
     let unchanged = 0;
     const conflicts: ImportConflict[] = [];
 
@@ -84,7 +91,7 @@ export async function POST(req: Request) {
 
       if (!existing) {
         const values = keywordValues(row);
-        if (listingId) values["Etsy Listings"] = [listingId];
+        if (designId) values["Designs"] = [designId];
         const rec = await createRecord("keywords", values);
         byName.set(row.keyword.trim().toLowerCase(), rec);
         created++;
@@ -93,13 +100,13 @@ export async function POST(req: Request) {
 
       const values: Record<string, SimpleValue> = {};
 
-      // attach to the listing regardless of the metric question — same
-      // keyword text is the same keyword; attachment isn't an overwrite
-      if (listingId) {
-        const rels = (existing.props["Etsy Listings"] as string[] | null) ?? [];
-        if (!rels.includes(listingId)) {
-          values["Etsy Listings"] = [...rels, listingId];
-          attached++;
+      // link to the design regardless of the metric question — same
+      // keyword text is the same keyword; a relation isn't an overwrite
+      if (designId) {
+        const rels = (existing.props["Designs"] as string[] | null) ?? [];
+        if (!rels.includes(designId)) {
+          values["Designs"] = [...rels, designId];
+          linked++;
         }
       }
 
@@ -156,10 +163,12 @@ export async function POST(req: Request) {
       source: parsed.source,
       total: parsed.rows.length,
       created,
-      attached,
+      linked,
       unchanged,
       skipped: parsed.skipped,
       conflicts,
+      // no design = nowhere to aim the research; rows are in the bank only
+      noDesign: !designId,
     });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

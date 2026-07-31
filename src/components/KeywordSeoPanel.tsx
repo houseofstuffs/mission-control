@@ -115,9 +115,11 @@ interface ImportSummary {
   source: string;
   total: number;
   created: number;
-  attached: number;
+  /** rows linked to the Design's recommendation pool (never auto-attached) */
+  linked: number;
   unchanged: number;
   skipped: number;
+  noDesign?: boolean;
 }
 interface ImportConflict {
   id: string;
@@ -245,7 +247,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setBusy("import");
     setError(null);
     setImportSummary(null);
-    const totals: ImportSummary = { source: "", total: 0, created: 0, attached: 0, unchanged: 0, skipped: 0 };
+    const totals: ImportSummary = { source: "", total: 0, created: 0, linked: 0, unchanged: 0, skipped: 0 };
     const newConflicts: ImportConflict[] = [];
     const sources = new Set<string>();
     const failures: string[] = [];
@@ -259,10 +261,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         listingCount?: number;
         total?: number;
         created?: number;
-        attached?: number;
+        linked?: number;
         unchanged?: number;
         skipped?: number;
         conflicts?: ImportConflict[];
+        noDesign?: boolean;
       }>("/api/keywords/import", "POST", { csv: text, listingId: seo.listingId });
       if (!res.ok) {
         failures.push(`${file.name}: ${res.error}`);
@@ -279,9 +282,10 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       sources.add(res.data.source);
       totals.total += res.data.total ?? 0;
       totals.created += res.data.created ?? 0;
-      totals.attached += res.data.attached ?? 0;
+      totals.linked += res.data.linked ?? 0;
       totals.unchanged += res.data.unchanged ?? 0;
       totals.skipped += res.data.skipped ?? 0;
+      if (res.data.noDesign) totals.noDesign = true;
       // dedupe by keyword id — the same disagreement from two files is one review
       for (const c of res.data.conflicts ?? []) {
         if (!newConflicts.some((x) => x.id === c.id)) newConflicts.push(c);
@@ -537,10 +541,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         ))}
         {importSummary ? (
           <span className="hint">
-            {importSummary.source} format · {importSummary.created} new · {importSummary.attached} attached
+            {importSummary.source} format · {importSummary.created} new · {importSummary.linked} linked to the design pool
             {importSummary.unchanged > 0 ? ` · ${importSummary.unchanged} already current` : ""}
             {importSummary.skipped > 0 ? ` · ${importSummary.skipped} blank rows skipped` : ""}
             {conflicts.length > 0 ? ` · ${conflicts.length} need review below` : ""}
+            {importSummary.noDesign ? " · no Design on this listing — rows are in the bank only" : ""}
+            {" — nothing auto-attaches; pick from the recommendations."}
           </span>
         ) : null}
         {conflicts.map((c) => (
@@ -852,7 +858,41 @@ export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showParked, setShowParked] = useState(false);
+  const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
   const PARKED_RENDER_CAP = 100;
+
+  // attachment = the hand-picked shortlist. Anything attached beyond the
+  // tag list is residue from the old attach-everything imports.
+  const tagNames = new Set(
+    seo.tags.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
+  );
+  const excess = seo.attached.filter((k) => !tagNames.has(k.name.trim().toLowerCase())).length;
+
+  /** chunked: ~1000 relation moves can't fit one request — loop until clear */
+  async function cleanUp() {
+    setBusy("cleanup");
+    setError(null);
+    let moved = 0;
+    let remaining = 1;
+    while (remaining > 0) {
+      const res = await apiJson<{ moved: number; remaining: number }>(
+        `/api/listings/${seo.listingId}/rehome-keywords`,
+        "POST",
+        {}
+      );
+      if (!res.ok) {
+        setError(res.error);
+        break;
+      }
+      moved += res.data.moved;
+      remaining = res.data.remaining;
+      setCleanupProgress(`Moving to the design pool… ${moved} done${remaining > 0 ? `, ${remaining} left` : ""}`);
+      if (res.data.moved === 0) break;
+    }
+    setCleanupProgress(null);
+    router.refresh();
+    setBusy(null);
+  }
 
   const main = seo.attached
     .filter((k) => k.bucket !== "Dead" && k.bucket !== "Unknown")
@@ -914,6 +954,23 @@ export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
     <div className="gate-panel">
       <div className="panel-title">Attached keywords · {seo.attached.length}</div>
       {error ? <div className="field-error">{error}</div> : null}
+      {excess > 5 ? (
+        <div className="stack-12" style={{ gap: 6, marginBottom: 8 }}>
+          <button
+            className="btn btn-secondary"
+            style={{ fontSize: 12, padding: "5px 10px", alignSelf: "flex-start" }}
+            disabled={busy !== null}
+            onClick={cleanUp}
+          >
+            {busy === "cleanup" ? <span className="spinner" /> : null}
+            Keep my tags — move {excess} to the design pool
+          </button>
+          <span className="hint">
+            {cleanupProgress ??
+              "Attached should be your shortlist. This moves everything not in your tag list to the Design's pool — still recommendable, off this record."}
+          </span>
+        </div>
+      ) : null}
       {main.length === 0 ? (
         <div className="hint">Nothing measured attached yet — pick from the recommendations.</div>
       ) : (

@@ -23,6 +23,19 @@ export type BlendMode = (typeof BLEND_MODES)[number];
 export const DEFAULT_BLEND: BlendMode = "Multiply";
 
 /**
+ * How artwork meets the print area when their ratios disagree — a property
+ * of the template's footprint, chosen at intake:
+ *   Fit inside — whole artwork visible at its own ratio, leftover
+ *                transparent. Garment print areas.
+ *   Fill area  — artwork covers the area edge-to-edge, overflow cropped
+ *                equally. Die-cuts, full-bleed frames, wraps.
+ * Neither ever stretches the artwork.
+ */
+export const FIT_MODES = ["Fit inside", "Fill area"] as const;
+export type FitMode = (typeof FIT_MODES)[number];
+export const DEFAULT_FIT: FitMode = "Fit inside";
+
+/**
  * What the photo shows — filters which templates get offered for a design's
  * garment compatibility (dark-only art never gets a white-tee template).
  */

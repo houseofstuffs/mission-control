@@ -21,8 +21,10 @@ import { downscaleImage } from "@/lib/downscale";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
+  FIT_MODES,
   SURFACE_TAGS,
   DEFAULT_BLEND,
+  DEFAULT_FIT,
   DEFAULT_QUAD,
   type Quad,
 } from "@/config/mockups";
@@ -34,6 +36,7 @@ export interface MockupTemplateCard {
   surface: string;
   blend: string;
   quadSet: boolean;
+  fit: string;
   baseImageUrl: string | null;
   hasDisplacement: boolean;
   hasShadow: boolean;
@@ -330,6 +333,7 @@ export function MockupTemplateIntake() {
   const [quad, setQuad] = useState<Quad>(DEFAULT_QUAD);
   const [quadTouched, setQuadTouched] = useState(false);
   const [blend, setBlend] = useState<string>(DEFAULT_BLEND);
+  const [fit, setFit] = useState<string>(DEFAULT_FIT);
   const [surface, setSurface] = useState("");
   const [basePreview, setBasePreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -372,6 +376,7 @@ export function MockupTemplateIntake() {
     form.append("pipelineType", pipeline);
     form.append("surface", surface);
     form.append("blendMode", blend);
+    form.append("fitMode", fit);
     if (sourceLink.trim()) form.append("sourceLink", sourceLink.trim());
     if (simple || quadTouched) form.append("quad", JSON.stringify(quad));
     // Notion's free plan caps uploads around 5MB — shrink to Etsy's 2000px
@@ -389,7 +394,7 @@ export function MockupTemplateIntake() {
       setOpen(false);
       setName(""); setSourceLink(""); setPipeline(""); setBase(null); setDisplacement(null);
       setShadow(null); setHighlight(null); setQuad(DEFAULT_QUAD); setQuadTouched(false);
-      setBlend(DEFAULT_BLEND); setSurface("");
+      setBlend(DEFAULT_BLEND); setFit(DEFAULT_FIT); setSurface("");
       router.refresh();
     }
     setBusy(false);
@@ -466,6 +471,21 @@ export function MockupTemplateIntake() {
             file={highlight}
             onFile={setHighlight}
           />
+        </div>
+      ) : null}
+
+      {pipeline ? (
+        <div className="field" style={{ maxWidth: 260 }}>
+          <label className="kicker" htmlFor="mt-fit">ARTWORK FIT</label>
+          <select id="mt-fit" className="select" value={fit} onChange={(e) => setFit(e.target.value)}>
+            {FIT_MODES.map((f) => (
+              <option key={f}>{f}</option>
+            ))}
+          </select>
+          <span className="hint">
+            When artwork and area shapes disagree: fit shows the whole design (garments);
+            fill covers edge-to-edge and crops the overflow (die-cuts, full-bleed). Never stretched.
+          </span>
         </div>
       ) : null}
 
@@ -562,6 +582,7 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
             map ✓{t.hasShadow ? " · shadow ✓" : ""}{t.hasHighlight ? " · highlight ✓" : ""}
           </span>
         ) : null}
+        {t.fit === "Fill area" ? <span className="chip neutral">fills area</span> : null}
         {missingCorners ? <span className="chip stale">needs corners</span> : null}
       </div>
 

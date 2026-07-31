@@ -22,9 +22,11 @@ import {
   RENDER_MAX_EDGE,
   DISPLACEMENT_STRENGTH,
   DEFAULT_QUAD,
+  DEFAULT_FIT,
   type Quad,
   type PipelineType,
   type BlendMode,
+  type FitMode,
 } from "@/config/mockups";
 
 export interface TemplateSpec {
@@ -32,6 +34,8 @@ export interface TemplateSpec {
   /** normalized TL→TR→BR→BL; required for Simple Placement */
   quad: Quad | null;
   blend: BlendMode;
+  /** how artwork meets the area when ratios disagree — never stretched */
+  fit?: FitMode;
 }
 
 export interface TemplateLayers {
@@ -113,12 +117,12 @@ function sample(src: Raw, x: number, y: number, out: [number, number, number, nu
  * size. Inverse mapping: for every canvas pixel, ask which artwork pixel
  * lands there — no holes, no double-writes.
  *
- * The artwork is CONTAIN-fit, never stretched: if the quad's shape doesn't
- * match the artwork's, the artwork centres inside it at its own ratio and
- * the leftover stays transparent. The quad marks the print AREA; the
- * artwork's proportions are not negotiable.
+ * The artwork's proportions are not negotiable — when the quad's shape
+ * disagrees, `fit` decides which honest compromise to make:
+ *   Fit inside — whole artwork, centred, leftover transparent (contain)
+ *   Fill area  — area covered edge-to-edge, overflow cropped equally (cover)
  */
-function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number): Raw {
+function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number, fit: FitMode): Raw {
   const px: Quad = quad.map((p) => ({ x: p.x * (width - 1), y: p.y * (height - 1) })) as Quad;
   const inv = invert(squareToQuad(px));
 
@@ -129,14 +133,27 @@ function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number): Ra
   const quadAspect =
     (edge(px[0], px[1]) + edge(px[3], px[2])) / Math.max(1, edge(px[0], px[3]) + edge(px[1], px[2]));
   const artAspect = artwork.width / artwork.height;
-  // the centred band of the unit square the artwork actually occupies
+  // Fit inside: the centred band of the unit square the artwork occupies.
+  // Fill area: the band GROWS past the unit square — the quad shows a
+  // centred crop of the artwork, and sampling outside [0,1] never happens
+  // because only u,v inside the quad are visited.
   let u0 = 0, v0 = 0, uw = 1, vh = 1;
-  if (artAspect > quadAspect) {
-    vh = quadAspect / artAspect;
-    v0 = (1 - vh) / 2;
-  } else if (artAspect < quadAspect) {
-    uw = artAspect / quadAspect;
-    u0 = (1 - uw) / 2;
+  if (fit === "Fill area") {
+    if (artAspect > quadAspect) {
+      uw = artAspect / quadAspect;
+      u0 = (1 - uw) / 2;
+    } else if (artAspect < quadAspect) {
+      vh = quadAspect / artAspect;
+      v0 = (1 - vh) / 2;
+    }
+  } else {
+    if (artAspect > quadAspect) {
+      vh = quadAspect / artAspect;
+      v0 = (1 - vh) / 2;
+    } else if (artAspect < quadAspect) {
+      uw = artAspect / quadAspect;
+      u0 = (1 - uw) / 2;
+    }
   }
   const out = Buffer.alloc(width * height * 4);
   const rgba: [number, number, number, number] = [0, 0, 0, 0];
@@ -211,10 +228,11 @@ export async function renderMockup(
   const base = await loadRaw(layers.base);
   const artwork = await loadRaw(artworkBuf, 2400);
   const quad = quadOverride ?? spec.quad;
+  const fit = spec.fit ?? DEFAULT_FIT;
 
   if (spec.pipelineType === "Simple Placement") {
     if (!quad) throw new Error("This template has no print-area corners yet — open it and place them.");
-    const warped = warpToQuad(artwork, quad, base.width, base.height);
+    const warped = warpToQuad(artwork, quad, base.width, base.height, fit);
     return sharp(await toPng(base))
       .composite([{ input: await toPng(warped), blend: spec.blend === "Normal" ? "over" : "multiply" }])
       .png()
@@ -227,7 +245,7 @@ export async function renderMockup(
   }
   // Placement first: the quad if one was saved (optional crop guide), else a
   // centred box — the artwork has to sit somewhere before the fabric warps it.
-  const placed = warpToQuad(artwork, quad ?? DEFAULT_QUAD, base.width, base.height);
+  const placed = warpToQuad(artwork, quad ?? DEFAULT_QUAD, base.width, base.height, fit);
   const map = await loadRaw(layers.displacement).then((m) =>
     m.width === base.width && m.height === base.height
       ? m

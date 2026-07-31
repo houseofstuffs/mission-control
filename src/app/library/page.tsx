@@ -27,6 +27,7 @@ function templateCard(m: SimpleRecord): MockupTemplateCard {
     surface: String(m.props["Surface"] ?? ""),
     blend: String(m.props["Blend Mode"] ?? ""),
     quadSet: String(m.props["Print Area Quad (JSON)"] ?? "").trim().length > 0,
+    fit: String(m.props["Fit"] ?? ""),
     baseImageUrl: fileUrl("Base Image"),
     hasDisplacement: fileUrl("Displacement Map") != null,
     hasShadow: fileUrl("Shadow Layer") != null,

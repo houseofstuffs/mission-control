@@ -16,7 +16,7 @@
 
 import { GARMENT_COMPATIBILITY } from "@/config/design-prompt";
 import { CATEGORIES } from "@/config/product-categories";
-import { PIPELINE_TYPES, BLEND_MODES, SURFACE_TAGS } from "@/config/mockups";
+import { PIPELINE_TYPES, BLEND_MODES, FIT_MODES, SURFACE_TAGS } from "@/config/mockups";
 
 export type PropType =
   | "title"
@@ -262,6 +262,10 @@ export const SCHEMA: DbSpec[] = [
       "Print Area Quad (JSON)": { type: "rich_text" },
       // Simple Placement's composite step. Multiply sinks ink into fabric.
       "Blend Mode": { type: "select", options: [...BLEND_MODES] },
+      // How artwork meets the print area when ratios disagree: whole-and-
+      // letterboxed (garments) or edge-to-edge with overflow cropped
+      // (die-cuts, full-bleed). Never stretched, in either mode.
+      Fit: { type: "select", options: [...FIT_MODES] },
       // What the photo shows — filters templates against the design's
       // garment compatibility at offer time.
       Surface: { type: "select", options: [...SURFACE_TAGS] },

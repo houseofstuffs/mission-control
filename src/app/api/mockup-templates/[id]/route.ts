@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, updateRecord, archiveRecord } from "@/server/notion/store";
-import { BLEND_MODES, SURFACE_TAGS, parseQuad } from "@/config/mockups";
+import { BLEND_MODES, FIT_MODES, SURFACE_TAGS, parseQuad } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         return NextResponse.json({ error: `Unknown blend mode "${body.blendMode}"` }, { status: 400 });
       }
       values["Blend Mode"] = String(body.blendMode);
+    }
+    if (body.fitMode !== undefined) {
+      if (!FIT_MODES.includes(body.fitMode)) {
+        return NextResponse.json({ error: `Unknown fit "${body.fitMode}"` }, { status: 400 });
+      }
+      values["Fit"] = String(body.fitMode);
     }
     if (body.surface !== undefined) {
       if (!SURFACE_TAGS.includes(body.surface)) {

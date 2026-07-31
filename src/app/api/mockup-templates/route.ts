@@ -4,8 +4,10 @@ import { uploadFileToNotion } from "@/server/notion/upload";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
+  FIT_MODES,
   SURFACE_TAGS,
   DEFAULT_BLEND,
+  DEFAULT_FIT,
   parseQuad,
   type PipelineType,
 } from "@/config/mockups";
@@ -68,11 +70,13 @@ export async function POST(req: Request) {
     }
 
     const blend = str("blendMode");
+    const fit = str("fitMode");
     const values: Record<string, SimpleValue> = {
       Name: name,
       "Pipeline Type": pipelineType,
       Surface: surface,
       "Blend Mode": BLEND_MODES.includes(blend as (typeof BLEND_MODES)[number]) ? blend : DEFAULT_BLEND,
+      Fit: FIT_MODES.includes(fit as (typeof FIT_MODES)[number]) ? fit : DEFAULT_FIT,
     };
     if (str("sourceLink")) values["File Link"] = str("sourceLink");
     if (str("shotType")) values["Shot Type"] = str("shotType");

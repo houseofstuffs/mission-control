@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cachedRecord } from "@/server/notion/store";
 import { renderMockup } from "@/server/mockup/render";
-import { parseQuad, DEFAULT_BLEND, type PipelineType, type BlendMode } from "@/config/mockups";
+import { parseQuad, DEFAULT_BLEND, DEFAULT_FIT, type PipelineType, type BlendMode, type FitMode } from "@/config/mockups";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // fetch layers + per-pixel warp
@@ -64,6 +64,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         pipelineType,
         quad: parseQuad(String(template.props["Print Area Quad (JSON)"] ?? "")),
         blend: (String(template.props["Blend Mode"] ?? "") || DEFAULT_BLEND) as BlendMode,
+        fit: (String(template.props["Fit"] ?? "") || DEFAULT_FIT) as FitMode,
       },
       {
         base,

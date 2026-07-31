@@ -16,7 +16,7 @@
  * always a draft: title, hook, tags and attributes render editable and
  * nothing persists until its own explicit save.
  */
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Kicker, Spinner } from "./ui";
@@ -235,6 +235,46 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const inheritedShown = showAllInherited
     ? BUCKETS.flatMap((b) => pool.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
     : recommendedInherited;
+
+  // The AI-built starting point: a listing with NO saved tags opens with
+  // the best 13 already selected toward the target mix (7 vis · 4 reach ·
+  // 2 best, backfilled best-first when a bucket runs thin). Client-side
+  // and UNSAVED — the operator course-corrects and then commits; review
+  // is the editability plus the save button, not an empty panel.
+  const didPrefill = useRef(false);
+  useEffect(() => {
+    if (didPrefill.current) return;
+    didPrefill.current = true;
+    if (seo.tags.trim() || tags.length > 0 || pool.length === 0) return;
+    const targets: Array<[string, number]> = [
+      ["Visibility", 7],
+      ["Reach", 4],
+      ["Best Seller", 2],
+    ];
+    const ranked = (b: string) =>
+      pool.filter((k) => k.bucket === b && k.tagEligible).sort(keywordRank);
+    const chosen: string[] = [];
+    const used = new Set<string>();
+    for (const [b, n] of targets) {
+      for (const k of ranked(b).slice(0, n)) {
+        chosen.push(k.name);
+        used.add(k.id);
+      }
+    }
+    for (const k of targets.flatMap(([b]) => ranked(b)).filter((k) => !used.has(k.id))) {
+      if (chosen.length >= TAG_COUNT) break;
+      chosen.push(k.name);
+      used.add(k.id);
+    }
+    if (chosen.length > 0) {
+      setTags(chosen.slice(0, TAG_COUNT));
+      setDirty(true);
+      setNotice(
+        `Pre-selected the best ${Math.min(chosen.length, TAG_COUNT)} toward the target mix — swap any out on the right, then save.`
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // No hard stop at 13 — over-filling while sifting is normal; the rail
   // warns and the publish gate still requires exactly 13 at L6.

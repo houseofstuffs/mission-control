@@ -450,7 +450,10 @@ export function MockupTemplateIntake() {
                 <option key={b}>{b}</option>
               ))}
             </select>
-            <span className="hint">Multiply sinks ink into fabric. Normal for stickers and frames.</span>
+            <span className="hint">
+              Multiply suits LIGHT garments (ink sinks into fabric). On dark garments DTG lays a
+              white underbase, so pick Normal — multiply over a dark photo crushes every colour.
+            </span>
           </div>
         </>
       ) : null}
@@ -567,6 +570,15 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
     setBusy(false);
   }
 
+  async function patchField(body: Record<string, unknown>) {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson(`/api/mockup-templates/${t.id}`, "PATCH", body);
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(false);
+  }
+
   async function saveQuad() {
     setBusy(true);
     setError(null);
@@ -600,6 +612,38 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
         {t.fit === "Fill area" ? <span className="chip neutral">fills area</span> : null}
         {missingCorners ? <span className="chip stale">needs corners</span> : null}
       </div>
+
+      {/* Both knobs are correctable in place — the wrong blend on a dark
+          base is discovered at the first test render, not at intake. */}
+      {!editingQuad ? (
+        <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            className="select input-compact"
+            style={{ width: "auto", fontSize: 12 }}
+            value={t.blend || DEFAULT_BLEND}
+            disabled={busy}
+            aria-label="Blend mode"
+            title="Multiply sinks ink into LIGHT fabric. On dark garments DTG prints a white underbase — use Normal."
+            onChange={(e) => patchField({ blendMode: e.target.value })}
+          >
+            {BLEND_MODES.map((b) => (
+              <option key={b}>{b}</option>
+            ))}
+          </select>
+          <select
+            className="select input-compact"
+            style={{ width: "auto", fontSize: 12 }}
+            value={t.fit || DEFAULT_FIT}
+            disabled={busy}
+            aria-label="Artwork fit"
+            onChange={(e) => patchField({ fitMode: e.target.value })}
+          >
+            {FIT_MODES.map((f) => (
+              <option key={f}>{f}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {editingQuad && t.baseImageUrl ? (
         <>

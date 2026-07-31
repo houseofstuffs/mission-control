@@ -33,6 +33,9 @@ export interface KeywordRow {
   competition: number | null;
   tagEligible: boolean;
   stale: boolean;
+  /** market momentum from listing-research imports — beside the bucket, never in it */
+  momentum: string | null;
+  momentumTitle: string | null;
 }
 
 export interface SeoData {
@@ -62,6 +65,13 @@ const BUCKET_CHIP: Record<string, string> = {
   "Best Seller": "neutral",
   Unknown: "neutral",
   Dead: "blocked",
+};
+
+/** momentum chip styling — selling now reads good, legacy reads caution */
+const MOMENTUM_CHIP: Record<string, string> = {
+  "Selling now": "done",
+  Steady: "count",
+  Legacy: "stale",
 };
 
 function fmt(n: number | null): string {
@@ -132,6 +142,10 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [dragOver, setDragOver] = useState(false);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [conflicts, setConflicts] = useState<ImportConflict[]>([]);
+  // listing-research files waiting to be told which keyword they describe
+  const [pendingMarkets, setPendingMarkets] = useState<
+    Array<{ fileName: string; csv: string; source: string; listingCount: number }>
+  >([]);
 
   // quick add form
   const [kw, setKw] = useState("");
@@ -190,20 +204,90 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     if (ok && k.tagEligible) addTag(k.name);
   }
 
-  async function importCsv(file: File) {
+  /** several files at once is normal — 3 searches × 2 platforms = 6 CSVs.
+   *  Processed sequentially through one endpoint; keyword files accumulate
+   *  into one summary, listing-research files queue up to be assigned a
+   *  keyword. Order matters across platforms: the first file to bring a
+   *  keyword sets its numbers, later disagreements surface as conflicts. */
+  async function importFiles(files: File[]) {
+    if (files.length === 0) return;
     setBusy("import");
     setError(null);
     setImportSummary(null);
-    const text = await file.text();
-    const res = await apiJson<ImportSummary & { conflicts: ImportConflict[] }>(
+    const totals: ImportSummary = { source: "", total: 0, created: 0, attached: 0, unchanged: 0, skipped: 0 };
+    const newConflicts: ImportConflict[] = [];
+    const sources = new Set<string>();
+    const failures: string[] = [];
+    let sawKeywordFile = false;
+    for (const file of files) {
+      const text = await file.text();
+      const res = await apiJson<{
+        kind: string;
+        needsKeyword?: boolean;
+        source: string;
+        listingCount?: number;
+        total?: number;
+        created?: number;
+        attached?: number;
+        unchanged?: number;
+        skipped?: number;
+        conflicts?: ImportConflict[];
+      }>("/api/keywords/import", "POST", { csv: text, listingId: seo.listingId });
+      if (!res.ok) {
+        failures.push(`${file.name}: ${res.error}`);
+        continue;
+      }
+      if (res.data.kind === "listing") {
+        setPendingMarkets((cur) => [
+          ...cur,
+          { fileName: file.name, csv: text, source: res.data.source, listingCount: res.data.listingCount ?? 0 },
+        ]);
+        continue;
+      }
+      sawKeywordFile = true;
+      sources.add(res.data.source);
+      totals.total += res.data.total ?? 0;
+      totals.created += res.data.created ?? 0;
+      totals.attached += res.data.attached ?? 0;
+      totals.unchanged += res.data.unchanged ?? 0;
+      totals.skipped += res.data.skipped ?? 0;
+      // dedupe by keyword id — the same disagreement from two files is one review
+      for (const c of res.data.conflicts ?? []) {
+        if (!newConflicts.some((x) => x.id === c.id)) newConflicts.push(c);
+      }
+    }
+    if (sawKeywordFile) {
+      totals.source = [...sources].join(" + ");
+      setImportSummary(totals);
+      setConflicts((cur) => {
+        const merged = [...cur];
+        for (const c of newConflicts) if (!merged.some((x) => x.id === c.id)) merged.push(c);
+        return merged;
+      });
+    }
+    if (failures.length > 0) setError(failures.join("\n"));
+    router.refresh();
+    setBusy(null);
+  }
+
+  /** a listing-research file, assigned: compute + store momentum on that keyword */
+  async function assignMarket(
+    pending: { fileName: string; csv: string },
+    keywordId: string
+  ) {
+    setBusy("market");
+    setError(null);
+    const res = await apiJson<{ keyword: string; momentum: string; listingCount: number }>(
       "/api/keywords/import",
       "POST",
-      { csv: text, listingId: seo.listingId }
+      { csv: pending.csv, keywordId, listingId: seo.listingId }
     );
     if (!res.ok) setError(res.error);
     else {
-      setImportSummary(res.data);
-      setConflicts(res.data.conflicts);
+      setPendingMarkets((cur) => cur.filter((p) => p !== pending));
+      setNotice(
+        `Momentum for "${res.data.keyword}": ${res.data.momentum.toLowerCase()} — from ${res.data.listingCount} listings.`
+      );
       router.refresh();
     }
     setBusy(null);
@@ -342,25 +426,60 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const f = e.dataTransfer.files?.[0];
-            if (f) importCsv(f);
+            importFiles(Array.from(e.dataTransfer.files ?? []));
           }}
         >
           <span className="hint">
-            {busy === "import" ? "Importing…" : "Drop a keyword CSV export here, or click to choose. New keywords attach to this listing; existing ones are matched by text, never duplicated."}
+            {busy === "import"
+              ? "Importing…"
+              : "Drop CSV exports here — several at once is fine. Keyword files land in the bank (matched by text, never duplicated); listing-research files (Everbee Product Analytics / eRank listings) become a momentum read on the keyword you pick."}
           </span>
           <input
             ref={fileInput}
             type="file"
             accept=".csv,text/csv"
+            multiple
             style={{ display: "none" }}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) importCsv(f);
+              importFiles(Array.from(e.target.files ?? []));
               e.target.value = "";
             }}
           />
         </div>
+        {/* listing-research files don't say which search they came from — ask */}
+        {pendingMarkets.map((p) => (
+          <div key={p.fileName + p.listingCount} className="well" style={{ marginTop: 8 }}>
+            <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+              <span className="body-sm" style={{ fontWeight: 700 }}>{p.fileName}</span>
+              <span className="chip count">{p.source} · {p.listingCount} listings</span>
+            </div>
+            <div className="field" style={{ marginTop: 8, maxWidth: 380 }}>
+              <label className="kicker" htmlFor={`mk-${p.fileName}`}>WHICH KEYWORD WAS THIS SEARCH FOR?</label>
+              <select
+                id={`mk-${p.fileName}`}
+                className="select"
+                value=""
+                disabled={busy !== null}
+                onChange={(e) => e.target.value && assignMarket(p, e.target.value)}
+              >
+                <option value="" disabled>Keyword…</option>
+                {[...seo.attached, ...seo.inherited].map((k) => (
+                  <option key={k.id} value={k.id}>{k.name} · {(k.bucket || "unknown").toLowerCase()}</option>
+                ))}
+                {seo.available.map((k) => (
+                  <option key={k.id} value={k.id}>{k.name} · {(k.bucket || "unknown").toLowerCase()}</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 11, padding: "3px 8px", alignSelf: "flex-start" }}
+                onClick={() => setPendingMarkets((cur) => cur.filter((x) => x !== p))}
+              >
+                Discard file
+              </button>
+            </div>
+          </div>
+        ))}
         {importSummary ? (
           <span className="hint">
             {importSummary.source} format · {importSummary.created} new · {importSummary.attached} attached
@@ -622,6 +741,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                     <span className="hint">
                       {fmt(k.avgSearches)} searches · {fmt(k.competition)} comp
                     </span>
+                    {/* market momentum — context beside the bucket, not part of it */}
+                    {k.momentum && MOMENTUM_CHIP[k.momentum] ? (
+                      <span className={`chip ${MOMENTUM_CHIP[k.momentum]}`} title={k.momentumTitle ?? undefined}>
+                        {k.momentum.toLowerCase()}
+                      </span>
+                    ) : null}
                     {k.stale ? <span className="chip stale">stale numbers</span> : null}
                     <button
                       type="button"

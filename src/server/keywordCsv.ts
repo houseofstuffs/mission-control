@@ -24,7 +24,7 @@ export interface ParsedKeywordCsv {
 }
 
 /** lowercase, letters+digits only — "Avg. Searches " and "avg_searches" meet here */
-function norm(header: string): string {
+export function norm(header: string): string {
   return header.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
@@ -43,7 +43,7 @@ const ERANK_MARKERS = new Set(["avgsearches", "avgclicks", "etsycompetition", "g
 const EVERBEE_MARKERS = new Set(["volume", "searchvolume", "keywordscore", "competinglistings", "totalviews"]);
 
 /** "1,234" → 1234 · "< 20" → 20 · "N/A"/"Unknown"/"" → null. Never 0 for absent. */
-function parseMetric(raw: string | undefined): number | null {
+export function parseMetric(raw: string | undefined): number | null {
   if (raw == null) return null;
   const cleaned = raw.replace(/[",$%\s]/g, "").replace(/^[<>~≈]+/, "");
   if (!cleaned || /^(na|n\/a|unknown|none|-)$/i.test(cleaned)) return null;
@@ -52,7 +52,7 @@ function parseMetric(raw: string | undefined): number | null {
 }
 
 /** Minimal quote-aware CSV: handles quoted fields, "" escapes, \r\n. */
-function parseCsvText(text: string): string[][] {
+export function parseCsvText(text: string): string[][] {
   const rows: string[][] = [];
   let field = "";
   let row: string[] = [];

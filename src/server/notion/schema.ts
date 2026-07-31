@@ -17,6 +17,7 @@
 import { GARMENT_COMPATIBILITY } from "@/config/design-prompt";
 import { CATEGORIES } from "@/config/product-categories";
 import { PIPELINE_TYPES, BLEND_MODES, FIT_MODES, SURFACE_TAGS } from "@/config/mockups";
+import { MOMENTUM_OPTIONS } from "@/config/momentum";
 
 export type PropType =
   | "title"
@@ -564,6 +565,13 @@ export const SCHEMA: DbSpec[] = [
       },
       "Bucket Manual Override": { type: "checkbox" },
       Seasonality: { type: "select", options: ["Evergreen", "Seasonal", "Unknown"] },
+      // Is this market selling NOW? Computed from listing-research CSV
+      // imports (Everbee Product Analytics / eRank listings) — a label
+      // BESIDE the bucket, never folded into it: buckets feed the publish
+      // gate, momentum is context. Detail JSON keeps the lifetime numbers
+      // so old data stays visible, just dated.
+      Momentum: { type: "select", options: [...MOMENTUM_OPTIONS] },
+      "Momentum Detail (JSON)": { type: "rich_text" },
       "Pulled At": { type: "date" },
       Source: { type: "select", options: ["eRank", "Everbee", "Manual"] },
       Notes: { type: "rich_text" },

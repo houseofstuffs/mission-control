@@ -11,6 +11,7 @@ import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import { isStaleKeyword } from "@/config/keywords";
+import { momentumTooltip, type MomentumDetail } from "@/server/listingCsv";
 import { Kicker } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,15 @@ function slotsData(listingId: string, isMultiVariant: boolean, compatibility: st
   return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
 }
 
+function momentumTitleFor(k: NonNullable<ReturnType<typeof cachedRecord>>): string | null {
+  try {
+    const detail = JSON.parse(String(k.props["Momentum Detail (JSON)"] ?? "")) as MomentumDetail;
+    return detail && typeof detail === "object" ? momentumTooltip(detail) : null;
+  } catch {
+    return null;
+  }
+}
+
 function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
   const listingId = rec.id;
   const all = cachedRecords("keywords");
@@ -110,6 +120,8 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
     tagEligible:
       typeof k.props["Tag Eligible"] === "boolean" ? k.props["Tag Eligible"] : k.title.length <= 20,
     stale: isStaleKeyword(typeof k.props["Pulled At"] === "string" ? k.props["Pulled At"] : null),
+    momentum: String(k.props["Momentum"] ?? "") || null,
+    momentumTitle: momentumTitleFor(k),
   }));
   const rowById = new Map(rows.map((r) => [r.id, r]));
   const attachedIds = new Set(

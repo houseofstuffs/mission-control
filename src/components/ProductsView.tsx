@@ -188,21 +188,22 @@ function ProductCard({
       ) : null}
       <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
         {p.technique ? <span className="chip count">{p.technique}</span> : null}
-        {/* the badge is now the door: it opens the voice editor, where the
-            boilerplate gets generated once and reused by every listing */}
+        {/* the chip is the door to the voice editor. Quiet (neutral, not
+            yellow) when unwritten — missing boilerplate matters at L2, where
+            the description gets stitched, not at product intake. */}
         <button
           type="button"
-          className={`chip ${p.hasVoiceText ? "done" : "stale"}`}
+          className={`chip ${p.hasVoiceText ? "done" : "neutral"}`}
           style={{ cursor: "pointer" }}
           disabled={busy}
           title={
             p.hasVoiceText
               ? "Edit the fit/fabric/care boilerplate every listing on this garment reuses"
-              : "Generate the fit/fabric/care boilerplate — once per product, reused by every listing"
+              : "Generate the fit/fabric/care boilerplate — once per product, reused by every listing. Only needed once a listing reaches L2."
           }
           onClick={onVoice}
         >
-          {p.hasVoiceText ? "voice written ✎" : "needs shop voice — write it"}
+          {p.hasVoiceText ? "voice written ✎" : "write shop voice"}
         </button>
         {!p.category ? <span className="chip stale">needs category</span> : null}
         {/* The dropdown exists only while the category is missing — new seeds

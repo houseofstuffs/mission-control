@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
-import { parseKeywordCsv } from "@/server/keywordCsv";
+import { cachedRecord, cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
+import { parseKeywordCsv, parseCsvText } from "@/server/keywordCsv";
+import { looksLikeListingCsv, parseListingCsv, momentumTooltip } from "@/server/listingCsv";
 import { keywordValues } from "@/server/keywords";
 import { computeBucket } from "@/config/keywords";
 import type { SimpleValue } from "@/server/notion/props";
@@ -19,11 +20,16 @@ export interface ImportConflict {
  * eRank/Everbee CSV import — the Phase 2 placeholder made real, writing
  * through the same shapes as manual entry (KeywordInput → keywordValues).
  *
- * Dedupe is by keyword TEXT (case-insensitive): a keyword that already
- * exists is attached to the listing, never duplicated. Metrics on an
- * existing row are only written when they fill a blank or match what's
- * there — a row whose numbers DISAGREE with the import comes back as a
- * conflict for the operator to resolve, never a silent overwrite.
+ * Two file kinds share this door, detected by header shape:
+ *   - KEYWORD exports (a Keyword column + metrics) → rows into the bank.
+ *     Dedupe is by keyword TEXT (case-insensitive): a keyword that already
+ *     exists is attached to the listing, never duplicated. Metrics on an
+ *     existing row are only written when they fill a blank or match what's
+ *     there — a row whose numbers DISAGREE comes back as a conflict for
+ *     the operator to resolve, never a silent overwrite.
+ *   - LISTING-RESEARCH exports (per-listing sales + age, no Keyword
+ *     column) → aggregated into a momentum read on ONE keyword; the
+ *     client supplies keywordId, or gets needsKeyword back and asks.
  */
 export async function POST(req: Request) {
   try {
@@ -32,6 +38,36 @@ export async function POST(req: Request) {
     const listingId = body.listingId ? String(body.listingId) : null;
     if (!csv.trim()) {
       return NextResponse.json({ error: "Empty file — export the keyword list as CSV first." }, { status: 400 });
+    }
+
+    const table = parseCsvText(csv);
+    if (table.length >= 1 && looksLikeListingCsv(table[0])) {
+      const parsed = parseListingCsv(csv);
+      if (!body.keywordId) {
+        // the export doesn't say which search it came from — ask
+        return NextResponse.json({
+          kind: "listing",
+          needsKeyword: true,
+          source: parsed.source,
+          listingCount: parsed.detail.listingCount,
+        });
+      }
+      const kw = cachedRecord(String(body.keywordId));
+      if (!kw || kw.dbKey !== "keywords") {
+        return NextResponse.json({ error: "Keyword not found in cache — refresh first" }, { status: 404 });
+      }
+      await updateRecord("keywords", kw.id, {
+        Momentum: parsed.momentum,
+        "Momentum Detail (JSON)": JSON.stringify(parsed.detail),
+      });
+      return NextResponse.json({
+        kind: "listing",
+        keyword: kw.title,
+        momentum: parsed.momentum,
+        tooltip: momentumTooltip(parsed.detail),
+        listingCount: parsed.detail.listingCount,
+        source: parsed.source,
+      });
     }
 
     const parsed = parseKeywordCsv(csv);
@@ -116,6 +152,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
+      kind: "keywords",
       source: parsed.source,
       total: parsed.rows.length,
       created,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
+import { reconcileListingNames } from "@/server/listingNames";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -148,6 +149,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
     const record = await updateRecord("designs", id, values);
+    // renaming the design carries its formulaic listing names along —
+    // "{design} — {product}" prefixes follow; hand-renamed listings don't
+    if (values["Name"] !== undefined) {
+      await reconcileListingNames();
+    }
     return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

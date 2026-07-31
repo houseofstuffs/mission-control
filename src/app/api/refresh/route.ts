@@ -3,6 +3,7 @@ import { refreshAll, refreshDb } from "@/server/notion/store";
 import { DB_KEYS } from "@/server/notion/schema";
 import { getDbId } from "@/server/cache/db";
 import { reconcileKeywordBuckets } from "@/server/keywords";
+import { reconcileListingNames } from "@/server/listingNames";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +18,16 @@ export async function POST(req: Request) {
       }
       const count = await refreshDb(db);
       if (db === "keywords") await reconcileKeywordBuckets();
+      // design renames made in Notion (or before this reconcile existed)
+      // catch up with their formulaic listing names here
+      if (db === "designs" || db === "etsy_listings") await reconcileListingNames();
       return NextResponse.json({ refreshed: { [db]: count } });
     }
     const counts = await refreshAll();
     // compute-on-refresh: rows edited straight in Notion (or imported) get
     // bucketed here; manual overrides are skipped inside
     if (getDbId("keywords")) await reconcileKeywordBuckets();
+    if (getDbId("etsy_listings")) await reconcileListingNames();
     return NextResponse.json({ refreshed: counts });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

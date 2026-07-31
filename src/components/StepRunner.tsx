@@ -13,7 +13,7 @@ import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workf
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
-import { KeywordSeoPanel, type SeoData } from "./KeywordSeoPanel";
+import { KeywordSeoPanel, AttachedKeywordsRail, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
@@ -339,6 +339,11 @@ export function StepRunner({
               ))
             )}
           </div>
+          {/* L2's registry rides under the gates — what's on the record,
+              with a minimal ✕; the working surface stays in the left column */}
+          {record.workflowKey === "listing" && selected.id === "L2" && seo ? (
+            <AttachedKeywordsRail seo={seo} />
+          ) : null}
           <div className="card supporting">
             <Kicker>PROGRESS</Kicker>
             <div className="body-sm">

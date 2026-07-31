@@ -161,24 +161,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     Array<{ fileName: string; csv: string; source: string; listingCount: number }>
   >([]);
 
-  // quick add form
-  const [kw, setKw] = useState("");
-  const [searches, setSearches] = useState("");
-  const [clicks, setClicks] = useState("");
-  const [competition, setCompetition] = useState("");
-  const [seasonality, setSeasonality] = useState("Unknown");
-  const [source, setSource] = useState("Manual");
-
-  const groups = BUCKETS.map((b: Bucket) => ({
-    bucket: b,
-    items: seo.attached.filter((k) => (k.bucket || "Unknown") === b).slice().sort(keywordRank),
-  })).filter((g) => g.items.length > 0);
-  // Dead and unmeasured aren't tag candidates — parked out of sight, one
-  // toggle away. Nothing is hidden from the record, just from the sift.
-  const mainGroups = groups.filter((g) => g.bucket !== "Dead" && g.bucket !== "Unknown");
-  const parkedGroups = groups.filter((g) => g.bucket === "Dead" || g.bucket === "Unknown");
-  const parkedCount = parkedGroups.reduce((n, g) => n + g.items.length, 0);
-  const [showParked, setShowParked] = useState(false);
   const [showAllInherited, setShowAllInherited] = useState(false);
   const [showBody, setShowBody] = useState(false);
   // per-listing body edits — this listing's Body Copy only, the product's
@@ -196,24 +178,32 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const inTagList = (name: string) => tags.some((t) => t.toLowerCase() === name.toLowerCase());
   const mixCount = (bucket: string) => tags.filter((t) => bucketOf(t) === bucket).length;
 
+  // The candidate pool: Design-inherited keywords AND attached-but-untagged
+  // ones (imports land attached — this is their path into the tag list).
+  const pool: Array<KeywordRow & { attached: boolean }> = [
+    ...seo.inherited.map((k) => ({ ...k, attached: false })),
+    ...seo.attached.filter((k) => !inTagList(k.name)).map((k) => ({ ...k, attached: true })),
+  ];
   // The recommendation cut: only buckets worth tagging, ranked (momentum,
   // then volume), capped at the ROOM LEFT toward each bucket's target given
   // what's already in the tag list — so the shortlist shrinks live as picks
   // land. Dead/unmeasured never recommend; "show all" still has everything.
-  const recommendedInherited: KeywordRow[] = [];
+  const recommendedInherited: Array<KeywordRow & { attached: boolean }> = [];
   for (const bucket of ["Visibility", "Reach", "Best Seller"]) {
     const room = Math.max(0, (TAG_TARGETS[bucket] ?? 0) - mixCount(bucket));
     if (room === 0) continue;
     recommendedInherited.push(
-      ...seo.inherited.filter((k) => k.bucket === bucket).sort(keywordRank).slice(0, room)
+      ...pool.filter((k) => k.bucket === bucket && k.tagEligible).sort(keywordRank).slice(0, room)
     );
   }
   const inheritedShown = showAllInherited
-    ? BUCKETS.flatMap((b) => seo.inherited.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
+    ? BUCKETS.flatMap((b) => pool.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
     : recommendedInherited;
 
+  // No hard stop at 13 — over-filling while sifting is normal; the counter
+  // warns and the publish gate still requires exactly 13 at L6.
   function addTag(name: string) {
-    if (inTagList(name) || tags.length >= TAG_COUNT) return;
+    if (inTagList(name)) return;
     setDirty(true);
     setTags((cur) => [...cur, name]);
   }
@@ -221,12 +211,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setDirty(true);
     setTags((cur) => cur.filter((t) => t.toLowerCase() !== name.toLowerCase()));
   }
-  function toggleTag(k: KeywordRow) {
-    if (!k.tagEligible) return; // Etsy hard cap — never a tag
-    if (inTagList(k.name)) removeTag(k.name);
-    else addTag(k.name);
-  }
-
   async function call(label: string, url: string, method: string, body: unknown) {
     setBusy(label);
     setError(null);
@@ -242,10 +226,13 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     if (ok) setDirty(false);
   }
 
-  /** attach a Design-inherited keyword: relation now, into the tag list if it fits */
-  async function attachInherited(k: KeywordRow) {
-    const ok = await call("attach", `/api/keywords/${k.id}`, "PATCH", { attachListingId: seo.listingId });
-    if (ok && k.tagEligible) addTag(k.name);
+  /** pick a candidate: attach the relation if it isn't yet, into the tag list if eligible */
+  async function pickKeyword(k: KeywordRow & { attached: boolean }) {
+    if (!k.attached) {
+      const ok = await call("attach", `/api/keywords/${k.id}`, "PATCH", { attachListingId: seo.listingId });
+      if (!ok) return;
+    }
+    if (k.tagEligible) addTag(k.name);
   }
 
   /** several files at once is normal — 3 searches × 2 platforms = 6 CSVs.
@@ -392,6 +379,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       <div className="well">
         <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
           <Kicker>TAGS · {tags.length}/{TAG_COUNT}</Kicker>
+          {tags.length > TAG_COUNT ? (
+            <span className="chip stale">
+              {tags.length - TAG_COUNT} over the {TAG_COUNT}-tag limit — trim before publish
+            </span>
+          ) : null}
           <span className="hint">target {TARGET_MIX} — guidance, not a rule</span>
           <span style={{ marginLeft: "auto" }}>
             <TagMixTally tags={tags} bucketOf={bucketOf} />
@@ -424,46 +416,45 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
 
       {/* inherited from the Design — keyword work already done upstream,
           pre-populated here instead of retyped */}
-      {seo.inherited.length > 0 ? (
+      {pool.length > 0 ? (
         <div className="field">
           <span className="kicker">
             {showAllInherited
-              ? `FROM THIS DESIGN — ALL · ${seo.inherited.length}`
-              : `FROM THIS DESIGN — RECOMMENDED · ${recommendedInherited.length}`}
+              ? `KEYWORD CANDIDATES — ALL · ${pool.length}`
+              : `RECOMMENDED TAGS · ${recommendedInherited.length}`}
           </span>
           <span className="hint">
             {showAllInherited
-              ? "Everything related to this Design, best first. Dead and unmeasured included down here."
-              : "Best picks toward the target mix — ranked by momentum, then volume. The shortlist shrinks as your tag list fills. Tap to attach; eligible ones join the tags."}
+              ? "Everything from this Design and your imports, best first — dead and unmeasured included down here."
+              : "Best picks toward the target mix from this Design and your imports — ranked by momentum, then volume. The shortlist shrinks as your tag list fills. Tap to add."}
           </span>
           {!showAllInherited && recommendedInherited.length === 0 ? (
             <span className="hint">Tag targets covered for every bucket — nothing more to recommend.</span>
           ) : null}
-          <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+          {/* two columns — the candidate names are short enough to pair up */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
             {inheritedShown.map((k) => (
               <button
                 key={k.id}
                 type="button"
                 className="chip neutral"
-                style={{ cursor: "pointer" }}
+                style={{ cursor: "pointer", textAlign: "left" }}
                 disabled={busy !== null}
                 title={`${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}`}
-                onClick={() => attachInherited(k)}
+                onClick={() => pickKeyword(k)}
               >
                 + {k.name} · {(k.bucket || "unknown").toLowerCase()}
                 {k.momentum === "Selling now" ? " 🔥" : ""}
               </button>
             ))}
           </div>
-          {seo.inherited.length > recommendedInherited.length ? (
+          {pool.length > recommendedInherited.length ? (
             <button
               className="btn btn-tertiary"
               style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
               onClick={() => setShowAllInherited((v) => !v)}
             >
-              {showAllInherited
-                ? "Show recommended only"
-                : `Show all ${seo.inherited.length}`}
+              {showAllInherited ? "Show recommended only" : `Show all ${pool.length}`}
             </button>
           ) : null}
         </div>
@@ -635,8 +626,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                     <button
                       type="button"
                       className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
-                      style={{ cursor: tags.length >= TAG_COUNT ? "not-allowed" : "pointer" }}
-                      disabled={busy !== null || tags.length >= TAG_COUNT}
+                      style={{ cursor: "pointer" }}
+                      disabled={busy !== null}
                       title={bucket ? `${bucket} — from the keyword bank` : "new phrase — not in the keyword bank, no metrics yet"}
                       onClick={() => addTag(t)}
                     >
@@ -819,76 +810,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         )}
       </div>
 
-      {/* attached keywords, grouped by bucket — Dead/unmeasured parked below */}
-      {seo.attached.length === 0 ? (
-        <div className="hint">No keywords attached yet — add one below or attach an existing one.</div>
-      ) : (
-        [...mainGroups, ...(showParked ? parkedGroups : [])].map((g) => (
-          <div key={g.bucket} className="field">
-            <span className="kicker">{g.bucket.toUpperCase()} · {g.items.length}</span>
-            <div className="stack-12">
-              {g.items.map((k) => {
-                const inTags = inTagList(k.name);
-                return (
-                  <div key={k.id} className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
-                    {k.tagEligible ? (
-                      <button
-                        type="button"
-                        className={`btn ${inTags ? "btn-secondary" : "btn-tertiary"}`}
-                        style={{ fontSize: 12, padding: "5px 11px" }}
-                        onClick={() => toggleTag(k)}
-                        disabled={busy !== null}
-                        title={inTags ? "Remove from tags" : "Add to tags"}
-                      >
-                        {inTags ? "✓ " : ""}{k.name}
-                      </button>
-                    ) : (
-                      <>
-                        <span className="body-sm" style={{ fontWeight: 700 }}>{k.name}</span>
-                        {/* over Etsy's 20-char tag cap — usable in the title only */}
-                        <span className="chip neutral">title-only</span>
-                      </>
-                    )}
-                    <span className="hint">
-                      {fmt(k.avgSearches)} searches · {fmt(k.competition)} comp
-                    </span>
-                    {/* market momentum — context beside the bucket, not part of it */}
-                    {k.momentum && MOMENTUM_CHIP[k.momentum] ? (
-                      <span className={`chip ${MOMENTUM_CHIP[k.momentum]}`} title={k.momentumTitle ?? undefined}>
-                        {k.momentum.toLowerCase()}
-                      </span>
-                    ) : null}
-                    {k.stale ? <span className="chip stale">stale numbers</span> : null}
-                    <button
-                      type="button"
-                      className="btn btn-tertiary"
-                      style={{ fontSize: 11, padding: "3px 8px" }}
-                      disabled={busy !== null}
-                      onClick={() =>
-                        call("detach", `/api/keywords/${k.id}`, "PATCH", { detachListingId: seo.listingId })
-                      }
-                    >
-                      detach
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))
-      )}
-
-      {/* parked: attached but not worth the sift — dead volume or no numbers */}
-      {parkedCount > 0 ? (
-        <button
-          className="btn btn-tertiary"
-          style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
-          onClick={() => setShowParked((v) => !v)}
-        >
-          {showParked ? "Hide" : "Show"} {parkedCount} dead / unmeasured keyword{parkedCount === 1 ? "" : "s"}
-        </button>
-      ) : null}
-
       {/* attach an existing keyword */}
       {seo.available.length > 0 ? (
         <div className="field">
@@ -915,72 +836,108 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         </div>
       ) : null}
 
-      {/* manual entry — the one-off path, same API the importer writes through */}
-      <div className="field">
-        <span className="kicker">ADD A KEYWORD (MANUAL)</span>
-        <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
-          <div className="field" style={{ flex: "1 1 180px" }}>
-            <label className="kicker" htmlFor="kw-new">KEYWORD</label>
-            <input id="kw-new" className="input" value={kw} onChange={(e) => setKw(e.target.value)} />
-          </div>
-          <div className="field" style={{ width: 110 }}>
-            <label className="kicker" htmlFor="kw-s">AVG SEARCHES</label>
-            <input id="kw-s" type="number" className="input" value={searches} onChange={(e) => setSearches(e.target.value)} />
-          </div>
-          <div className="field" style={{ width: 100 }}>
-            <label className="kicker" htmlFor="kw-c">AVG CLICKS</label>
-            <input id="kw-c" type="number" className="input" value={clicks} onChange={(e) => setClicks(e.target.value)} />
-          </div>
-          <div className="field" style={{ width: 120 }}>
-            <label className="kicker" htmlFor="kw-comp">COMPETITION</label>
-            <input id="kw-comp" type="number" className="input" value={competition} onChange={(e) => setCompetition(e.target.value)} />
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="kw-season">SEASONALITY</label>
-            <select id="kw-season" className="select" value={seasonality} onChange={(e) => setSeasonality(e.target.value)}>
-              <option>Evergreen</option>
-              <option>Seasonal</option>
-              <option>Unknown</option>
-            </select>
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="kw-src">SOURCE</label>
-            <select id="kw-src" className="select" value={source} onChange={(e) => setSource(e.target.value)}>
-              <option>Manual</option>
-              <option>eRank</option>
-              <option>Everbee</option>
-            </select>
-          </div>
+    </div>
+  );
+}
+
+/**
+ * The attached-keywords registry — a thin rail box under the publish gates.
+ * Reading and pruning only: the working surface (recommendations, tags,
+ * imports) lives in the main panel; this answers "what's on the record"
+ * with a minimal ✕ to detach. Dead/unmeasured stay collapsed behind their
+ * count — CSV imports attach everything, and nobody sifts 900 dead rows.
+ */
+export function AttachedKeywordsRail({ seo }: { seo: SeoData }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showParked, setShowParked] = useState(false);
+  const PARKED_RENDER_CAP = 100;
+
+  const main = seo.attached
+    .filter((k) => k.bucket !== "Dead" && k.bucket !== "Unknown")
+    .slice()
+    .sort(
+      (a, b) =>
+        BUCKETS.indexOf((a.bucket || "Unknown") as Bucket) -
+          BUCKETS.indexOf((b.bucket || "Unknown") as Bucket) || keywordRank(a, b)
+    );
+  const parked = seo.attached
+    .filter((k) => k.bucket === "Dead" || k.bucket === "Unknown")
+    .slice()
+    .sort(keywordRank);
+
+  async function detach(k: KeywordRow) {
+    setBusy(k.id);
+    setError(null);
+    const res = await apiJson(`/api/keywords/${k.id}`, "PATCH", { detachListingId: seo.listingId });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(null);
+  }
+
+  const SHORT_BUCKET: Record<string, string> = {
+    Visibility: "vis",
+    Reach: "reach",
+    "Best Seller": "best",
+    Unknown: "?",
+    Dead: "dead",
+  };
+
+  const row = (k: KeywordRow) => (
+    <div key={k.id} className="row-gap-8" style={{ alignItems: "center" }}>
+      <span
+        className={`chip ${BUCKET_CHIP[k.bucket] ?? "neutral"}`}
+        style={{ flex: "0 0 auto" }}
+        title={`${k.bucket || "Unknown"} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentumTitle ? ` · ${k.momentumTitle}` : ""}`}
+      >
+        {SHORT_BUCKET[k.bucket] ?? "?"}
+      </span>
+      <span className="body-sm" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={k.name}>
+        {k.name}
+        {k.momentum === "Selling now" ? " 🔥" : ""}
+      </span>
+      <button
+        type="button"
+        aria-label={`Detach ${k.name}`}
+        title="Detach from this listing"
+        disabled={busy !== null}
+        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "2px 4px", flex: "0 0 auto" }}
+        onClick={() => detach(k)}
+      >
+        {busy === k.id ? <span className="spinner" /> : "✕"}
+      </button>
+    </div>
+  );
+
+  return (
+    <div className="gate-panel">
+      <div className="panel-title">Attached keywords · {seo.attached.length}</div>
+      {error ? <div className="field-error">{error}</div> : null}
+      {main.length === 0 ? (
+        <div className="hint">Nothing measured attached yet — pick from the recommendations.</div>
+      ) : (
+        <div className="stack-12" style={{ gap: 6 }}>{main.map(row)}</div>
+      )}
+      {parked.length > 0 ? (
+        <>
           <button
-            className="btn btn-primary"
-            disabled={busy !== null || !kw.trim()}
-            onClick={async () => {
-              const ok = await call("add", "/api/keywords", "POST", {
-                keyword: kw.trim(),
-                avgSearches: searches,
-                avgClicks: clicks,
-                etsyCompetition: competition,
-                seasonality,
-                source,
-                listingId: seo.listingId,
-              });
-              if (ok) {
-                setKw("");
-                setSearches("");
-                setClicks("");
-                setCompetition("");
-              }
-            }}
+            className="btn btn-tertiary"
+            style={{ fontSize: 11, padding: "3px 8px", alignSelf: "flex-start", marginTop: 8 }}
+            onClick={() => setShowParked((v) => !v)}
           >
-            {busy === "add" ? <span className="spinner" /> : null}
-            Add + attach
+            {showParked ? "Hide" : "Show"} {parked.length} dead / unmeasured
           </button>
-        </div>
-        <span className="hint">
-          Bucket is computed from searches × competition. Leave numbers empty if you don&apos;t have
-          them — the keyword lands in Unknown, never a guessed bucket.
-        </span>
-      </div>
+          {showParked ? (
+            <div className="stack-12" style={{ gap: 6, marginTop: 6 }}>
+              {parked.slice(0, PARKED_RENDER_CAP).map(row)}
+              {parked.length > PARKED_RENDER_CAP ? (
+                <span className="hint">…and {parked.length - PARKED_RENDER_CAP} more — detach in Notion if you need a bulk prune.</span>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

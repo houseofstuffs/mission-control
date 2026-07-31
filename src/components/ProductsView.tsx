@@ -6,7 +6,7 @@
  * (system of record) then mirrors into the cache; the master-canvas math is
  * computed at seed time from real placeholder pixel dimensions.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiCall, apiJson } from "@/lib/api";
 import { Kicker } from "./ui";
@@ -203,7 +203,7 @@ function ProductCard({
           }
           onClick={onVoice}
         >
-          {p.hasVoiceText ? "voice written ✎" : "write shop voice"}
+          {p.hasVoiceText ? "edit shop voice ✎" : "write shop voice"}
         </button>
         {!p.category ? <span className="chip stale">needs category</span> : null}
         {/* The dropdown exists only while the category is missing — new seeds
@@ -299,16 +299,41 @@ export function ProductsView({
   // the voice editor — one modal, whichever card opened it
   const [voiceFor, setVoiceFor] = useState<ProductCardData | null>(null);
   const [voiceDraft, setVoiceDraft] = useState("");
+  // the last PERSISTED text — dirtiness is measured against this, and
+  // generation auto-saves into it so an accidental close loses nothing
+  const [voiceSaved, setVoiceSaved] = useState("");
   const [voiceNotes, setVoiceNotes] = useState<string | null>(null);
   const [voiceBusy, setVoiceBusy] = useState<"generate" | "save" | null>(null);
+  const voiceArea = useRef<HTMLTextAreaElement>(null);
+  const voiceDirty = voiceDraft !== voiceSaved;
+
+  // height follows the text: fit the whole draft plus ~2 rows of editing
+  // room, capped so long boilerplate scrolls inside instead of pushing the
+  // save button off screen
+  useEffect(() => {
+    const el = voiceArea.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight + 48, Math.round(window.innerHeight * 0.55))}px`;
+  }, [voiceDraft, voiceFor]);
 
   function openVoice(p: ProductCardData) {
     setVoiceFor(p);
     setVoiceDraft(p.voiceText);
+    setVoiceSaved(p.voiceText);
     setVoiceNotes(null);
     setError(null);
   }
 
+  function closeVoice(force = false) {
+    if (voiceBusy !== null) return;
+    if (voiceDirty && !force) return; // scrim clicks can't eat unsaved edits
+    setVoiceFor(null);
+  }
+
+  /** generate AND persist in one motion — the draft is real the moment it
+   *  exists, so closing the window can never lose a generation again.
+   *  Edits after that save with the button. */
   async function generateVoice() {
     if (!voiceFor) return;
     setVoiceBusy("generate");
@@ -317,10 +342,21 @@ export function ProductsView({
       `/api/products/${voiceFor.id}/generate-voice`,
       { method: "POST" }
     );
-    if (!res.ok) setError(res.error);
-    else {
-      setVoiceDraft(res.data.draft ?? "");
-      setVoiceNotes(res.data.notes || null);
+    if (!res.ok) {
+      setError(res.error);
+      setVoiceBusy(null);
+      return;
+    }
+    const draft = (res.data.draft ?? "").trim();
+    setVoiceDraft(draft);
+    setVoiceNotes(res.data.notes || null);
+    const save = await apiJson(`/api/products/${voiceFor.id}`, "PATCH", { shopVoiceText: draft });
+    if (!save.ok) {
+      setError(`Generated but not saved yet — ${save.error}. Use the save button.`);
+    } else {
+      setVoiceSaved(draft);
+      setVoiceNotes((n) => [n, "Saved automatically — edits below save with the button."].filter(Boolean).join(" "));
+      router.refresh();
     }
     setVoiceBusy(null);
   }
@@ -531,8 +567,10 @@ export function ProductsView({
       ))}
 
       {voiceFor ? (
-        <div className="modal-scrim" onClick={() => voiceBusy === null && setVoiceFor(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+        // scrim clicks close only when nothing is unsaved — three lost
+        // generations taught us that lesson
+        <div className="modal-scrim" onClick={() => closeVoice()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 768 }}>
             <div className="card-title">
               {voiceFor.brandLine} {voiceFor.productLine}
             </div>
@@ -553,24 +591,35 @@ export function ProductsView({
               {voiceNotes ? <span className="hint">{voiceNotes}</span> : null}
             </div>
             <textarea
+              ref={voiceArea}
               className="input"
-              rows={12}
+              rows={6}
               value={voiceDraft}
               placeholder="Fabric, fit, sizing, care — true of this garment whatever's printed on it."
+              style={{ overflowY: "auto", resize: "vertical" }}
               onChange={(e) => setVoiceDraft(e.target.value)}
             />
-            <div className="row-gap-12">
+            <div className="row-gap-12" style={{ alignItems: "center" }}>
               <button
                 className="btn btn-primary"
                 onClick={saveVoice}
-                disabled={voiceBusy !== null || !voiceDraft.trim()}
+                disabled={voiceBusy !== null || !voiceDraft.trim() || !voiceDirty}
               >
                 {voiceBusy === "save" ? <span className="spinner" /> : null}
-                Save shop voice
+                {voiceSaved.trim() ? "Save edits" : "Save shop voice"}
               </button>
-              <button className="btn btn-tertiary" disabled={voiceBusy !== null} onClick={() => setVoiceFor(null)}>
-                Cancel
+              <button
+                className="btn btn-tertiary"
+                disabled={voiceBusy !== null}
+                onClick={() => {
+                  if (!voiceDirty || window.confirm("Discard unsaved edits? The last saved version stays on the product.")) {
+                    closeVoice(true);
+                  }
+                }}
+              >
+                {voiceDirty ? "Cancel" : "Close"}
               </button>
+              {voiceDirty ? <span className="hint">Unsaved edits</span> : voiceSaved.trim() ? <span className="hint">Saved</span> : null}
             </div>
           </div>
         </div>

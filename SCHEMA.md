@@ -24,7 +24,7 @@ Generated 2026-07-31 · 17 databases
 | 6 | `ideas` | Ideas | 14 |
 | 7 | `styles` | Styles | 16 |
 | 8 | `textures` | Textures | 7 |
-| 9 | `mockup_templates` | Mockup Templates | 15 |
+| 9 | `mockup_templates` | Mockup Templates | 16 |
 | 10 | `products` | Products | 31 |
 | 11 | `product_variants` | Product Variants | 10 |
 | 12 | `designs` | Designs | 42 |
@@ -207,6 +207,7 @@ Purchased or collected mockup templates. Usage and license tracked. Pipeline Typ
 | Highlight Layer | files |  |
 | Print Area Quad (JSON) | rich_text |  |
 | Blend Mode | select | Multiply · Normal |
+| Fit | select | Fit inside · Fill area |
 | Surface | select | Dark garment · Light garment · Any garment · Non-garment surface |
 | Shot Type | select | Artwork Only · Flat Lay · Flat Lay Styled · On Model · Ghost Mannequin · Hanging · Folded · Closeup Print · Closeup Fabric · Lifestyle Scene · Grid Composite · Graphic Card · Video |
 | Notes | rich_text |  |

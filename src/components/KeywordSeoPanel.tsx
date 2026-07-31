@@ -180,7 +180,7 @@ interface CopyDraft {
 export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const router = useRouter();
   // tier 2 is shared with the SelectedTagsRail on the right — one state
-  const { tags, setTags, setDirty } = useTagSelection();
+  const { tags, setTags, dirty, setDirty } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -434,16 +434,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   async function generate() {
     setBusy("generate");
     setError(null);
-    // the toggled selection drives generation: current tags, plus attached
-    // title-only keywords (they can't be tags but should shape the title)
-    const toggled = [
-      ...tags,
-      ...seo.attached.filter((k) => !k.tagEligible).map((k) => k.name),
-    ];
+    // the server reads the SAVED tags off the record — the locked-in
+    // keyword decision, not the mid-edit selection
     const res = await apiJson<{ draft: CopyDraft }>(
       `/api/listings/${seo.listingId}/generate-copy`,
       "POST",
-      { keywords: [...new Set(toggled.map((t) => t.trim()))] }
+      {}
     );
     if (!res.ok) setError(res.error);
     else {
@@ -690,19 +686,37 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
           <Kicker>LISTING COPY</Kicker>
           {seo.aiReady ? (
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null || !seo.hasDesign}
-              title={seo.hasDesign ? undefined : "Attach a Design first — the draft needs its phrase and niche."}
-              onClick={generate}
-            >
-              <Spinner active={busy === "generate"} />
-              Generate draft copy
-            </button>
+            (() => {
+              // the title front-loads the LOCKED-IN keywords — generation
+              // waits for a saved, non-empty selection, never a mid-edit one
+              const tagsLocked = tags.length > 0 && !dirty;
+              const blocker = !seo.hasDesign
+                ? "Attach a Design first — the draft needs its phrase and niche."
+                : tags.length === 0
+                  ? "Pick your keywords first — the title is built from them."
+                  : dirty
+                    ? "Save the Selected tags first — the draft builds on your locked-in decision."
+                    : undefined;
+              return (
+                <button
+                  className="btn btn-secondary"
+                  disabled={busy !== null || !seo.hasDesign || !tagsLocked}
+                  title={blocker}
+                  onClick={generate}
+                >
+                  <Spinner active={busy === "generate"} />
+                  Generate draft copy
+                </button>
+              );
+            })()
           ) : (
             <span className="hint">Set ANTHROPIC_API_KEY to generate drafts.</span>
           )}
-          <span className="hint">Drafts only — nothing saves without its button.</span>
+          <span className="hint">
+            {tags.length > 0 && dirty
+              ? "Waiting on your keywords — save the Selected tags to unlock generation."
+              : "Drafts only — nothing saves without its button."}
+          </span>
         </div>
         {draftNotes ? <div className="hint" style={{ marginTop: 6 }}>{draftNotes}</div> : null}
 

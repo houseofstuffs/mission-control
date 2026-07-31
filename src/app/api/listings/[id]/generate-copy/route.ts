@@ -25,7 +25,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
     const { id } = await ctx.params;
-    const body = await req.json().catch(() => ({}));
+    await req.json().catch(() => ({}));
     const listing = cachedRecord(id);
     if (!listing || listing.dbKey !== "etsy_listings") {
       return NextResponse.json({ error: "Listing not found in cache — refresh first" }, { status: 404 });
@@ -46,17 +46,43 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const productId = ((listing.props["Product"] as string[] | null) ?? [])[0];
     const product = productId ? cachedRecord(productId) : null;
 
-    // toggled keyword names from the client → bucket data from the bank
-    const toggled: string[] = Array.isArray(body.keywords) ? body.keywords.map(String) : [];
-    const wanted = new Set(toggled.map((n) => n.trim().toLowerCase()));
-    const keywords = cachedRecords("keywords")
-      .filter((k) => wanted.has(k.title.trim().toLowerCase()))
-      .map((k) => ({
-        name: k.title,
-        bucket: String(k.props["Bucket"] ?? "Unknown"),
-        tagEligible:
-          typeof k.props["Tag Eligible"] === "boolean" ? k.props["Tag Eligible"] : k.title.length <= 20,
-      }));
+    // The keyword decision comes from the RECORD, not the request — the
+    // title front-loads the operator's locked-in keywords, so generation
+    // waits until the Selected tags are saved. Attached title-only
+    // keywords (>20 chars) ride along: they can't be tags but shape the
+    // title.
+    const savedTags = String(listing.props["Tags"] ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (savedTags.length === 0) {
+      return NextResponse.json(
+        { error: "Lock in your keywords first — save the Selected tags, then generate. The title is built to front-load your decision." },
+        { status: 400 }
+      );
+    }
+    const wanted = new Set(savedTags.map((n) => n.toLowerCase()));
+    const bank = cachedRecords("keywords");
+    const keywords = [
+      ...bank.filter((k) => wanted.has(k.title.trim().toLowerCase())),
+      ...bank.filter(
+        (k) =>
+          ((k.props["Etsy Listings"] as string[] | null) ?? []).includes(id) &&
+          !(typeof k.props["Tag Eligible"] === "boolean" ? k.props["Tag Eligible"] : k.title.length <= 20)
+      ),
+    ].map((k) => ({
+      name: k.title,
+      bucket: String(k.props["Bucket"] ?? "Unknown"),
+      tagEligible:
+        typeof k.props["Tag Eligible"] === "boolean" ? k.props["Tag Eligible"] : k.title.length <= 20,
+    }));
+    // saved tags that aren't bank records (hand-typed phrases) still count
+    const known = new Set(keywords.map((k) => k.name.trim().toLowerCase()));
+    for (const t of savedTags) {
+      if (!known.has(t.toLowerCase())) {
+        keywords.push({ name: t, bucket: "Unknown", tagEligible: t.length <= 20 });
+      }
+    }
 
     const draft = await draftListingCopy({
       designName: design.title,

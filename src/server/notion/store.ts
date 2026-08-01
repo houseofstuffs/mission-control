@@ -70,6 +70,21 @@ export async function refreshDb(dbKey: string): Promise<number> {
   return records.length;
 }
 
+/**
+ * Refresh ONE record from Notion — used to mint fresh signed file URLs
+ * right before a render, without paying for a whole-database refresh.
+ * Notion's file links expire roughly an hour after the page was last
+ * fetched, so an action that reads files (mockup render) needs one on
+ * demand rather than waiting for the operator to notice and hit Refresh.
+ */
+export async function refreshRecord(dbKey: string, pageId: string): Promise<SimpleRecord> {
+  const spec = fullSpec(dbKey);
+  const page: any = await throttled(() => notion().pages.retrieve({ page_id: pageId }));
+  const rec = fromNotionPage(spec, page);
+  upsertRecord(rec);
+  return rec;
+}
+
 export async function refreshAll(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const db of SCHEMA) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { cachedRecord } from "@/server/notion/store";
+import { cachedRecord, refreshRecord } from "@/server/notion/store";
+import type { SimpleRecord } from "@/server/notion/props";
 import { renderMockup } from "@/server/mockup/render";
 import { parseQuad, DEFAULT_BLEND, DEFAULT_FIT, type PipelineType, type BlendMode, type FitMode } from "@/config/mockups";
 
@@ -18,20 +19,32 @@ function firstFileUrl(v: unknown): string | null {
   return url || null;
 }
 
+class LayerExpiredError extends Error {}
+
 async function fetchLayer(url: string | null, label: string): Promise<Buffer | null> {
   if (!url) return null;
   const res = await fetch(url);
   if (!res.ok) {
-    // Notion file URLs expire about an hour after a sync
-    throw new Error(`Couldn't fetch the ${label} (${res.status}) — hit Refresh and try again.`);
+    // Notion file URLs expire about an hour after a sync — the caller
+    // gets one chance to re-mint them before this becomes a real error.
+    throw new LayerExpiredError(`Couldn't fetch the ${label} (${res.status}).`);
   }
   return Buffer.from(await res.arrayBuffer());
+}
+
+/** Every layer for one attempt — thrown LayerExpiredError signals "refetch the record and retry". */
+async function fetchLayers(template: SimpleRecord) {
+  const base = await fetchLayer(firstFileUrl(template.props["Base Image"]), "base image");
+  const displacement = await fetchLayer(firstFileUrl(template.props["Displacement Map"]), "displacement map");
+  const shadow = await fetchLayer(firstFileUrl(template.props["Shadow Layer"]), "shadow layer");
+  const highlight = await fetchLayer(firstFileUrl(template.props["Highlight Layer"]), "highlight layer");
+  return { base, displacement, shadow, highlight };
 }
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const template = cachedRecord(id);
+    let template = cachedRecord(id);
     if (!template || template.dbKey !== "mockup_templates") {
       return NextResponse.json({ error: "Template not found in cache — refresh first" }, { status: 404 });
     }
@@ -53,8 +66,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
-    const base = await fetchLayer(firstFileUrl(template.props["Base Image"]), "base image");
-    if (!base) {
+    // Notion's signed file URLs go stale roughly an hour after the record
+    // was last fetched. Rather than making the operator notice a 403 and
+    // hit Refresh by hand, re-fetch this ONE record from Notion (fresh
+    // URLs) and retry once before surfacing anything.
+    let layers;
+    try {
+      layers = await fetchLayers(template);
+    } catch (err) {
+      if (!(err instanceof LayerExpiredError)) throw err;
+      template = await refreshRecord("mockup_templates", id);
+      try {
+        layers = await fetchLayers(template);
+      } catch (err2) {
+        const msg = err2 instanceof LayerExpiredError ? err2.message : (err2 as Error).message;
+        return NextResponse.json(
+          { error: `${msg} Re-uploading the file on this template would fix it for good.` },
+          { status: 502 }
+        );
+      }
+    }
+    if (!layers.base) {
       return NextResponse.json({ error: "This template has no base image." }, { status: 400 });
     }
 
@@ -69,10 +101,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         fit: (String(template.props["Fit"] ?? "") || DEFAULT_FIT) as FitMode,
       },
       {
-        base,
-        displacement: await fetchLayer(firstFileUrl(template.props["Displacement Map"]), "displacement map"),
-        shadow: await fetchLayer(firstFileUrl(template.props["Shadow Layer"]), "shadow layer"),
-        highlight: await fetchLayer(firstFileUrl(template.props["Highlight Layer"]), "highlight layer"),
+        base: layers.base,
+        displacement: layers.displacement,
+        shadow: layers.shadow,
+        highlight: layers.highlight,
       },
       Buffer.from(await artwork.arrayBuffer()),
       typeof quadOverrideRaw === "string" && quadOverrideRaw ? parseQuad(quadOverrideRaw) : null,

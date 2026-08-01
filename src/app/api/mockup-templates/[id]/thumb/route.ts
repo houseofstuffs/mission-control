@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord } from "@/server/notion/store";
-import { thumbFor, ThumbSourceExpiredError, THUMB_HEADERS } from "@/server/thumb";
+import { thumbForFresh, ThumbSourceExpiredError, THUMB_HEADERS } from "@/server/thumb";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     const version = new URL(req.url).searchParams.get("v") ?? template.lastEdited;
-    const thumb = await thumbFor(template, "Base Image", version);
+    const thumb = await thumbForFresh("mockup_templates", template, "Base Image", version);
     return new NextResponse(new Uint8Array(thumb), { headers: THUMB_HEADERS });
   } catch (err) {
     const expired = err instanceof ThumbSourceExpiredError;

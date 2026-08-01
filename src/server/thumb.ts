@@ -48,6 +48,29 @@ export async function thumbFor(record: SimpleRecord, prop: string, version: stri
   return thumb;
 }
 
+/**
+ * Same as thumbFor, but self-heals an expired signed URL: one re-fetch of
+ * the record from Notion (fresh URL), one retry, before giving up. Notion's
+ * file links go stale roughly an hour after the record was last synced —
+ * this means the operator doesn't have to notice and hit Refresh by hand
+ * just to see a thumbnail again.
+ */
+export async function thumbForFresh(
+  dbKey: string,
+  record: SimpleRecord,
+  prop: string,
+  version: string
+): Promise<Buffer> {
+  try {
+    return await thumbFor(record, prop, version);
+  } catch (err) {
+    if (!(err instanceof ThumbSourceExpiredError)) throw err;
+    const { refreshRecord } = await import("@/server/notion/store");
+    const fresh = await refreshRecord(dbKey, record.id);
+    return thumbFor(fresh, prop, version);
+  }
+}
+
 /** Standard response headers: pin hard — the url changes when the file does. */
 export const THUMB_HEADERS = {
   "Content-Type": "image/webp",

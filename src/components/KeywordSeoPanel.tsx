@@ -212,6 +212,55 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setNotice("Swapped drafts — swap again to flip back. Save the one you're keeping.");
   }
 
+  // Unsaved drafts survive reloads and deploys: every keystroke snapshots
+  // to this browser's storage, and a fresh mount restores anything newer
+  // than what's saved on the record. Losing a good hook to a page refresh
+  // happened once too often to stay possible.
+  const draftKey = `stuffs-l2-draft-${seo.listingId}`;
+  const restoredDraft = useRef(false);
+  useEffect(() => {
+    if (restoredDraft.current) return;
+    restoredDraft.current = true;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      let restored = false;
+      if (typeof d.title === "string" && d.title && d.title !== seo.title) {
+        setTitle(d.title);
+        restored = true;
+      }
+      if (typeof d.hook === "string" && d.hook && d.hook !== seo.hook) {
+        setHook(d.hook);
+        restored = true;
+      }
+      if (
+        Array.isArray(d.attrs) &&
+        d.attrs.length > 0 &&
+        JSON.stringify(d.attrs) !== JSON.stringify(seo.attributes)
+      ) {
+        setAttrs(d.attrs);
+        restored = true;
+      }
+      if (Array.isArray(d.suggested) && d.suggested.length > 0) setSuggestedTags(d.suggested);
+      if (d.prevDraft) setPrevDraft(d.prevDraft);
+      if (restored) setNotice("Restored your unsaved draft from this browser — save what you're keeping.");
+    } catch {
+      /* corrupt snapshot — start clean */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({ title, hook, attrs, suggested: suggestedTags, prevDraft })
+      );
+    } catch {
+      /* storage blocked — drafts just aren't persisted */
+    }
+  }, [draftKey, title, hook, attrs, suggestedTags, prevDraft]);
+
   // CSV import
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -478,6 +527,15 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
 
   const titleWords = title.trim() ? title.trim().split(/\s+/).length : 0;
   const pendingSuggestions = suggestedTags.filter((t) => !inTagList(t));
+  const attrsDirty = JSON.stringify(attrs) !== JSON.stringify(seo.attributes);
+  // why Generate is locked, when it is — shown inline, not just on hover
+  const generateBlocker = !seo.hasDesign
+    ? "Attach a Design first — the draft needs its phrase and niche."
+    : tags.length === 0
+      ? "Pick your keywords first — the title is built from them."
+      : dirty
+        ? "Save the Selected tags first — the draft builds on your locked-in decision."
+        : null;
 
   return (
     <div className="card supporting">
@@ -708,35 +766,23 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
           <Kicker>LISTING COPY</Kicker>
           {seo.aiReady ? (
-            (() => {
-              // the title front-loads the LOCKED-IN keywords — generation
-              // waits for a saved, non-empty selection, never a mid-edit one
-              const tagsLocked = tags.length > 0 && !dirty;
-              const blocker = !seo.hasDesign
-                ? "Attach a Design first — the draft needs its phrase and niche."
-                : tags.length === 0
-                  ? "Pick your keywords first — the title is built from them."
-                  : dirty
-                    ? "Save the Selected tags first — the draft builds on your locked-in decision."
-                    : undefined;
-              return (
-                <button
-                  className="btn btn-secondary"
-                  disabled={busy !== null || !seo.hasDesign || !tagsLocked}
-                  title={blocker}
-                  onClick={generate}
-                >
-                  <Spinner active={busy === "generate"} />
-                  Generate draft copy
-                </button>
-              );
-            })()
+            // the title front-loads the LOCKED-IN keywords — generation
+            // waits for a saved, non-empty selection, never a mid-edit one
+            <button
+              className="btn btn-secondary"
+              disabled={busy !== null || generateBlocker !== null}
+              title={generateBlocker ?? undefined}
+              onClick={generate}
+            >
+              <Spinner active={busy === "generate"} />
+              Generate draft copy
+            </button>
           ) : (
             <span className="hint">Set ANTHROPIC_API_KEY to generate drafts.</span>
           )}
           <span className="hint">
-            {tags.length > 0 && dirty
-              ? "Waiting on your keywords — save the Selected tags to unlock generation."
+            {generateBlocker
+              ? `Locked: ${generateBlocker}`
               : "Drafts only — nothing saves without its button."}
           </span>
         </div>
@@ -874,14 +920,23 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             >
               + Add attribute
             </button>
+            {/* an empty save over saved attributes is a CLEAR — named and
+                confirmed, never the default behavior of the same button */}
             <button
               className="btn btn-secondary"
-              disabled={busy !== null}
-              onClick={() => call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs })}
+              disabled={busy !== null || !attrsDirty}
+              onClick={() => {
+                const clearing = attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0;
+                if (clearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
+                call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
+              }}
             >
               {busy === "attrs" ? <span className="spinner" /> : null}
-              Save attributes
+              {attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0
+                ? "Clear saved attributes"
+                : "Save attributes"}
             </button>
+            {attrsDirty ? <span className="hint">Unsaved</span> : null}
           </div>
         </div>
       </div>

@@ -71,7 +71,7 @@ const DRAFT_SCHEMA = {
         additionalProperties: false,
       },
       description:
-        "Etsy attribute suggestions that genuinely apply (Occasion, Holiday, Recipient, Style...). Only ones defensible from the design and niche — an empty array beats a stretch.",
+        "Etsy attribute suggestions that genuinely apply (Occasion, Holiday, Recipient, Style...). Only ones defensible from the design and niche — an empty array beats a stretch. Occasion and Holiday are DISTINCT Etsy attributes: for a seasonal design both may carry the same holiday, and that is correct, not a duplicate.",
     },
     notes: {
       type: "string",

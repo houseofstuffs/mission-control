@@ -425,6 +425,21 @@ a:hover { color: var(--candy); }
 .step.selected .step-label { font-weight: 700; color: var(--blueberry); }
 .step-icon .refresh-glyph { width: 14px; height: 14px; }
 
+/* numbered section badge — the L2 redesign's card headers */
+.section-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-panel-accent);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
 /* ---------- step runner grid ---------- */
 
 .runner-grid { display: grid; grid-template-columns: 1fr 320px; gap: 22px; align-items: start; }

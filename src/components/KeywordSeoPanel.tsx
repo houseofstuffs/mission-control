@@ -1,28 +1,27 @@
 "use client";
 
 /**
- * L2 SEO panel — the listing-writing workbench.
+ * L2 — the listing-writing workbench, in the approved numbered-section
+ * layout: ① CSV import ② shortlist ③ title ④ attributes ⑤ description.
+ * The page shell (breadcrumb, step rail, publish gates) is untouched —
+ * this file owns only the center column and the Selected-tags rail.
  *
- * Four ways keywords arrive, one selection they land in:
- *   1. inherited from the Design (attached during the C-series — shown
- *      pre-populated, toggle to attach, never retyped)
- *   2. eRank/Everbee CSV import (same bucket computation, conflicts
- *      surfaced for review, never silently overwritten)
- *   3. AI tag suggestions (drafts — accepted/rejected per chip)
- *   4. manual one-off entry (the original path, still here)
+ * Save-state has ONE consistent surface: each section header shows an
+ * UNSAVED chip while it holds unsaved changes, and the chip clearing IS
+ * the save confirmation (writes are write-through to Notion; failures
+ * surface in the red callout, never silently).
  *
- * The bucket tally and the 13-tag counter read the ONE selection state, so
- * they update live no matter which door a tag came through. AI output is
- * always a draft: title, hook, tags and attributes render editable and
- * nothing persists until its own explicit save.
+ * The three keyword tiers: the full pool (design-linked research +
+ * legacy attachments), the bucket-balanced shortlist cut from it, and
+ * the Selected working set (shared state with the rail). ✕ on a selected
+ * tag returns it to the shortlist — it never deletes the keyword.
  */
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Kicker, Spinner } from "./ui";
-import { CopyIconButton } from "./CopyIconButton";
+import { Spinner } from "./ui";
 import { apiJson } from "@/lib/api";
-import { BUCKETS, TAG_COUNT, TAG_MAX_CHARS, TARGET_MIX, type Bucket } from "@/config/keywords";
+import { BUCKETS, TAG_COUNT, TAG_MAX_CHARS, type Bucket } from "@/config/keywords";
 
 export interface KeywordRow {
   id: string;
@@ -72,13 +71,6 @@ const BUCKET_CHIP: Record<string, string> = {
   "Best Seller": "neutral",
   Unknown: "neutral",
   Dead: "blocked",
-};
-
-/** momentum chip styling — selling now reads good, legacy reads caution */
-const MOMENTUM_CHIP: Record<string, string> = {
-  "Selling now": "done",
-  Steady: "count",
-  Legacy: "stale",
 };
 
 /**
@@ -135,22 +127,36 @@ function fmt(n: number | null): string {
 }
 
 /**
- * The live bucket tally — one selection in, three counts out. Reusable on
- * purpose: every flow that edits the tag selection shows the same counter.
+ * A numbered section card — module-level on purpose: defining it inside
+ * the panel would mint a new component type every render and remount the
+ * children, dropping input focus mid-keystroke.
  */
-export function TagMixTally({
-  tags,
-  bucketOf,
+function Section({
+  n,
+  title,
+  right,
+  children,
 }: {
-  tags: string[];
-  bucketOf: (tag: string) => string | null;
+  n: number;
+  title: ReactNode;
+  right?: ReactNode;
+  children: ReactNode;
 }) {
-  const count = (bucket: string) => tags.filter((t) => bucketOf(t) === bucket).length;
   return (
-    <span className="hint">
-      now: {count("Visibility")} vis · {count("Reach")} reach · {count("Best Seller")} best
-    </span>
+    <div className="card supporting">
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <span className="section-num">{n}</span>
+        <span style={{ fontWeight: 700, fontSize: 16 }}>{title}</span>
+        <span className="row-gap-8" style={{ marginLeft: "auto", alignItems: "center" }}>{right}</span>
+      </div>
+      {children}
+    </div>
   );
+}
+
+/** THE save-state indicator — one look, every section, nothing inline. */
+function UnsavedChip() {
+  return <span className="chip stale">UNSAVED</span>;
 }
 
 interface ImportSummary {
@@ -192,11 +198,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [attrs, setAttrs] = useState<Array<{ name: string; value: string }>>(seo.attributes);
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState("");
-  // saved + clean fields collapse to a compact readout with a pencil to
-  // reopen editing — an untouched input box next to already-saved copy
-  // is just clutter. Forced open again the moment there's anything unsaved.
-  const [titleEditOpen, setTitleEditOpen] = useState(false);
-  const [hookEditOpen, setHookEditOpen] = useState(false);
   // one generation of history — a regenerate must never eat an unsaved
   // draft silently. Swap flips between the current and previous versions.
   const [prevDraft, setPrevDraft] = useState<{
@@ -328,6 +329,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const inheritedShown = showAllInherited
     ? BUCKETS.flatMap((b) => pool.filter((k) => (k.bucket || "Unknown") === b).sort(keywordRank))
     : recommendedInherited;
+  const poolCount = (b: string) => pool.filter((k) => (k.bucket || "Unknown") === b).length;
+  const shortCount = (b: string) => recommendedInherited.filter((k) => k.bucket === b).length;
 
   // The AI-built starting point: a listing with NO saved tags opens with
   // the best 13 already selected toward the target mix (7 vis · 4 reach ·
@@ -530,64 +533,13 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setBusy(null);
   }
 
-  // shared by the DESCRIPTION section below — a function, not inline JSX,
-  // so it can render once instead of duplicating the collapse/edit logic
-  function hookEditor() {
-    const hookSaved = hook.trim() !== "" && hook === seo.hook;
-    const showInput = !hookSaved || hookEditOpen;
-    return (
-      <div className="field">
-        <span className="kicker">HOOK IN SHOP VOICE</span>
-        {showInput ? (
-          <>
-            <textarea
-              id="l2-hook"
-              className="input"
-              rows={3}
-              value={hook}
-              onChange={(e) => setHook(e.target.value)}
-            />
-            <div className="row-gap-12" style={{ marginTop: 6 }}>
-              <button
-                className="btn btn-secondary"
-                disabled={busy !== null || !hook.trim() || hook === seo.hook}
-                onClick={async () => {
-                  const ok = await call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() });
-                  if (ok) setHookEditOpen(false);
-                }}
-              >
-                {busy === "hook" ? <span className="spinner" /> : null}
-                Save hook
-              </button>
-              {hook !== seo.hook ? <span className="hint">Unsaved</span> : null}
-              {hookSaved ? (
-                <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setHookEditOpen(false)}>
-                  Done
-                </button>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
-            <span className="body-sm" style={{ flex: 1, whiteSpace: "pre-wrap" }}>{hook}</span>
-            <button
-              type="button"
-              className="btn btn-tertiary"
-              style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
-              title="Edit hook"
-              onClick={() => setHookEditOpen(true)}
-            >
-              ✎
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   const titleWords = title.trim() ? title.trim().split(/\s+/).length : 0;
   const pendingSuggestions = suggestedTags.filter((t) => !inTagList(t));
   const attrsDirty = JSON.stringify(attrs) !== JSON.stringify(seo.attributes);
+  const titleDirty = title !== seo.title;
+  const hookDirty = hook !== seo.hook;
+  const attrsClearing =
+    attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0;
   // why Generate is locked, when it is — shown inline, not just on hover
   const generateBlocker = !seo.hasDesign
     ? "Attach a Design first — the draft needs its phrase and niche."
@@ -597,114 +549,53 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         ? "Save the Selected tags first — the draft builds on your locked-in decision."
         : null;
 
+  const usedBadge = (
+    <span className={`chip ${tags.length > TAG_COUNT ? "stale" : "done"}`}>
+      {tags.length}/{TAG_COUNT} USED
+    </span>
+  );
+
+  /** shortlist pill + its dismiss ✕ — shared by the bucket groups */
+  const shortlistPill = (k: KeywordRow & { attached: boolean }, bucket: string) => {
+    const out = dismissed.has(k.id);
+    return (
+      <span key={k.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <button
+          type="button"
+          className="chip neutral"
+          style={{ cursor: "pointer", textAlign: "left", opacity: out ? 0.45 : 1 }}
+          disabled={busy !== null}
+          title={`${bucket} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}${out ? " · dismissed — picking it brings it back" : ""}`}
+          onClick={() => pickKeyword(k)}
+        >
+          + {k.name.toUpperCase()}
+          {k.momentum === "Selling now" ? " 🔥" : ""}
+        </button>
+        {!out ? (
+          <button
+            type="button"
+            aria-label={`Dismiss ${k.name}`}
+            title="Drop from the shortlist back to the pool — the next-best candidate takes its place"
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
+            onClick={() => {
+              const next = new Set(dismissed);
+              next.add(k.id);
+              void persistDismissed(next);
+            }}
+          >
+            ✕
+          </button>
+        ) : null}
+      </span>
+    );
+  };
+
   return (
-    <div className="card supporting">
-      <Kicker>SEO — KEYWORDS &amp; TAGS</Kicker>
+    <>
+      {error ? <div className="callout blocked" style={{ whiteSpace: "pre-wrap" }}>{error}</div> : null}
 
-      {error ? <div className="callout blocked">{error}</div> : null}
-      {notice ? <div className="hint">{notice}</div> : null}
-
-      {/* tier 1 — the bucket-balanced shortlist; the selected set lives in
-          the rail on the right. Always rendered: an empty pool SAYS so
-          instead of silently vanishing (a listing whose design holds no
-          research yet would otherwise show nothing at all). */}
-      <div className="field">
-        <span className="kicker">
-          {showAllInherited
-            ? `FULL KEYWORD POOL · ${pool.length}`
-            : `SHORTLIST · ${recommendedInherited.length}`}
-        </span>
-        {/* the pool's shape, always visible — when a bucket is thin, the
-            shortlist is thin for a data reason, not a rendering one */}
-        <span className="hint">
-          pool {pool.length}: {pool.filter((k) => k.bucket === "Visibility").length} visibility ·{" "}
-          {pool.filter((k) => k.bucket === "Reach").length} reach ·{" "}
-          {pool.filter((k) => k.bucket === "Best Seller").length} best seller ·{" "}
-          {pool.filter((k) => k.bucket === "Dead" || k.bucket === "Unknown" || !k.bucket).length} dead/unmeasured
-        </span>
-        {pool.length === 0 ? (
-          <div className="callout stale">
-            No keyword candidates reachable from this listing. The pool is keywords linked to this
-            listing&apos;s Design (CSV imports land there) plus this listing&apos;s own shortlist.{" "}
-            {seo.hasDesign
-              ? "Drop a CSV below, or run the cleanup on the sibling listing holding the research — design-pool keywords appear on every listing of the design."
-              : "This listing has no Design attached — set that first; research has nowhere to land without it."}
-          </div>
-        ) : null}
-        {pool.length > 0 ? (
-          <>
-          <span className="hint">
-            {showAllInherited
-              ? "Everything from this Design and your imports, best first — dead and unmeasured included down here."
-              : "Bucket-balanced: the top visibility, reach and best-seller candidates, each ranked within its own bucket (momentum, then volume). Tap + to move one into Selected tags on the right; a ✕'d word returns here."}
-          </span>
-          {!showAllInherited && recommendedInherited.length === 0 ? (
-            <span className="hint">Nothing left to recommend — browse the full pool below.</span>
-          ) : null}
-          {/* sectioned by bucket — visibility first so the backbone gets
-              locked in before the stretches; the bucket lives in the header
-              now, not on every pill */}
-          {BUCKETS.map((b) => {
-            const items = inheritedShown.filter((k) => (k.bucket || "Unknown") === b);
-            if (items.length === 0) return null;
-            return (
-              <div key={b} className="stack-12" style={{ gap: 6, marginTop: 4 }}>
-                <span className="kicker">{b.toUpperCase()} · {items.length}</span>
-                {/* two columns — the candidate names are short enough to pair up */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
-                  {items.map((k) => {
-                    const out = dismissed.has(k.id);
-                    return (
-                      <span key={k.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                        <button
-                          type="button"
-                          className="chip neutral"
-                          style={{ cursor: "pointer", textAlign: "left", opacity: out ? 0.45 : 1 }}
-                          disabled={busy !== null}
-                          title={`${b} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}${out ? " · dismissed — picking it brings it back" : ""}`}
-                          onClick={() => pickKeyword(k)}
-                        >
-                          + {k.name}
-                          {k.momentum === "Selling now" ? " 🔥" : ""}
-                        </button>
-                        {!out ? (
-                          <button
-                            type="button"
-                            aria-label={`Dismiss ${k.name}`}
-                            title="Remove from consideration — the next-best candidate takes its place"
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
-                            onClick={() => {
-                              const next = new Set(dismissed);
-                              next.add(k.id);
-                              void persistDismissed(next);
-                            }}
-                          >
-                            ✕
-                          </button>
-                        ) : null}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-          {pool.length > recommendedInherited.length ? (
-            <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 12, padding: "4px 10px", alignSelf: "flex-start" }}
-              onClick={() => setShowAllInherited((v) => !v)}
-            >
-              {showAllInherited ? "Show recommended only" : `Show all ${pool.length}`}
-            </button>
-          ) : null}
-          </>
-        ) : null}
-      </div>
-
-      {/* CSV import — eRank/Everbee exports through the same bucket math */}
-      <div className="field">
-        <span className="kicker">IMPORT FROM ERANK / EVERBEE</span>
+      {/* ① import — restyled, functionally the same door */}
+      <Section n={1} title="Import from eRank / Everbee">
         <div
           className="well"
           style={{
@@ -726,10 +617,13 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             importFiles(Array.from(e.dataTransfer.files ?? []));
           }}
         >
+          <div className="body-sm" style={{ fontWeight: 700 }}>
+            {busy === "import" ? "Importing…" : "Drop CSV exports here"}
+          </div>
           <span className="hint">
-            {busy === "import"
-              ? "Importing…"
-              : "Drop CSV exports here — several at once is fine. Keyword files land in the bank (matched by text, never duplicated); listing-research files (Everbee Product Analytics / eRank listings) become a momentum read on the keyword you pick."}
+            Several at once is fine. Keyword files land in the bank (matched by text, never
+            duplicated); listing-research files (Everbee Product Analytics / eRank listings) become
+            a momentum read on the keyword you pick.
           </span>
           <input
             ref={fileInput}
@@ -743,9 +637,19 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             }}
           />
         </div>
+        {importSummary ? (
+          <span className="hint">
+            {importSummary.source} format · {importSummary.created} new · {importSummary.linked} linked to the design pool
+            {importSummary.unchanged > 0 ? ` · ${importSummary.unchanged} already current` : ""}
+            {importSummary.skipped > 0 ? ` · ${importSummary.skipped} blank rows skipped` : ""}
+            {conflicts.length > 0 ? ` · ${conflicts.length} need review below` : ""}
+            {importSummary.noDesign ? " · no Design on this listing — rows are in the bank only" : ""}
+            {" — nothing auto-attaches; pick from the shortlist."}
+          </span>
+        ) : null}
         {/* listing-research files don't say which search they came from — ask */}
         {pendingMarkets.map((p) => (
-          <div key={p.fileName + p.listingCount} className="well" style={{ marginTop: 8 }}>
+          <div key={p.fileName + p.listingCount} className="well">
             <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
               <span className="body-sm" style={{ fontWeight: 700 }}>{p.fileName}</span>
               <span className="chip count">{p.source} · {p.listingCount} listings</span>
@@ -777,18 +681,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             </div>
           </div>
         ))}
-        {importSummary ? (
-          <span className="hint">
-            {importSummary.source} format · {importSummary.created} new · {importSummary.linked} linked to the design pool
-            {importSummary.unchanged > 0 ? ` · ${importSummary.unchanged} already current` : ""}
-            {importSummary.skipped > 0 ? ` · ${importSummary.skipped} blank rows skipped` : ""}
-            {conflicts.length > 0 ? ` · ${conflicts.length} need review below` : ""}
-            {importSummary.noDesign ? " · no Design on this listing — rows are in the bank only" : ""}
-            {" — nothing auto-attaches; pick from the recommendations."}
-          </span>
-        ) : null}
         {conflicts.map((c) => (
-          <div key={c.id} className="well" style={{ marginTop: 8 }}>
+          <div key={c.id} className="well">
             <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
               <span className="body-sm" style={{ fontWeight: 700 }}>{c.keyword}</span>
               <span className="chip stale">numbers disagree</span>
@@ -818,143 +712,169 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             </div>
           </div>
         ))}
-      </div>
+      </Section>
 
-      {/* the copy workbench — title, hook, attributes. Generate fills the
-          drafts; each save is its own deliberate action. */}
-      <div className="well">
-        <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
-          <Kicker>LISTING COPY</Kicker>
-          {seo.aiReady ? (
-            // the title front-loads the LOCKED-IN keywords — generation
-            // waits for a saved, non-empty selection, never a mid-edit one
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null || generateBlocker !== null}
-              title={generateBlocker ?? undefined}
-              onClick={generate}
-            >
-              <Spinner active={busy === "generate"} />
-              Generate draft copy
-            </button>
-          ) : (
-            <span className="hint">Set ANTHROPIC_API_KEY to generate drafts.</span>
-          )}
-          <span className="hint">
-            {generateBlocker
-              ? `Locked: ${generateBlocker}`
-              : "Drafts only — nothing saves without its button."}
-          </span>
-        </div>
-        {prevDraft ? (
-          <div className="row-gap-12" style={{ alignItems: "center", marginTop: 6 }}>
-            <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 12, padding: "4px 10px" }}
-              disabled={busy !== null}
-              onClick={swapDrafts}
-            >
-              ⇄ Swap back to previous draft
-            </button>
-            <span className="hint">Nothing is lost on regenerate anymore — flip between the last two versions.</span>
+      {/* ② shortlist — picks go RIGHT, into Selected tags; no save here */}
+      <Section
+        n={2}
+        title="SEO — keywords & tags"
+        right={
+          <>
+            {usedBadge}
+            {dirty ? <UnsavedChip /> : null}
+          </>
+        }
+      >
+        {notice ? <span className="hint">{notice}</span> : null}
+        <span className="hint">
+          Pool of {pool.length} candidates: {poolCount("Visibility")} visibility, {poolCount("Reach")} reach,{" "}
+          {poolCount("Best Seller")} best seller,{" "}
+          {pool.length - poolCount("Visibility") - poolCount("Reach") - poolCount("Best Seller")} dead/unmeasured.
+          Tap + to move a shortlisted word into Selected tags; removing it there returns it to this shortlist.
+        </span>
+        {pool.length === 0 ? (
+          <div className="callout stale">
+            No keyword candidates reachable from this listing. The pool is keywords linked to this
+            listing&apos;s Design (CSV imports land there) plus this listing&apos;s own shortlist.{" "}
+            {seo.hasDesign
+              ? "Drop a CSV above, or run the cleanup on the sibling listing holding the research — design-pool keywords appear on every listing of the design."
+              : "This listing has no Design attached — set that first; research has nowhere to land without it."}
           </div>
-        ) : null}
-        {draftNotes ? <div className="hint" style={{ marginTop: 6 }}>{draftNotes}</div> : null}
-
-        {(() => {
-          const titleSaved = title.trim() !== "" && title === seo.title;
-          const showInput = !titleSaved || titleEditOpen;
-          return (
-            <div className="field" style={{ marginTop: 10 }}>
-              <label className="kicker" htmlFor="l2-title">TITLE · {titleWords}/15 WORDS</label>
-              {showInput ? (
-                <>
-                  <input id="l2-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
-                  {titleWords >= 15 ? <span className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>Over the 15-word gate — trim it.</span> : null}
-                  <div className="row-gap-12" style={{ marginTop: 6 }}>
-                    <button
-                      className="btn btn-secondary"
-                      disabled={busy !== null || !title.trim() || title === seo.title}
-                      onClick={async () => {
-                        const ok = await call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() });
-                        if (ok) setTitleEditOpen(false);
-                      }}
-                    >
-                      {busy === "title" ? <span className="spinner" /> : null}
-                      Save title
-                    </button>
-                    {title !== seo.title ? <span className="hint">Unsaved</span> : null}
-                    {titleSaved ? (
-                      <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setTitleEditOpen(false)}>
-                        Done
-                      </button>
-                    ) : null}
+        ) : (
+          <>
+            <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700 }}>{showAllInherited ? "Full pool" : "Shortlist"}</span>
+              <span className="chip count">{inheritedShown.length} KEYWORDS</span>
+              {!showAllInherited ? (
+                <span className="hint">
+                  {shortCount("Visibility")} visibility · {shortCount("Reach")} reach · {shortCount("Best Seller")} best seller
+                </span>
+              ) : null}
+              <span className="hint" style={{ marginLeft: "auto" }}>
+                ✕ drops a word from the shortlist back to the pool
+              </span>
+            </div>
+            {BUCKETS.map((b) => {
+              const items = inheritedShown.filter((k) => (k.bucket || "Unknown") === b);
+              if (items.length === 0) return null;
+              return (
+                <div key={b} className="stack-12" style={{ gap: 6, marginTop: 4 }}>
+                  <span className="kicker">{b.toUpperCase()} · {items.length}</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
+                    {items.map((k) => shortlistPill(k, b))}
                   </div>
-                </>
-              ) : (
-                <div className="row-gap-8" style={{ alignItems: "center" }}>
-                  <span className="body-sm" style={{ flex: 1 }}>{title}</span>
-                  <button
-                    type="button"
-                    className="btn btn-tertiary"
-                    style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
-                    title="Edit title"
-                    onClick={() => setTitleEditOpen(true)}
-                  >
-                    ✎
-                  </button>
                 </div>
-              )}
+              );
+            })}
+            {pendingSuggestions.length > 0 ? (
+              <div className="stack-12" style={{ gap: 6, marginTop: 4 }}>
+                <span className="kicker">SUGGESTED BY THE DRAFT · {pendingSuggestions.length}</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
+                  {pendingSuggestions.map((t) => {
+                    const bucket = bucketOf(t);
+                    return (
+                      <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <button
+                          type="button"
+                          className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
+                          style={{ cursor: "pointer", textAlign: "left" }}
+                          disabled={busy !== null}
+                          title={bucket ? `${bucket} — from the keyword bank` : "new phrase — not in the keyword bank, no metrics yet"}
+                          onClick={() => addTag(t)}
+                        >
+                          + {t.toUpperCase()}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Dismiss suggestion ${t}`}
+                          title="Dismiss suggestion"
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
+                          onClick={() => setSuggestedTags((cur) => cur.filter((x) => x !== t))}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+            <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() =>
+                  document.getElementById("selected-tags")?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
+                Review selected tags →
+              </button>
+              <span className="hint">saving happens in the Selected tags panel</span>
+              {pool.length > recommendedInherited.length ? (
+                <button
+                  className="btn btn-tertiary"
+                  style={{ fontSize: 12, padding: "4px 10px", marginLeft: "auto" }}
+                  onClick={() => setShowAllInherited((v) => !v)}
+                >
+                  {showAllInherited ? "Show shortlist only" : `Show all ${pool.length}`}
+                </button>
+              ) : null}
             </div>
-          );
-        })()}
+          </>
+        )}
+      </Section>
 
-        {pendingSuggestions.length > 0 ? (
-          <div className="field">
-            <span className="kicker">SUGGESTED TAGS — TAP TO ACCEPT, ✕ TO DISMISS</span>
-            <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-              {pendingSuggestions.map((t) => {
-                const bucket = bucketOf(t);
-                return (
-                  <span key={t} className="row-gap-8" style={{ alignItems: "center", gap: 4, display: "inline-flex" }}>
-                    <button
-                      type="button"
-                      className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
-                      style={{ cursor: "pointer" }}
-                      disabled={busy !== null}
-                      title={bucket ? `${bucket} — from the keyword bank` : "new phrase — not in the keyword bank, no metrics yet"}
-                      onClick={() => addTag(t)}
-                    >
-                      + {t} · {(bucket ?? "new").toLowerCase()}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-tertiary"
-                      style={{ fontSize: 11, padding: "2px 6px" }}
-                      title="Dismiss suggestion"
-                      onClick={() => setSuggestedTags((cur) => cur.filter((x) => x !== t))}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-            <span className="hint">
-              Accepted suggestions join Selected tags on the right — the tally and the {TAG_COUNT}-tag
-              counter track your edited selection, not the draft.
+      {/* ③ title — full text always visible (a wrapping textarea, so a long
+          title can never scroll its own start out of view) */}
+      <Section
+        n={3}
+        title={
+          <>
+            Title{" "}
+            <span className="hint" style={{ fontWeight: 400 }}>
+              {titleWords}/15 words
             </span>
-          </div>
+          </>
+        }
+        right={titleDirty ? <UnsavedChip /> : null}
+      >
+        <textarea
+          id="l2-title"
+          className="input"
+          rows={2}
+          value={title}
+          style={{ resize: "vertical" }}
+          onChange={(e) => setTitle(e.target.value.replace(/\n/g, " "))}
+        />
+        {titleWords >= 15 ? (
+          <span className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>
+            Over the 15-word gate — trim it.
+          </span>
         ) : null}
+        {draftNotes ? <span className="hint">{draftNotes}</span> : null}
+        <div className="row-gap-12">
+          <button
+            className="btn btn-primary"
+            disabled={busy !== null || !title.trim() || !titleDirty}
+            onClick={() => call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() })}
+          >
+            {busy === "title" ? <span className="spinner" /> : null}
+            Save title
+          </button>
+        </div>
+      </Section>
 
-        <div className="field">
-          <span className="kicker">ATTRIBUTES</span>
-          {attrs.length === 0 ? <span className="hint">None yet — generate a draft or add one.</span> : null}
+      {/* ④ attributes — two-column, per the approved mockup. Occasion and
+          Holiday both reading "Halloween" is Etsy's taxonomy, not a dupe:
+          they are separate attributes and both legitimately carry the
+          holiday for a seasonal design. */}
+      <Section n={4} title="Attributes" right={attrsDirty ? <UnsavedChip /> : null}>
+        {attrs.length === 0 ? <span className="hint">None yet — generate a draft or add one.</span> : null}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(220px, 1fr))", gap: "10px 22px" }}>
           {attrs.map((a, i) => (
             <div key={i} className="row-gap-8" style={{ alignItems: "center" }}>
               <input
                 className="input"
-                style={{ flex: "0 1 160px" }}
+                style={{ flex: "0 0 96px", fontSize: 12.5, padding: "6px 8px" }}
                 value={a.name}
                 placeholder="Occasion"
                 aria-label="Attribute name"
@@ -964,7 +884,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               />
               <input
                 className="input"
-                style={{ flex: "1 1 180px" }}
+                style={{ flex: 1, minWidth: 0 }}
                 value={a.value}
                 placeholder="Halloween"
                 aria-label="Attribute value"
@@ -973,133 +893,199 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                 }
               />
               <button
-                className="btn btn-tertiary"
-                style={{ fontSize: 11, padding: "3px 8px" }}
+                type="button"
+                aria-label={`Remove ${a.name || "attribute"}`}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "2px 4px", flex: "0 0 auto" }}
                 onClick={() => setAttrs((cur) => cur.filter((_, j) => j !== i))}
               >
                 ✕
               </button>
             </div>
           ))}
-          <div className="row-gap-12">
-            <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 12, padding: "5px 10px" }}
-              onClick={() => setAttrs((cur) => [...cur, { name: "", value: "" }])}
-            >
-              + Add attribute
-            </button>
-            {/* an empty save over saved attributes is a CLEAR — named and
-                confirmed, never the default behavior of the same button */}
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null || !attrsDirty}
-              onClick={() => {
-                const clearing = attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0;
-                if (clearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
-                call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
-              }}
-            >
-              {busy === "attrs" ? <span className="spinner" /> : null}
-              {attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0
-                ? "Clear saved attributes"
-                : "Save attributes"}
-            </button>
-            {attrsDirty ? <span className="hint">Unsaved</span> : null}
-          </div>
         </div>
-      </div>
+        <div className="row-gap-12">
+          {/* an empty save over saved attributes is a CLEAR — named and
+              confirmed, never the default behavior of the same button */}
+          <button
+            className="btn btn-primary"
+            disabled={busy !== null || !attrsDirty}
+            onClick={() => {
+              if (attrsClearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
+              call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
+            }}
+          >
+            {busy === "attrs" ? <span className="spinner" /> : null}
+            {attrsClearing ? "Clear saved attributes" : "Save attributes"}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setAttrs((cur) => [...cur, { name: "", value: "" }])}
+          >
+            + Add attribute
+          </button>
+        </div>
+      </Section>
 
-      {/* DESCRIPTION — both parts of what the buyer reads: the hook (this
-          listing's own voice) and the product boilerplate (generated once
-          on the Product, never inline here — an empty one points back to
-          the Products page instead of papering over it). One section, one
-          header, so the two halves read as one description, not a stack of
-          duplicate boxes. */}
-      <div className="field">
-        <span className="kicker">DESCRIPTION</span>
-        {hookEditor()}
-        <div className="field">
-          <span className="kicker">PRODUCT BOILERPLATE</span>
-          {!seo.product ? (
-            <span className="hint">No product set on this listing yet.</span>
-          ) : seo.product.hasVoice ? (
-            <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
-              <button
-                className="btn btn-secondary"
-                disabled={busy !== null}
-                onClick={() =>
-                  call("body", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: seo.product!.voiceText })
-                }
-              >
-                {busy === "body" ? <span className="spinner" /> : null}
-                {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
-              </button>
-              {bodyCopySet ? <span className="chip done">body copy set</span> : null}
-              {bodyCopySet ? (
+      {/* ⑤ description — the hook (per-listing, generated) over the product
+          boilerplate (per-product, stitched; collapsed by default) */}
+      <Section
+        n={5}
+        title="Description — listing copy"
+        right={hookDirty || bodyDirty ? <UnsavedChip /> : null}
+      >
+        <span className="kicker">HOOK IN SHOP VOICE</span>
+        <div className="well">
+          <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            <span className="hint">
+              Drafts only — nothing saves without its button.
+              {prevDraft ? " Regenerating keeps the last two versions." : ""}
+            </span>
+            <span className="row-gap-8" style={{ marginLeft: "auto", alignItems: "center", flexWrap: "wrap" }}>
+              {prevDraft ? (
                 <button
-                  className="btn btn-tertiary"
-                  style={{ fontSize: 12, padding: "4px 10px" }}
-                  onClick={() => {
-                    setBodyDraft(seo.bodyCopy); // fresh from the record on open
-                    setShowBody((v) => !v);
-                  }}
+                  className="btn btn-secondary"
+                  style={{ fontSize: 12, padding: "5px 11px" }}
+                  disabled={busy !== null}
+                  onClick={swapDrafts}
                 >
-                  {showBody ? "Collapse" : "Read / edit"}
+                  ⇄ Swap to previous draft
                 </button>
               ) : null}
-              <span className="hint">
-                This garment&apos;s fit/fabric/care copy, under the hook above — same text on every
-                listing that sells {seo.product.name}.
-              </span>
-              {/* per-listing edit of the boilerplate text only — the hook has
-                  its own box above, so it isn't repeated here */}
-              {showBody ? (
-                <div className="well" style={{ flexBasis: "100%" }}>
-                  <textarea
-                    className="input"
-                    value={bodyDraft}
-                    rows={Math.min(24, bodyDraft.split("\n").length + 4)}
-                    style={{ resize: "vertical", width: "100%" }}
-                    onChange={(e) => setBodyDraft(e.target.value)}
-                  />
-                  <div className="row-gap-12" style={{ marginTop: 8, alignItems: "center" }}>
-                    <button
-                      className="btn btn-secondary"
-                      disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
-                      onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
-                    >
-                      {busy === "body-edit" ? <span className="spinner" /> : null}
-                      Save body copy — this listing only
-                    </button>
-                    {bodyDirty ? <span className="hint">Unsaved</span> : null}
-                    <span className="hint">
-                      The product boilerplate is untouched; &quot;Refresh from product&quot; replaces these edits.
-                    </span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="callout stale">
-              {seo.product.name} has no shop-voice boilerplate yet — generate it once on the{" "}
-              <Link href="/products">Products page</Link>, then stitch it here. It&apos;s written per
-              product, not per listing, so every future listing on this garment reuses it.
-            </div>
-          )}
+              {seo.aiReady ? (
+                <button
+                  className="btn btn-primary"
+                  disabled={busy !== null || generateBlocker !== null}
+                  title={generateBlocker ?? undefined}
+                  onClick={generate}
+                >
+                  <Spinner active={busy === "generate"} />
+                  Generate hook draft
+                </button>
+              ) : (
+                <span className="hint">Set ANTHROPIC_API_KEY to generate drafts.</span>
+              )}
+            </span>
+          </div>
+          {generateBlocker ? (
+            <span className="hint" style={{ marginTop: 6 }}>Locked: {generateBlocker}</span>
+          ) : null}
         </div>
-      </div>
-    </div>
+        <textarea
+          id="l2-hook"
+          className="input"
+          rows={3}
+          value={hook}
+          onChange={(e) => setHook(e.target.value)}
+        />
+        <div className="row-gap-12">
+          <button
+            className="btn btn-primary"
+            disabled={busy !== null || !hook.trim() || !hookDirty}
+            onClick={() => call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() })}
+          >
+            {busy === "hook" ? <span className="spinner" /> : null}
+            Save hook
+          </button>
+        </div>
+
+        {/* the boilerplate row — collapsed by default, badge says its state */}
+        <div className="well" style={{ padding: "10px 14px" }}>
+          <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 11, color: "var(--text-muted)" }}
+              aria-expanded={showBody}
+              onClick={() => {
+                if (!showBody) setBodyDraft(seo.bodyCopy);
+                setShowBody((v) => !v);
+              }}
+            >
+              {showBody ? "▾" : "▸"}
+            </button>
+            <span className="kicker">PRODUCT BOILERPLATE</span>
+            {bodyCopySet ? (
+              <span className="chip done">BODY COPY SET</span>
+            ) : seo.product && !seo.product.hasVoice ? (
+              <span className="chip stale">product voice missing</span>
+            ) : (
+              <span className="chip neutral">not stitched yet</span>
+            )}
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 10px", marginLeft: "auto" }}
+              onClick={() => {
+                if (!showBody) setBodyDraft(seo.bodyCopy);
+                setShowBody((v) => !v);
+              }}
+            >
+              {showBody ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {showBody ? (
+            !seo.product ? (
+              <span className="hint" style={{ marginTop: 8 }}>No product set on this listing yet.</span>
+            ) : seo.product.hasVoice ? (
+              <div className="stack-12" style={{ gap: 8, marginTop: 10 }}>
+                <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      call("body", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: seo.product!.voiceText })
+                    }
+                  >
+                    {busy === "body" ? <span className="spinner" /> : null}
+                    {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
+                  </button>
+                </div>
+                <textarea
+                  className="input"
+                  value={bodyDraft}
+                  rows={Math.min(24, bodyDraft.split("\n").length + 4)}
+                  style={{ resize: "vertical", width: "100%" }}
+                  onChange={(e) => setBodyDraft(e.target.value)}
+                />
+                <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    className="btn btn-secondary"
+                    disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
+                    onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
+                  >
+                    {busy === "body-edit" ? <span className="spinner" /> : null}
+                    Save body copy — this listing only
+                  </button>
+                  <span className="hint">
+                    The product boilerplate is untouched; &quot;Refresh from product&quot; replaces these edits.
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="callout stale" style={{ marginTop: 10 }}>
+                {seo.product.name} has no shop-voice boilerplate yet — generate it once on the{" "}
+                <Link href="/products">Products page</Link>, then stitch it here. It&apos;s written per
+                product, not per listing, so every future listing on this garment reuses it.
+              </div>
+            )
+          ) : null}
+        </div>
+        {seo.product ? (
+          <span className="hint">
+            This garment&apos;s fit/fabric/care copy, under the hook above — same text on every
+            listing that sells {seo.product.name}.
+          </span>
+        ) : null}
+      </Section>
+    </>
   );
 }
 
 /**
  * Tier 2 — the Selected tags rail, under the publish gates. The up-to-13
  * working set the operator is actually building: added from the shortlist
- * (or AI suggestions) in the center panel, removed here with the minimal ✕.
- * A ✕'d word requalifies for the shortlist — removal is "not this one",
- * never "forget this word exists". Save commits the set to the listing;
- * the server syncs keyword attachments to match.
+ * (or AI suggestions) in the center panel, removed here with the ✕ — which
+ * RETURNS the word to the shortlist (it requalifies by rank); it never
+ * deletes the keyword from the Design's pool. Save commits the set to the
+ * listing; the server syncs keyword attachments to match.
  */
 export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const router = useRouter();
@@ -1107,6 +1093,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const bucketOf = (tag: string): string | null =>
     seo.bank[tag.trim().toLowerCase()]?.bucket ?? null;
@@ -1134,6 +1121,28 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
     setTags((cur) => cur.filter((t) => t.toLowerCase() !== tag.toLowerCase()));
   }
 
+  async function save() {
+    setBusy("save");
+    setError(null);
+    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", { tags: sortedTags.join(", ") });
+    if (!res.ok) setError(res.error);
+    else {
+      setDirty(false);
+      router.refresh();
+    }
+    setBusy(null);
+  }
+
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(sortedTags.join(", "));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError("Couldn't reach the clipboard — copy from Notion instead.");
+    }
+  }
+
   // inline edit — the tag TEXT changes; metrics belong to the phrase, so
   // the edited word re-resolves against the bank by name: match a bank
   // keyword and its bucket/numbers apply, match nothing and it's honestly
@@ -1157,18 +1166,6 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
         : [...without, next];
     });
     setEditing(null);
-  }
-
-  async function save() {
-    setBusy("save");
-    setError(null);
-    const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", { tags: sortedTags.join(", ") });
-    if (!res.ok) setError(res.error);
-    else {
-      setDirty(false);
-      router.refresh();
-    }
-    setBusy(null);
   }
 
   // residue from the old attach-everything imports — offer the move-out
@@ -1220,10 +1217,17 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
         });
 
   return (
-    <div className="gate-panel tags-panel">
-      <div className="panel-title">
-        Selected tags · {tags.length}/{TAG_COUNT}
+    <div className="gate-panel tags-panel" id="selected-tags">
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <div className="panel-title" style={{ margin: 0 }}>Selected tags</div>
+        <span className="row-gap-8" style={{ marginLeft: "auto", alignItems: "center" }}>
+          <span className={`chip ${tags.length > TAG_COUNT ? "stale" : "done"}`}>
+            {tags.length}/{TAG_COUNT} USED
+          </span>
+          {dirty ? <span className="chip stale">UNSAVED</span> : null}
+        </span>
       </div>
+      <span className="hint">✕ returns a tag to the shortlist — it isn&apos;t deleted.</span>
       {tags.length > TAG_COUNT ? (
         <span className="chip stale" style={{ alignSelf: "flex-start" }}>
           {tags.length - TAG_COUNT} over the limit — trim before publish
@@ -1251,19 +1255,19 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
             <span className="hint">{items.length} of {band.min}</span>
           );
         return (
-          <div key={band.label} className="stack-12" style={{ gap: 4, marginTop: 6 }}>
+          <div key={band.label} className="stack-12" style={{ gap: 6, marginTop: 6 }}>
             <div className="row-gap-8" style={{ alignItems: "center" }}>
               <span className="kicker" style={{ flex: 1 }}>{band.label}</span>
               {status}
             </div>
-            {items.map((t) => (
-              <div key={t} className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-                {editing?.orig === t ? (
-                  <>
+            <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+              {items.map((t) =>
+                editing?.orig === t ? (
+                  <span key={t} style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
                     <input
                       autoFocus
                       className="input"
-                      style={{ flex: 1, minWidth: 0, fontSize: 12, padding: "3px 6px" }}
+                      style={{ fontSize: 12, padding: "3px 6px", width: 170 }}
                       value={editing.value}
                       onChange={(e) => setEditing({ orig: t, value: e.target.value })}
                       onKeyDown={(e) => {
@@ -1273,43 +1277,49 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
                       onBlur={commitEdit}
                     />
                     {editOverCap ? (
-                      <span className="hint" style={{ flexBasis: "100%", color: "var(--status-blocked, #b3423a)" }}>
-                        {editing.value.trim().length}/{TAG_MAX_CHARS} — over Etsy&apos;s tag cap
+                      <span className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>
+                        {editing.value.trim().length}/{TAG_MAX_CHARS} — over Etsy&apos;s cap
                       </span>
                     ) : null}
-                  </>
+                  </span>
                 ) : (
                   <span
-                    className="body-sm"
-                    style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "text" }}
-                    title={`${tagTooltip(t)} — click to edit`}
-                    onClick={() => setEditing({ orig: t, value: t })}
+                    key={t}
+                    className="chip neutral"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#ffffff" }}
                   >
-                    {t}
+                    <span
+                      style={{ cursor: "text" }}
+                      title={`${tagTooltip(t)} — click to edit`}
+                      onClick={() => setEditing({ orig: t, value: t })}
+                    >
+                      {t}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${t}`}
+                      title="Return to the shortlist — the keyword isn't deleted"
+                      disabled={busy !== null}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: 0 }}
+                      onClick={() => remove(t)}
+                    >
+                      ✕
+                    </button>
                   </span>
-                )}
-                <button
-                  type="button"
-                  aria-label={`Remove ${t}`}
-                  title="Remove — it returns to the shortlist"
-                  disabled={busy !== null}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 12, padding: "2px 4px", flex: "0 0 auto" }}
-                  onClick={() => remove(t)}
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+                )
+              )}
+            </div>
           </div>
         );
       })}
-      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-        <button className="btn btn-secondary" onClick={save} disabled={busy !== null || !dirty}>
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
+        <button className="btn btn-primary" onClick={save} disabled={busy !== null || !dirty}>
           {busy === "save" ? <span className="spinner" /> : null}
           Save tags to listing
         </button>
-        {dirty ? <span className="hint">Unsaved</span> : null}
-        {tags.length > 0 ? <CopyIconButton text={sortedTags.join(", ")} label="tags" /> : null}
+        <button className="btn btn-secondary" onClick={copyAll} disabled={tags.length === 0}>
+          {copied ? "Copied ✓" : "Copy all"}
+        </button>
       </div>
       {excess > 5 ? (
         <div className="stack-12" style={{ gap: 6, marginTop: 10 }}>

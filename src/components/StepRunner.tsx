@@ -22,6 +22,7 @@ import { TexturePick, type TextureData } from "./TexturePick";
 import { StandingConstraints } from "./StandingConstraints";
 import { ColorwaysPanel, type ColorwaysData } from "./ColorwaysPanel";
 import { PricingPanel, type PricingData } from "./PricingPanel";
+import { PrintFilePanel, type PrintFileData } from "./PrintFilePanel";
 import { FanOutPanel, type FanOutData } from "./FanOutPanel";
 import { PrintCheck, type PrintCheckData } from "./PrintCheck";
 
@@ -56,6 +57,7 @@ export function StepRunner({
   colorways,
   fanOut,
   pricing,
+  printFile,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -71,6 +73,7 @@ export function StepRunner({
   colorways?: ColorwaysData;
   fanOut?: FanOutData;
   pricing?: PricingData;
+  printFile?: PrintFileData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -258,6 +261,12 @@ export function StepRunner({
             downstream template offers filter against this list */}
         {record.workflowKey === "listing" && selected.id === "L1" && colorways ? (
           <ColorwaysPanel data={colorways} />
+        ) : null}
+
+        {/* L1: the print file Printify needs — recomposed when this garment's
+            shape deviates from the master (the derivative record, Phase 2) */}
+        {record.workflowKey === "listing" && selected.id === "L1" && printFile ? (
+          <PrintFilePanel data={printFile} />
         ) : null}
 
         {/* L2 is where title and tags are written — attached keywords by

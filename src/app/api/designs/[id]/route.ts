@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { cachedRecord, updateRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { reconcileListingNames } from "@/server/listingNames";
 import { markStepsStale } from "@/server/steps";
@@ -160,6 +160,24 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (values["Name"] !== undefined) {
       await reconcileListingNames();
     }
+    // A changed master invalidates every recomposition made from the old
+    // one — derivatives flip to Stale, and the L6 gate stops trusting them
+    // until they're re-saved. Made-only: a Stale one stays Stale.
+    const masterKeys = ["Master PNG Link", "Master Width", "Master Height"] as const;
+    const masterChanged = masterKeys.some(
+      (k) => k in values && (values[k] ?? null) !== (design.props[k] ?? null)
+    );
+    if (masterChanged) {
+      const derivatives = cachedRecords("design_derivatives").filter(
+        (d) =>
+          ((d.props["Design"] as string[] | null) ?? []).includes(id) &&
+          String(d.props["Status"] ?? "") === "Made"
+      );
+      for (const d of derivatives) {
+        await updateRecord("design_derivatives", d.id, { Status: "Stale" });
+      }
+    }
+
     // The Phase 2 canvas bug, closed: swapping the primary product rewrote
     // Master Canvas silently while C7's export and C8's dimension check
     // still described the OLD product. Stale, never silent — done steps

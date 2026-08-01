@@ -610,6 +610,26 @@ export const SCHEMA: DbSpec[] = [
       Notes: { type: "rich_text" },
     },
   },
+  {
+    key: "design_derivatives",
+    title: "Design Derivatives",
+    description:
+      "Per-product recompositions of a design's master (Phase 2). A derivative exists only once the recomposed file is actually made — at L1, where the Printify product needs its print file — never speculatively. Need is computed live (front print-area ratio deviating >12% from the master's shape, same bar as the C9 fan-out flag). Master changes mark derivatives Stale; the master itself is never a derivative, and files live in Drive/S3 — Notion stores links only (§3.6).",
+    properties: {
+      Name: { type: "title" },
+      Design: { type: "relation", relation: "designs" },
+      Product: { type: "relation", relation: "products" },
+      Listing: { type: "relation", relation: "etsy_listings" },
+      "File Link": { type: "url" },
+      "Width px": { type: "number" },
+      "Height px": { type: "number" },
+      // Made = file exists and matches the current master. Stale = the
+      // master changed after this was made — re-export before publishing.
+      Status: { type: "select", options: ["Made", "Stale"] },
+      "Made At": { type: "date" },
+      Notes: { type: "rich_text" },
+    },
+  },
 ];
 
 /**

@@ -11,6 +11,8 @@ import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
+import type { PrintFileData } from "@/components/PrintFilePanel";
+import { needsRecompose, derivativeFor } from "@/server/recompose";
 import { isStaleKeyword } from "@/config/keywords";
 import { momentumTooltip, type MomentumDetail } from "@/server/listingCsv";
 import { Kicker } from "@/components/ui";
@@ -36,6 +38,7 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
         slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec), selectedColorways(rec))}
         colorways={colorwaysData(rec)}
         pricing={pricingData(rec)}
+        printFile={printFileData(rec)}
       />
     </div>
   );
@@ -97,6 +100,33 @@ function slotsData(listingId: string, isMultiVariant: boolean, compatibility: st
     garmentColor: String(t.props["Garment Color"] ?? ""),
   }));
   return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
+}
+
+/** L1's print-file question: does this garment need a recomposed master? */
+function printFileData(rec: NonNullable<ReturnType<typeof cachedRecord>>): PrintFileData {
+  const designId = ((rec.props["Designs"] as string[] | null) ?? [])[0] ?? null;
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0] ?? null;
+  const design = designId ? cachedRecord(designId) : null;
+  const product = productId ? cachedRecord(productId) : null;
+  const der =
+    design && product ? derivativeFor(cachedRecords("design_derivatives"), design.id, product.id) : null;
+  return {
+    listingId: rec.id,
+    designId,
+    productId,
+    productName: product ? productLabel(product) : "",
+    needsRecompose: design && product ? needsRecompose(design, product) : false,
+    masterLink: String(design?.props["Master PNG Link"] ?? ""),
+    derivative: der
+      ? {
+          fileLink: String(der.props["File Link"] ?? ""),
+          width: typeof der.props["Width px"] === "number" ? der.props["Width px"] : null,
+          height: typeof der.props["Height px"] === "number" ? der.props["Height px"] : null,
+          status: String(der.props["Status"] ?? "Made"),
+          madeAt: String(der.props["Made At"] ?? ""),
+        }
+      : null,
+  };
 }
 
 /** L3's inputs: the snapshot on the record, the estimate on the product. */

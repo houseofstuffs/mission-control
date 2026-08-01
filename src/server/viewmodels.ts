@@ -5,6 +5,7 @@
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState, unmetRequirement } from "@/server/steps";
 import { compatForListing } from "@/server/imageSlots";
+import { needsRecompose, derivativeFor } from "@/server/recompose";
 import { estimateFor, variantCostsFor } from "@/server/productCost";
 import { asCategory } from "@/config/product-categories";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
@@ -478,6 +479,24 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
           ok: persOk,
         });
       }
+    }
+
+    // Recomposed print file: when this garment's shape deviates from the
+    // master, publishing without a Made (non-stale) derivative would ship
+    // a stretched or cropped print.
+    const gateDesignId = rel(rec.props["Designs"])[0];
+    const gateDesign = gateDesignId ? cachedRecords("designs").find((d) => d.id === gateDesignId) : null;
+    if (gateProduct && gateDesign && needsRecompose(gateDesign, gateProduct)) {
+      const der = derivativeFor(cachedRecords("design_derivatives"), gateDesign.id, gateProduct.id);
+      const made = der != null && str(der.props["Status"]) === "Made";
+      gates.push({
+        label: made
+          ? "Recomposed print file saved"
+          : der != null
+            ? "Recomposed print file is stale — master changed."
+            : "Needs a recomposed print file for this garment (L1).",
+        ok: made,
+      });
     }
 
     // SEO hard gate: no visibility keyword attached = blocked. The bucket

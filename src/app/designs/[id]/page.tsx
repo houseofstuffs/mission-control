@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { runnerRecord, productLabel } from "@/server/viewmodels";
+import { RECOMPOSE_DEVIATION } from "@/server/recompose";
 import { StepRunner } from "@/components/StepRunner";
 import type { StyleOption, SavedPair, CandidateData } from "@/components/ApplyPanel";
 import type { ArtworkData } from "@/components/ArtworkCapture";
@@ -112,7 +113,9 @@ function printCheckData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Prin
   };
 }
 
-/** Ratio of a product's first print area, from its stored Print Areas JSON. */
+/** Ratio of a product's first print area, from its stored Print Areas JSON.
+ *  (Kept as a thin local: the shared rule lives in src/server/recompose.ts,
+ *  which the L1 panel and L6 gate also use — same threshold everywhere.) */
 function frontRatio(raw: unknown): number | null {
   if (typeof raw !== "string" || !raw.trim()) return null;
   try {
@@ -143,7 +146,9 @@ function fanOutData(rec: NonNullable<ReturnType<typeof cachedRecord>>): FanOutDa
       category: String(p.props["Category"] ?? "") || null,
       isPrimary: p.id === primaryId,
       needsRecompose:
-        masterRatio != null && ratio != null && Math.abs(ratio - masterRatio) / masterRatio > 0.12,
+        masterRatio != null &&
+        ratio != null &&
+        Math.abs(ratio - masterRatio) / masterRatio > RECOMPOSE_DEVIATION,
       listingId: listing?.id ?? null,
       listingTitle: listing?.title ?? null,
     };

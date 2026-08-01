@@ -90,6 +90,28 @@ export interface VariantWithCost extends CatalogVariant {
   cost?: number; // cents
 }
 
+/**
+ * Shipping rates for every variant of a blueprint × print provider pair —
+ * a catalog endpoint like blueprints/variants, so no connected shop needed.
+ * `first_item` is what one unit costs to ship; `additional_items` is the
+ * marginal cost of each further unit in the same order.
+ */
+export interface ShippingProfile {
+  variant_ids: number[];
+  first_item: { cost: number; currency: string }; // cents
+  additional_items: { cost: number; currency: string }; // cents
+  countries: string[]; // ISO codes, plus "REST_OF_THE_WORLD"
+}
+
+export interface ShippingInfo {
+  handling_time: { value: number; unit: string };
+  profiles: ShippingProfile[];
+}
+
+export async function getShipping(blueprintId: number, providerId: number): Promise<ShippingInfo> {
+  return get<ShippingInfo>(`/catalog/blueprints/${blueprintId}/print_providers/${providerId}/shipping.json`);
+}
+
 /* ---------- shop-scoped calls (the cost probe) ---------- */
 
 async function send<T>(method: "POST" | "DELETE", path: string, body?: unknown): Promise<T> {

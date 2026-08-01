@@ -49,6 +49,9 @@ export interface PricingData {
     name: string;
     estimatedCost: number | null;
     costMethod: string | null;
+    /** what Printify bills to ship one unit, US domestic — pre-fills the scenario dial below */
+    estimatedShippingCost: number | null;
+    shippingPulledAt: string | null;
   } | null;
 }
 
@@ -70,7 +73,11 @@ export function PricingPanel({ data }: { data: PricingData }) {
   // ---- exploration dials: live math, saved nowhere ----
   const [discountInput, setDiscountInput] = useState("0");
   const [shipChargedInput, setShipChargedInput] = useState("0");
-  const [shipCostInput, setShipCostInput] = useState("0");
+  const defaultShipCost = data.product?.estimatedShippingCost ?? null;
+  const [shipCostInput, setShipCostInput] = useState(
+    defaultShipCost != null ? String(defaultShipCost) : "0"
+  );
+  const shipCostIsDefault = defaultShipCost != null && shipCostInput === String(defaultShipCost);
   const [adMode, setAdMode] = useState<AdMode>("percent");
   const [adInput, setAdInput] = useState("15");
 
@@ -344,7 +351,19 @@ export function PricingPanel({ data }: { data: PricingData }) {
               value={shipCostInput}
               onChange={(e) => setShipCostInput(e.target.value)}
             />
-            <span className="hint">what Printify bills you, on top of product cost</span>
+            <span className="hint">
+              what Printify bills you, on top of product cost
+              {defaultShipCost != null ? (
+                <>
+                  {" · "}
+                  {shipCostIsDefault ? "from " : "was "}
+                  Printify catalog (${defaultShipCost.toFixed(2)}
+                  {data.product?.shippingPulledAt ? `, pulled ${data.product.shippingPulledAt}` : ""}) — edit freely
+                </>
+              ) : (
+                <> · no Printify shipping pull yet for this product, starts at $0</>
+              )}
+            </span>
           </div>
           <div className="field">
             <label className="kicker" htmlFor="l3-ad">

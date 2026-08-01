@@ -45,6 +45,9 @@ export interface ProductCardData {
   costPulledAt: string | null;
   /** why there's no estimate, when there isn't one */
   costReason: string | null;
+  /** what Printify bills to ship one unit, US domestic — the L3 calculator's default */
+  estimatedShippingCost: number | null;
+  shippingPulledAt: string | null;
   needsRepresentative: boolean;
   representativeVariantId: string | null;
   /** true once probe or hand-entered costs exist */
@@ -165,6 +168,15 @@ function ProductCard({
       </div>
       {p.estimatedCost == null ? (
         <div className="hint" style={{ marginTop: -6 }}>{p.costReason}</div>
+      ) : null}
+      {p.estimatedShippingCost != null ? (
+        <div
+          className="body-sm muted"
+          style={{ marginTop: -6 }}
+          title={p.shippingPulledAt ? `Printify catalog, US domestic · pulled ${p.shippingPulledAt}` : "Printify catalog, US domestic"}
+        >
+          ship <strong>${p.estimatedShippingCost.toFixed(2)}</strong>
+        </div>
       ) : null}
       {/* wall_art without its anchor: same treatment as needs-shop-voice,
           plus the picker that resolves it in place */}
@@ -405,6 +417,32 @@ export function ProductsView({
     setPulling(false);
   }
 
+  const [pullingShipping, setPullingShipping] = useState(false);
+  const lastShippingPulled = products.reduce<string | null>(
+    (max, p) => (p.shippingPulledAt && (!max || p.shippingPulledAt > max) ? p.shippingPulledAt : max),
+    null
+  );
+
+  /** Catalog endpoint, no shop needed — still one request per product so a
+   *  single blueprint's failure can't strand the rest of the batch. */
+  async function pullAllShipping() {
+    setPullingShipping(true);
+    setError(null);
+    const targets = products.filter((p) => p.blueprintId && p.providerId);
+    let done = 0;
+    const failed: string[] = [];
+    for (const [i, t] of targets.entries()) {
+      setNotice(`Pulling shipping ${i + 1}/${targets.length} — ${t.productLine}…`);
+      const res = await apiJson(`/api/printify/pull-shipping`, "POST", { productId: t.id });
+      if (!res.ok) failed.push(`${t.productLine}: ${res.error}`);
+      else done++;
+    }
+    setNotice(done > 0 ? `Pulled shipping cost for ${done} of ${targets.length} products.` : null);
+    setError(failed.length > 0 ? `Couldn't pull ${failed.length}:\n${failed.join("\n")}` : null);
+    router.refresh();
+    setPullingShipping(false);
+  }
+
   // Fixed order — Apparel, Home, Wall Art, Miscellaneous, then anything the
   // auto-map couldn't place. Empty groups don't render.
   const groups = useMemo(() => {
@@ -487,6 +525,13 @@ export function ProductsView({
               {products.some((p) => p.hasCosts) ? "Re-pull costs" : "Pull costs from Printify"}
             </button>
             {lastPulled && !pulling ? <span className="hint">costs pulled {lastPulled}</span> : null}
+            <button className="btn btn-secondary" onClick={pullAllShipping} disabled={pullingShipping}>
+              {pullingShipping ? <span className="spinner" /> : null}
+              {products.some((p) => p.estimatedShippingCost != null) ? "Re-pull shipping" : "Pull shipping from Printify"}
+            </button>
+            {lastShippingPulled && !pullingShipping ? (
+              <span className="hint">shipping pulled {lastShippingPulled}</span>
+            ) : null}
           </>
         ) : null}
         {/* only exists while a product lacks its catalog photo — products

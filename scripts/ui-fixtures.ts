@@ -124,6 +124,9 @@ function main() {
     "Cost Pulled At": "2026-07-31",
     "Base Cost Min": 28.87,
     "Base Cost Max": 38.62,
+    "Estimated Shipping Cost": 5.99,
+    "Shipping Cost Source": "Printify catalog",
+    "Shipping Pulled At": "2026-07-31",
     "Shop Voice Text":
       "🧵 Fabric: 100% ring-spun cotton, which is the soft kind. It is a lighter sweatshirt at 6.4 oz/yd² (217 g/m²), so it is more \"cool evening on a porch\" than \"blizzard armor.\"\n\n📏 Fit: unisex fit, relaxed, with a rolled forward shoulder so it sits nicely instead of doing that weird bunching thing. Room to slouch, room to breathe, room to eat a whole sandwich. See the size chart photo for exact measurements.\n\n🧼 Care: wash cold, tumble dry low, and do not iron directly over the print.",
     "Voice Generated At": "2026-08-01",

@@ -347,6 +347,14 @@ export const SCHEMA: DbSpec[] = [
       // one throttled write instead of a five-minute sync per product. The
       // per-variant Base Cost field still wins when set by hand.
       "Variant Costs (JSON)": { type: "rich_text" },
+      // What Printify bills to ship one unit, US domestic, first item in the
+      // order — read from their catalog shipping endpoint (no shop needed,
+      // unlike the cost probe). The L3 calculator pre-fills its SHIPPING
+      // COST dial from this but always leaves it hand-overridable — this is
+      // a default, not a locked number.
+      "Estimated Shipping Cost": { type: "number" },
+      "Shipping Cost Source": { type: "select", options: ["Printify catalog"] },
+      "Shipping Pulled At": { type: "date" },
       // Representative Variant relation is patched in provisioning pass 2 —
       // product_variants doesn't exist yet when products is created.
       Currency: { type: "select", options: ["USD"] },

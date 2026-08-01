@@ -146,6 +146,11 @@ function pricingData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Pricing
           estimatedCost:
             typeof productRec.props["Estimated Cost"] === "number" ? productRec.props["Estimated Cost"] : null,
           costMethod: String(productRec.props["Cost Calc Method"] ?? "") || null,
+          estimatedShippingCost:
+            typeof productRec.props["Estimated Shipping Cost"] === "number"
+              ? productRec.props["Estimated Shipping Cost"]
+              : null,
+          shippingPulledAt: String(productRec.props["Shipping Pulled At"] ?? "") || null,
         }
       : null,
   };

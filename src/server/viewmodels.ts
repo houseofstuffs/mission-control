@@ -333,6 +333,8 @@ export function productCards(): ProductCardData[] {
     costVariantCount: num(p.props["Estimated Cost Variant Count"]),
     costPulledAt: str(p.props["Cost Pulled At"]) || null,
     costReason: num(p.props["Estimated Cost"]) != null ? null : estimateFor(p).reason,
+    estimatedShippingCost: num(p.props["Estimated Shipping Cost"]),
+    shippingPulledAt: str(p.props["Shipping Pulled At"]) || null,
     needsRepresentative,
     representativeVariantId: repId,
     hasCosts: probed.size > 0 || own.some((v) => num(v.props["Base Cost"]) != null),

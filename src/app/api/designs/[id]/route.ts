@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { reconcileListingNames } from "@/server/listingNames";
+import { markStepsStale } from "@/server/steps";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
     const contentType = req.headers.get("content-type") ?? "";
     const values: Record<string, SimpleValue> = {};
+    let productSwapped = false;
 
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
@@ -139,6 +141,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           if (product.props["Print Areas (JSON)"]) {
             values["Master Canvas (JSON)"] = String(product.props["Print Areas (JSON)"]);
           }
+          // SWAPPING products (not the first pick) invalidates work sized
+          // against the old canvas — flagged after the write, below
+          const prior = ((design.props["Primary Product"] as string[] | null) ?? [])[0] ?? null;
+          if (prior && prior !== product.id) productSwapped = true;
         } else {
           values["Primary Product"] = [];
         }
@@ -153,6 +159,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // "{design} — {product}" prefixes follow; hand-renamed listings don't
     if (values["Name"] !== undefined) {
       await reconcileListingNames();
+    }
+    // The Phase 2 canvas bug, closed: swapping the primary product rewrote
+    // Master Canvas silently while C7's export and C8's dimension check
+    // still described the OLD product. Stale, never silent — done steps
+    // only; a design that hasn't reached C7 loses nothing.
+    if (productSwapped) {
+      await markStepsStale(
+        id,
+        ["C7", "C8"],
+        "Primary product changed — the master was sized against the old product's print areas. Re-check C8, re-export if C7's master doesn't fit the new canvas."
+      );
     }
     return NextResponse.json({ record });
   } catch (err) {

@@ -164,9 +164,10 @@ export const LISTING_WORKFLOW: WorkflowDef = {
       id: "L3",
       label: "verify pricing",
       title: "Verify pricing + shipping profile",
-      needs: ["Price set at R6", "Shipping profile"],
-      produces: ["Verified price and shipping (verification, not decision)"],
+      needs: ["Cost snapshot (from the product's estimate)", "Shipping profile"],
+      produces: ["Saved price with verified margin (Etsy fees itemized)", "Shipping profile confirmed"],
       dependsOn: ["L1"],
+      note: "No cost, no math — the calculator refuses rather than showing a $0 cost.",
     },
     {
       id: "L4",

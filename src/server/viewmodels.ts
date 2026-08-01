@@ -419,7 +419,14 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
       { label: "Attributes recorded", ok: attrs.trim().length > 2 },
       { label: "Description hook + body", ok: hook.length > 0 && body.length > 0 },
       { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]) },
-      { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null }
+      { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null },
+      {
+        label:
+          num(rec.props["Price"]) != null
+            ? `Price set ($${num(rec.props["Price"])!.toFixed(2)})`
+            : "No price set.",
+        ok: num(rec.props["Price"]) != null,
+      }
     );
     // Hard block, not advice: this decides which garment colours ship.
     const compat = compatForListing(rec);

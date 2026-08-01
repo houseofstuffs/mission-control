@@ -10,6 +10,7 @@ import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
+import type { PricingData } from "@/components/PricingPanel";
 import { isStaleKeyword } from "@/config/keywords";
 import { momentumTooltip, type MomentumDetail } from "@/server/listingCsv";
 import { Kicker } from "@/components/ui";
@@ -34,6 +35,7 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
         seo={seoData(rec)}
         slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec), selectedColorways(rec))}
         colorways={colorwaysData(rec)}
+        pricing={pricingData(rec)}
       />
     </div>
   );
@@ -95,6 +97,27 @@ function slotsData(listingId: string, isMultiVariant: boolean, compatibility: st
     garmentColor: String(t.props["Garment Color"] ?? ""),
   }));
   return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
+}
+
+/** L3's inputs: the snapshot on the record, the estimate on the product. */
+function pricingData(rec: NonNullable<ReturnType<typeof cachedRecord>>): PricingData {
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const productRec = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
+  return {
+    listingId: rec.id,
+    price: typeof rec.props["Price"] === "number" ? rec.props["Price"] : null,
+    cost: typeof rec.props["Cost At Creation"] === "number" ? rec.props["Cost At Creation"] : null,
+    costBasis: String(rec.props["Cost Basis"] ?? ""),
+    costSnapshotAt: String(rec.props["Cost Snapshot At"] ?? ""),
+    product: productRec
+      ? {
+          name: productLabel(productRec),
+          estimatedCost:
+            typeof productRec.props["Estimated Cost"] === "number" ? productRec.props["Estimated Cost"] : null,
+          costMethod: String(productRec.props["Cost Calc Method"] ?? "") || null,
+        }
+      : null,
+  };
 }
 
 function momentumTitleFor(k: NonNullable<ReturnType<typeof cachedRecord>>): string | null {

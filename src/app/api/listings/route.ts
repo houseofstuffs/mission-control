@@ -31,9 +31,14 @@ export async function POST(req: Request) {
       const product = cachedRecord(String(body.productId));
       values["Product"] = [String(body.productId)];
       // cost_at_creation is a snapshot, not a live lookup (§3.4) — Printify
-      // prices change and would silently rewrite margin history.
-      const cost = product?.props["Base Cost Min"];
-      if (typeof cost === "number") {
+      // prices change and would silently rewrite margin history. The
+      // ESTIMATE is the honest number (category-aware: core-size average /
+      // representative size); Base Cost Min is the pre-estimate fallback
+      // and it UNDERSTATES apparel (smallest size is the cheapest).
+      const estimate = product?.props["Estimated Cost"];
+      const fallback = product?.props["Base Cost Min"];
+      const cost = typeof estimate === "number" ? estimate : typeof fallback === "number" ? fallback : null;
+      if (cost != null) {
         values["Cost At Creation"] = cost;
         values["Cost Snapshot At"] = new Date().toISOString().slice(0, 10);
         values["Cost Basis"] = "Printify Standard";

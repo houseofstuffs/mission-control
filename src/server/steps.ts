@@ -106,6 +106,16 @@ function requireRecord(pageId: string): SimpleRecord {
  */
 export function unmetRequirement(rec: SimpleRecord, stepId: string): string | null {
   if (rec.dbKey === "etsy_listings") {
+    // L3's whole job is a verified price — and a margin verified against a
+    // missing cost is a margin decided by accident. Both block, by name.
+    if (stepId === "L3") {
+      if (typeof rec.props["Cost At Creation"] !== "number") {
+        return "No cost snapshot — snapshot it from the product in the pricing panel first.";
+      }
+      if (typeof rec.props["Price"] !== "number") {
+        return "Save a price — verifying pricing is this step's whole job.";
+      }
+    }
     // The publish gate is where an unexamined design stops being harmless:
     // it decides which garment colours ship. No default is safe here.
     if ((stepId === "L6" || stepId === "L7") && compatForListing(rec) === "Unset") {

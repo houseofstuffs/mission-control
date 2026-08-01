@@ -21,6 +21,7 @@ import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
 import { TexturePick, type TextureData } from "./TexturePick";
 import { StandingConstraints } from "./StandingConstraints";
 import { ColorwaysPanel, type ColorwaysData } from "./ColorwaysPanel";
+import { PricingPanel, type PricingData } from "./PricingPanel";
 import { FanOutPanel, type FanOutData } from "./FanOutPanel";
 import { PrintCheck, type PrintCheckData } from "./PrintCheck";
 
@@ -54,6 +55,7 @@ export function StepRunner({
   printCheck,
   colorways,
   fanOut,
+  pricing,
 }: {
   record: RunnerRecord;
   styles?: StyleOption[];
@@ -68,6 +70,7 @@ export function StepRunner({
   printCheck?: PrintCheckData;
   colorways?: ColorwaysData;
   fanOut?: FanOutData;
+  pricing?: PricingData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
@@ -262,6 +265,11 @@ export function StepRunner({
             same as the C1 tools. */}
         {record.workflowKey === "listing" && selected.id === "L2" && seo ? (
           <KeywordSeoPanel seo={seo} />
+        ) : null}
+
+        {/* L3: the margin calculator — cost snapshot + price + itemized fees */}
+        {record.workflowKey === "listing" && selected.id === "L3" && pricing ? (
+          <PricingPanel data={pricing} />
         ) : null}
 
         {/* L5 is the slot plan — assemble the ordered image set */}

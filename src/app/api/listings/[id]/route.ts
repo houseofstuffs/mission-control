@@ -27,6 +27,34 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // L3 — the price decision, and the cost snapshot it's judged against
+    if (body.price !== undefined) {
+      const price = Number(body.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        return NextResponse.json({ error: "Price must be a positive number." }, { status: 400 });
+      }
+      values["Price"] = price;
+    }
+    // Cost At Creation is a SNAPSHOT (§3.4) — this is the one deliberate
+    // way to retake it, from the product's stored estimate. Never a live
+    // lookup, and it refuses when there's no estimate to take.
+    if (body.resnapshotCost) {
+      const productId = ((listing.props["Product"] as string[] | null) ?? [])[0];
+      const product = productId ? cachedRecord(productId) : null;
+      const estimate = typeof product?.props["Estimated Cost"] === "number" ? product.props["Estimated Cost"] : null;
+      if (estimate == null) {
+        return NextResponse.json(
+          { error: "The product has no cost estimate to snapshot — pull costs on the Products page first." },
+          { status: 400 }
+        );
+      }
+      values["Cost At Creation"] = estimate;
+      values["Cost Snapshot At"] = new Date().toISOString().slice(0, 10);
+      if (!String(listing.props["Cost Basis"] ?? "").trim()) {
+        values["Cost Basis"] = "Printify Standard";
+      }
+    }
+
     // shortlist dismissals — keyword ids ✕'d out of consideration at L2
     if (body.dismissedKeywords !== undefined) {
       const list = Array.isArray(body.dismissedKeywords)

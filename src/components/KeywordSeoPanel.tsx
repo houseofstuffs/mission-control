@@ -530,6 +530,61 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setBusy(null);
   }
 
+  // shared by the DESCRIPTION section below — a function, not inline JSX,
+  // so it can render once instead of duplicating the collapse/edit logic
+  function hookEditor() {
+    const hookSaved = hook.trim() !== "" && hook === seo.hook;
+    const showInput = !hookSaved || hookEditOpen;
+    return (
+      <div className="field">
+        <span className="kicker">HOOK IN SHOP VOICE</span>
+        {showInput ? (
+          <>
+            <textarea
+              id="l2-hook"
+              className="input"
+              rows={3}
+              value={hook}
+              onChange={(e) => setHook(e.target.value)}
+            />
+            <div className="row-gap-12" style={{ marginTop: 6 }}>
+              <button
+                className="btn btn-secondary"
+                disabled={busy !== null || !hook.trim() || hook === seo.hook}
+                onClick={async () => {
+                  const ok = await call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() });
+                  if (ok) setHookEditOpen(false);
+                }}
+              >
+                {busy === "hook" ? <span className="spinner" /> : null}
+                Save hook
+              </button>
+              {hook !== seo.hook ? <span className="hint">Unsaved</span> : null}
+              {hookSaved ? (
+                <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setHookEditOpen(false)}>
+                  Done
+                </button>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
+            <span className="body-sm" style={{ flex: 1, whiteSpace: "pre-wrap" }}>{hook}</span>
+            <button
+              type="button"
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
+              title="Edit hook"
+              onClick={() => setHookEditOpen(true)}
+            >
+              ✎
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const titleWords = title.trim() ? title.trim().split(/\s+/).length : 0;
   const pendingSuggestions = suggestedTags.filter((t) => !inTagList(t));
   const attrsDirty = JSON.stringify(attrs) !== JSON.stringify(seo.attributes);
@@ -892,59 +947,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           </div>
         ) : null}
 
-        {(() => {
-          const hookSaved = hook.trim() !== "" && hook === seo.hook;
-          const showInput = !hookSaved || hookEditOpen;
-          return (
-            <div className="field">
-              <label className="kicker" htmlFor="l2-hook">DESCRIPTION HOOK IN SHOP VOICE</label>
-              {showInput ? (
-                <>
-                  <textarea
-                    id="l2-hook"
-                    className="input"
-                    rows={3}
-                    value={hook}
-                    onChange={(e) => setHook(e.target.value)}
-                  />
-                  <div className="row-gap-12" style={{ marginTop: 6 }}>
-                    <button
-                      className="btn btn-secondary"
-                      disabled={busy !== null || !hook.trim() || hook === seo.hook}
-                      onClick={async () => {
-                        const ok = await call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() });
-                        if (ok) setHookEditOpen(false);
-                      }}
-                    >
-                      {busy === "hook" ? <span className="spinner" /> : null}
-                      Save hook
-                    </button>
-                    {hook !== seo.hook ? <span className="hint">Unsaved</span> : null}
-                    {hookSaved ? (
-                      <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setHookEditOpen(false)}>
-                        Done
-                      </button>
-                    ) : null}
-                  </div>
-                </>
-              ) : (
-                <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
-                  <span className="body-sm" style={{ flex: 1, whiteSpace: "pre-wrap" }}>{hook}</span>
-                  <button
-                    type="button"
-                    className="btn btn-tertiary"
-                    style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
-                    title="Edit hook"
-                    onClick={() => setHookEditOpen(true)}
-                  >
-                    ✎
-                  </button>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-
         <div className="field">
           <span className="kicker">ATTRIBUTES</span>
           {attrs.length === 0 ? <span className="hint">None yet — generate a draft or add one.</span> : null}
@@ -1008,87 +1010,85 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         </div>
       </div>
 
-      {/* description body = hook + the Product's boilerplate. The boilerplate
-          is generated ONCE on the product, never inline here — an empty one
-          points back to the Products page instead of papering over it. */}
+      {/* DESCRIPTION — both parts of what the buyer reads: the hook (this
+          listing's own voice) and the product boilerplate (generated once
+          on the Product, never inline here — an empty one points back to
+          the Products page instead of papering over it). One section, one
+          header, so the two halves read as one description, not a stack of
+          duplicate boxes. */}
       <div className="field">
-        <span className="kicker">DESCRIPTION BODY — HOOK + PRODUCT BOILERPLATE</span>
-        {!seo.product ? (
-          <span className="hint">No product set on this listing yet.</span>
-        ) : seo.product.hasVoice ? (
-          <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null}
-              onClick={() =>
-                call("body", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: seo.product!.voiceText })
-              }
-            >
-              {busy === "body" ? <span className="spinner" /> : null}
-              {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
-            </button>
-            {bodyCopySet ? <span className="chip done">body copy set</span> : null}
-            {bodyCopySet ? (
+        <span className="kicker">DESCRIPTION</span>
+        {hookEditor()}
+        <div className="field">
+          <span className="kicker">PRODUCT BOILERPLATE</span>
+          {!seo.product ? (
+            <span className="hint">No product set on this listing yet.</span>
+          ) : seo.product.hasVoice ? (
+            <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
               <button
-                className="btn btn-tertiary"
-                style={{ fontSize: 12, padding: "4px 10px" }}
-                onClick={() => {
-                  setBodyDraft(seo.bodyCopy); // fresh from the record on open
-                  setShowBody((v) => !v);
-                }}
+                className="btn btn-secondary"
+                disabled={busy !== null}
+                onClick={() =>
+                  call("body", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: seo.product!.voiceText })
+                }
               >
-                {showBody ? "Collapse" : "Read / edit"}
+                {busy === "body" ? <span className="spinner" /> : null}
+                {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
               </button>
-            ) : null}
-            <span className="hint">
-              Stitches {seo.product.name}&apos;s fit/fabric/care copy under the hook — same text on
-              every listing that sells this garment.
-            </span>
-            {/* the description as a buyer reads it: hook (edited in its own
-                field above), then the body — editable HERE, for THIS listing
-                only. The product boilerplate is never written from L2. */}
-            {showBody ? (
-              <div className="well" style={{ flexBasis: "100%" }}>
-                <div style={{ whiteSpace: "pre-wrap", marginBottom: 10 }}>
-                  {seo.hook.trim() ? (
-                    seo.hook.trim()
-                  ) : (
-                    <span className="hint">(no hook saved yet — it opens the description)</span>
-                  )}
+              {bodyCopySet ? <span className="chip done">body copy set</span> : null}
+              {bodyCopySet ? (
+                <button
+                  className="btn btn-tertiary"
+                  style={{ fontSize: 12, padding: "4px 10px" }}
+                  onClick={() => {
+                    setBodyDraft(seo.bodyCopy); // fresh from the record on open
+                    setShowBody((v) => !v);
+                  }}
+                >
+                  {showBody ? "Collapse" : "Read / edit"}
+                </button>
+              ) : null}
+              <span className="hint">
+                This garment&apos;s fit/fabric/care copy, under the hook above — same text on every
+                listing that sells {seo.product.name}.
+              </span>
+              {/* per-listing edit of the boilerplate text only — the hook has
+                  its own box above, so it isn't repeated here */}
+              {showBody ? (
+                <div className="well" style={{ flexBasis: "100%" }}>
+                  <textarea
+                    className="input"
+                    value={bodyDraft}
+                    rows={Math.min(24, bodyDraft.split("\n").length + 4)}
+                    style={{ resize: "vertical", width: "100%" }}
+                    onChange={(e) => setBodyDraft(e.target.value)}
+                  />
+                  <div className="row-gap-12" style={{ marginTop: 8, alignItems: "center" }}>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
+                      onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
+                    >
+                      {busy === "body-edit" ? <span className="spinner" /> : null}
+                      Save body copy — this listing only
+                    </button>
+                    {bodyDirty ? <span className="hint">Unsaved</span> : null}
+                    <span className="hint">
+                      The product boilerplate is untouched; &quot;Refresh from product&quot; replaces these edits.
+                    </span>
+                  </div>
                 </div>
-                <textarea
-                  className="input"
-                  value={bodyDraft}
-                  rows={Math.min(24, bodyDraft.split("\n").length + 4)}
-                  style={{ resize: "vertical", width: "100%" }}
-                  onChange={(e) => setBodyDraft(e.target.value)}
-                />
-                <div className="row-gap-12" style={{ marginTop: 8, alignItems: "center" }}>
-                  <button
-                    className="btn btn-secondary"
-                    disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
-                    onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
-                  >
-                    {busy === "body-edit" ? <span className="spinner" /> : null}
-                    Save body copy — this listing only
-                  </button>
-                  {bodyDirty ? <span className="hint">Unsaved</span> : null}
-                  <span className="hint">
-                    The product boilerplate is untouched; &quot;Refresh from product&quot; replaces these edits.
-                  </span>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="callout stale">
-            {seo.product.name} has no shop-voice boilerplate yet — generate it once on the{" "}
-            <Link href="/products">Products page</Link>, then stitch it here. It&apos;s written per
-            product, not per listing, so every future listing on this garment reuses it.
-          </div>
-        )}
+              ) : null}
+            </div>
+          ) : (
+            <div className="callout stale">
+              {seo.product.name} has no shop-voice boilerplate yet — generate it once on the{" "}
+              <Link href="/products">Products page</Link>, then stitch it here. It&apos;s written per
+              product, not per listing, so every future listing on this garment reuses it.
+            </div>
+          )}
+        </div>
       </div>
-
     </div>
   );
 }

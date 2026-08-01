@@ -67,6 +67,9 @@ export interface SeoData {
   patternUrl: string | null;
   /** keyword CSVs already folded into this design's pool, newest last */
   imports: Array<{ file: string; source: string; rows: number; at: string }>;
+  /** pool keywords that came from an eRank/Everbee export — the evidence
+   *  of imports made before per-file tracking existed */
+  pooledFromCsv: number;
 }
 
 const BUCKET_CHIP: Record<string, string> = {
@@ -643,7 +646,18 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         title="Import from eRank / Everbee"
         right={
           seo.imports.length === 0 ? (
-            <span className="chip neutral">NO IMPORTS</span>
+            // an empty LOG is not an empty pool: file tracking is newer
+            // than the imports themselves, so say which is true
+            seo.pooledFromCsv > 0 ? (
+              <span
+                className="chip stale"
+                title={`${seo.pooledFromCsv} keywords in this design's pool came from eRank/Everbee exports, imported before per-file tracking existed. The keywords are intact — only the file list is missing, and it fills in from the next import onward.`}
+              >
+                IMPORTED BEFORE TRACKING
+              </span>
+            ) : (
+              <span className="chip stale">NO IMPORTS</span>
+            )
           ) : (
             <span
               className="chip done"

@@ -274,5 +274,12 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
     aiReady: anthropicConfigured(),
     patternUrl: assetUrl("pattern"),
     imports: keywordImports(designId),
+    pooledFromCsv: designId
+      ? all.filter(
+          (k) =>
+            ((k.props["Designs"] as string[] | null) ?? []).includes(designId) &&
+            ["eRank", "Everbee"].includes(String(k.props["Source"] ?? ""))
+        ).length
+      : 0,
   };
 }

@@ -1153,7 +1153,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
         });
 
   return (
-    <div className="gate-panel">
+    <div className="gate-panel tags-panel">
       <div className="panel-title">
         Selected tags · {tags.length}/{TAG_COUNT}
       </div>

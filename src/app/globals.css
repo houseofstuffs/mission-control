@@ -438,6 +438,11 @@ a:hover { color: var(--candy); }
   gap: 12px;
 }
 .gate-panel .panel-title { color: var(--text-on-mint-title); }
+/* Selected tags — the working set the operator is actively building,
+   given the sidebar's yellow instead of the gates' mint so it doesn't
+   read as another pass/fail gate. */
+.gate-panel.tags-panel { background: var(--surface-sidebar); }
+.gate-panel.tags-panel .panel-title { color: var(--text-on-yellow); }
 .gate-item {
   background: #ffffff;
   border-radius: var(--radius-callout);

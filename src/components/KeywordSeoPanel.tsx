@@ -192,6 +192,25 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [attrs, setAttrs] = useState<Array<{ name: string; value: string }>>(seo.attributes);
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState("");
+  // one generation of history — a regenerate must never eat an unsaved
+  // draft silently. Swap flips between the current and previous versions.
+  const [prevDraft, setPrevDraft] = useState<{
+    title: string;
+    hook: string;
+    attrs: Array<{ name: string; value: string }>;
+    suggested: string[];
+  } | null>(null);
+
+  function swapDrafts() {
+    if (!prevDraft) return;
+    const current = { title, hook, attrs, suggested: suggestedTags };
+    setTitle(prevDraft.title);
+    setHook(prevDraft.hook);
+    setAttrs(prevDraft.attrs);
+    setSuggestedTags(prevDraft.suggested);
+    setPrevDraft(current);
+    setNotice("Swapped drafts — swap again to flip back. Save the one you're keeping.");
+  }
 
   // CSV import
   const fileInput = useRef<HTMLInputElement>(null);
@@ -444,6 +463,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     if (!res.ok) setError(res.error);
     else {
       const d = res.data.draft;
+      // stash what's on screen BEFORE overwriting — regenerating for one
+      // field must never silently cost an unsaved version of another
+      setPrevDraft({ title, hook, attrs, suggested: suggestedTags });
       setTitle(d.title);
       setHook(d.hook);
       if (d.attributes.length > 0) setAttrs(d.attributes);
@@ -718,6 +740,19 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               : "Drafts only — nothing saves without its button."}
           </span>
         </div>
+        {prevDraft ? (
+          <div className="row-gap-12" style={{ alignItems: "center", marginTop: 6 }}>
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              disabled={busy !== null}
+              onClick={swapDrafts}
+            >
+              ⇄ Swap back to previous draft
+            </button>
+            <span className="hint">Nothing is lost on regenerate anymore — flip between the last two versions.</span>
+          </div>
+        ) : null}
         {draftNotes ? <div className="hint" style={{ marginTop: 6 }}>{draftNotes}</div> : null}
 
         <div className="field" style={{ marginTop: 10 }}>
@@ -931,33 +966,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           </div>
         )}
       </div>
-
-      {/* tier-2 manual add: a bank keyword that didn't make the shortlist */}
-      {seo.available.length > 0 ? (
-        <div className="field">
-          <label className="kicker" htmlFor="kw-attach">ADD A KEYWORD NOT ON THE SHORTLIST</label>
-          <select
-            id="kw-attach"
-            className="select"
-            style={{ maxWidth: 340 }}
-            value=""
-            disabled={busy !== null}
-            onChange={(e) => {
-              const name = e.target.value;
-              if (name) addTag(name);
-            }}
-          >
-            <option value="" disabled>Keyword…</option>
-            {seo.available
-              .filter((k) => k.name.length <= 20 && !inTagList(k.name))
-              .map((k) => (
-                <option key={k.id} value={k.name}>
-                  {k.name} · {(k.bucket || "unknown").toLowerCase()}
-                </option>
-              ))}
-          </select>
-        </div>
-      ) : null}
 
     </div>
   );

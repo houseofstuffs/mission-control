@@ -161,6 +161,16 @@ function UnsavedChip() {
   return <span className="chip stale">UNSAVED</span>;
 }
 
+/** swapped back to a version that already matches the record — saving it
+ *  again changes nothing, but the button stays live so you can confirm. */
+function SwappedChip() {
+  return (
+    <span className="chip neutral" title="This version is already on the record — save again to confirm.">
+      SWAPPED · MATCHES SAVED
+    </span>
+  );
+}
+
 interface ImportSummary {
   source: string;
   total: number;
@@ -209,6 +219,15 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     suggested: string[];
   } | null>(null);
 
+  /**
+   * A swap ARMS the save buttons even when the restored text is identical
+   * to what's on the record. It usually is — you swap back to the version
+   * you'd already saved — and a dead button reads as "the swap didn't
+   * work" rather than "this is already safe". Re-saving the same value is
+   * harmless; being unable to is confusing.
+   */
+  const [swapped, setSwapped] = useState(false);
+
   function swapDrafts() {
     if (!prevDraft) return;
     const current = { title, hook, attrs, suggested: suggestedTags };
@@ -217,6 +236,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setAttrs(prevDraft.attrs);
     setSuggestedTags(prevDraft.suggested);
     setPrevDraft(current);
+    setSwapped(true);
     setNotice("Swapped drafts — swap again to flip back. Save the one you're keeping.");
   }
 
@@ -395,7 +415,10 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setError(null);
     const res = await apiJson(url, method, body);
     if (!res.ok) setError(res.error);
-    else router.refresh();
+    else {
+      setSwapped(false); // committed — the swap no longer needs arming
+      router.refresh();
+    }
     setBusy(null);
     return res.ok;
   }
@@ -549,6 +572,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const attrsDirty = JSON.stringify(attrs) !== JSON.stringify(seo.attributes);
   const titleDirty = title !== seo.title;
   const hookDirty = hook !== seo.hook;
+  // a swap re-arms every field it restored, differing or not
+  const canSaveTitle = titleDirty || swapped;
+  const canSaveHook = hookDirty || swapped;
+  const canSaveAttrs = attrsDirty || swapped;
+  /** already on the record — the save is a confirmation, not a change */
+  const matchesSaved = swapped && !titleDirty && !hookDirty && !attrsDirty;
   const attrsClearing =
     attrs.filter((a) => a.name.trim() && a.value.trim()).length === 0 && seo.attributes.length > 0;
   // why Generate is locked, when it is — shown inline, not just on hover
@@ -843,7 +872,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             </span>
           </>
         }
-        right={titleDirty ? <UnsavedChip /> : null}
+        right={titleDirty ? <UnsavedChip /> : swapped ? <SwappedChip /> : null}
       >
         <textarea
           id="l2-title"
@@ -862,7 +891,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         <div className="row-gap-12">
           <button
             className="btn btn-save"
-            disabled={busy !== null || !title.trim() || !titleDirty}
+            disabled={busy !== null || !title.trim() || !canSaveTitle}
             onClick={() => call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() })}
           >
             {busy === "title" ? <span className="spinner" /> : null}
@@ -875,7 +904,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           Holiday both reading "Halloween" is Etsy's taxonomy, not a dupe:
           they are separate attributes and both legitimately carry the
           holiday for a seasonal design. */}
-      <Section n={4} title="Attributes" right={attrsDirty ? <UnsavedChip /> : null}>
+      <Section n={4} title="Attributes" right={attrsDirty ? <UnsavedChip /> : swapped ? <SwappedChip /> : null}>
         {attrs.length === 0 ? <span className="hint">None yet — generate a draft or add one.</span> : null}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(220px, 1fr))", gap: "10px 22px" }}>
           {attrs.map((a, i) => (
@@ -916,7 +945,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               confirmed, never the default behavior of the same button */}
           <button
             className="btn btn-save"
-            disabled={busy !== null || !attrsDirty}
+            disabled={busy !== null || !canSaveAttrs}
             onClick={() => {
               if (attrsClearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
               call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
@@ -939,7 +968,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       <Section
         n={5}
         title="Description — listing copy"
-        right={hookDirty || bodyDirty ? <UnsavedChip /> : null}
+        right={hookDirty || bodyDirty ? <UnsavedChip /> : swapped ? <SwappedChip /> : null}
       >
         <span className="kicker">HOOK IN SHOP VOICE</span>
         {/* the note sits plainly under the subheading — no shaded box */}
@@ -959,7 +988,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
           <button
             className="btn btn-save"
-            disabled={busy !== null || !hook.trim() || !hookDirty}
+            disabled={busy !== null || !hook.trim() || !canSaveHook}
             onClick={() => call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() })}
           >
             {busy === "hook" ? <span className="spinner" /> : null}

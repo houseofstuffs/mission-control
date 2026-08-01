@@ -32,6 +32,18 @@ unless `CACHE_DB_PATH` points somewhere other than the real cache.
 The screenshot pass never writes to Notion — writes would fail without
 credentials, and nothing in the pass attempts one.
 
+## Standing assumptions that expire
+
+These are true today and will quietly stop being true. Each one names its
+trigger and where to change it — check them when the trigger fires, not on
+a schedule.
+
+| Assumption | True while | Flip it here |
+| --- | --- | --- |
+| Offsite Ads default **15%, mandatory** | STUFFS is under **$10,000** trailing-12-month Etsy revenue | `OFFSITE_ADS_TIER` in `src/config/fees.ts` → `"over10k"`. Rate becomes 12% and opt-out becomes possible. The L3 panel prints this assumption next to the advertising input on every visit, so it should get noticed. Nothing in the app can read Etsy revenue — this is a human check. |
+| Etsy fee rates (listing $0.20, transaction 6.5%, processing 3% + $0.25) | Etsy doesn't change them | `src/config/fees.ts` — all rates live there, nowhere else |
+| Fees computed for a **US seller in USD**, free-shipping-friendly | shop stays US/USD | `src/config/fees.ts` |
+
 ## Conventions worth not re-deciding
 
 - **Button colour**: filled candy red is ONLY for generate actions and

@@ -27,6 +27,7 @@ import {
   breakevenPrice,
   MARGIN_THIN_PCT,
   AD_PRESETS,
+  offsiteAds,
   ETSY_LISTING_FEE,
   ETSY_TRANSACTION_PCT,
   ETSY_PAYMENT_PCT,
@@ -287,26 +288,31 @@ export function PricingPanel({ data }: { data: PricingData }) {
               </select>
             </div>
             {adMode === "percent" ? (
-              <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                {AD_PRESETS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`chip ${num(adInput) === p ? "done" : "neutral"}`}
-                    style={{ cursor: "pointer" }}
-                    title={
-                      p === 15
-                        ? "Etsy Offsite Ads, mandatory tier (under $10k/yr)"
-                        : p === 12
-                          ? "Etsy Offsite Ads once the shop clears $10k/yr"
-                          : "no advertising on this sale"
-                    }
-                    onClick={() => setAdInput(String(p))}
-                  >
-                    {p === 0 ? "none" : `${p}%`}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                  {AD_PRESETS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`chip ${num(adInput) === p ? "done" : "neutral"}`}
+                      style={{ cursor: "pointer" }}
+                      title={
+                        p === 15
+                          ? "Etsy Offsite Ads, mandatory tier (under $10k/yr)"
+                          : p === 12
+                            ? "Etsy Offsite Ads once the shop clears $10k/yr"
+                            : "no advertising on this sale"
+                      }
+                      onClick={() => setAdInput(String(p))}
+                    >
+                      {p === 0 ? "none" : `${p}%`}
+                    </button>
+                  ))}
+                </div>
+                {/* the tier assumption, printed where it gets read — it
+                    can't quietly go stale if it's on screen every visit */}
+                <span className="hint">{offsiteAds.note}</span>
+              </>
             ) : (
               <span className="hint">flat spend attributed to one sale</span>
             )}

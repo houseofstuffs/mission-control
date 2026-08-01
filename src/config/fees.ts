@@ -24,12 +24,35 @@ export const ETSY_PAYMENT_FLAT = 0.25;
 
 /**
  * Offsite Ads: Etsy's own rate, not a choice — 15% under $10k/yr revenue
- * (the mandatory tier), 12% once a shop crosses $10k. It only applies to
- * orders an ad actually drove, which is why the panel treats it as a
- * scenario dial rather than a flat cost of doing business.
+ * (the mandatory tier, no opt-out), 12% once a shop crosses $10k (and
+ * opt-out becomes available). It only applies to orders an ad actually
+ * drove, which is why the panel treats it as a scenario dial rather than
+ * a flat cost of doing business.
+ *
+ * ⚠ REVISIT WHEN STUFFS CLEARS $10,000 IN TRAILING-12-MONTH ETSY REVENUE.
+ * At that point: flip OFFSITE_ADS_TIER to "over10k" below — the default
+ * preset becomes 12% and the panel stops calling it mandatory. Nobody can
+ * verify this from inside the app (Etsy revenue isn't wired in), so it is
+ * a human check. The panel prints the assumption next to the input on
+ * every visit, which is the reminder — see PricingPanel's ad hint.
  */
+export type OffsiteAdsTier = "under10k" | "over10k";
+export const OFFSITE_ADS_TIER: OffsiteAdsTier = "under10k";
+
 export const ETSY_OFFSITE_ADS_PCT = 0.15;
 export const ETSY_OFFSITE_ADS_PCT_HIGH_VOLUME = 0.12;
+
+/** the rate that applies at the current tier, and whether it's escapable */
+export const offsiteAds = {
+  pct: OFFSITE_ADS_TIER === "under10k" ? ETSY_OFFSITE_ADS_PCT : ETSY_OFFSITE_ADS_PCT_HIGH_VOLUME,
+  mandatory: OFFSITE_ADS_TIER === "under10k",
+  /** shown next to the advertising input so the assumption can't sit unseen */
+  note:
+    OFFSITE_ADS_TIER === "under10k"
+      ? "15% assumes STUFFS is under $10k/yr on Etsy (mandatory tier). Past $10k it drops to 12% and becomes optional — update OFFSITE_ADS_TIER in src/config/fees.ts."
+      : "12% applies over $10k/yr, and Offsite Ads is optional at this tier.",
+} as const;
+
 /** the presets the panel offers; the field still takes any number */
 export const AD_PRESETS = [0, 12, 15] as const;
 

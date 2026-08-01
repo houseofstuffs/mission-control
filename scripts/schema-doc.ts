@@ -29,7 +29,7 @@ const OUT = "SCHEMA.md";
  * Update these two lines whenever it IS re-uploaded. Until then this script
  * says how far behind it has drifted, so nobody has to remember.
  */
-const DRIVE_COPY = { fields: 232, uploaded: "2026-07-30" };
+const DRIVE_COPY = { fields: 255, uploaded: "2026-08-01" };
 
 /** Human name for a property type, plus whatever detail it carries. */
 function describe(spec: PropSpec, byKey: Map<string, DbSpec>): { type: string; detail: string } {

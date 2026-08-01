@@ -2,7 +2,7 @@
   "name": "stuffs-mission-control",
   "version": "0.1.0",
   "private": true,
-  "description": "STUFFS Mission Control — workflow dashboard for an Etsy print-on-demand shop. Front end over Notion (system of record) with a local cache.",
+  "description": "STUFFS Mission Control \u2014 workflow dashboard for an Etsy print-on-demand shop. Front end over Notion (system of record) with a local cache.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "schema:doc": "tsx scripts/schema-doc.ts",
     "notion:provision": "tsx scripts/provision-notion.ts",
-    "notion:refresh": "tsx scripts/refresh-cache.ts"
+    "notion:refresh": "tsx scripts/refresh-cache.ts",
+    "ui:seed": "CACHE_DB_PATH=./data/ui-preview.db tsx scripts/ui-fixtures.ts",
+    "ui:shots": "CACHE_DB_PATH=./data/ui-preview.db NOTION_API_KEY=ui-preview ANTHROPIC_API_KEY=ui-preview next dev --port 3111 & npx wait-on -t 90000 http://127.0.0.1:3111 && BASE_URL=http://127.0.0.1:3111 tsx scripts/ui-shots.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -27,6 +29,7 @@
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
+    "playwright": "^1.62.1",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }

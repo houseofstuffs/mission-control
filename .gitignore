@@ -21,3 +21,6 @@ data/
 *.log
 .claude/
 tsconfig.tsbuildinfo
+
+# UI screenshot checks — regenerated on demand, never reviewed in git
+.ui-shots/

@@ -942,42 +942,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         right={hookDirty || bodyDirty ? <UnsavedChip /> : null}
       >
         <span className="kicker">HOOK IN SHOP VOICE</span>
-        <div className="well">
-          <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <span className="hint">
-              Drafts only — nothing saves without its button.
-              {prevDraft ? " Regenerating keeps the last two versions." : ""}
-            </span>
-            <span className="row-gap-8" style={{ marginLeft: "auto", alignItems: "center", flexWrap: "wrap" }}>
-              {prevDraft ? (
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: 12, padding: "5px 11px" }}
-                  disabled={busy !== null}
-                  onClick={swapDrafts}
-                >
-                  ⇄ Swap to previous draft
-                </button>
-              ) : null}
-              {seo.aiReady ? (
-                <button
-                  className="btn btn-primary"
-                  disabled={busy !== null || generateBlocker !== null}
-                  title={generateBlocker ?? undefined}
-                  onClick={generate}
-                >
-                  <Spinner active={busy === "generate"} />
-                  Generate hook draft
-                </button>
-              ) : (
-                <span className="hint">Set ANTHROPIC_API_KEY to generate drafts.</span>
-              )}
-            </span>
-          </div>
-          {generateBlocker ? (
-            <span className="hint" style={{ marginTop: 6 }}>Locked: {generateBlocker}</span>
-          ) : null}
-        </div>
+        {/* the note sits plainly under the subheading — no shaded box */}
+        <span className="hint">
+          Drafts only — nothing saves without its button.
+          {prevDraft ? " Regenerating keeps the last two versions." : ""}
+        </span>
+        {generateBlocker ? <span className="hint">Locked: {generateBlocker}</span> : null}
         <textarea
           id="l2-hook"
           className="input"
@@ -985,7 +955,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           value={hook}
           onChange={(e) => setHook(e.target.value)}
         />
-        <div className="row-gap-12">
+        {/* save, swap and generate share one row under the hook */}
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
           <button
             className="btn btn-save"
             disabled={busy !== null || !hook.trim() || !hookDirty}
@@ -994,6 +965,25 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             {busy === "hook" ? <span className="spinner" /> : null}
             Save hook
           </button>
+          {prevDraft ? (
+            <button className="btn btn-secondary" disabled={busy !== null} onClick={swapDrafts}>
+              ⇄ Swap to previous draft
+            </button>
+          ) : null}
+          {seo.aiReady ? (
+            <button
+              className="btn btn-primary"
+              style={{ marginLeft: "auto" }}
+              disabled={busy !== null || generateBlocker !== null}
+              title={generateBlocker ?? undefined}
+              onClick={generate}
+            >
+              <Spinner active={busy === "generate"} />
+              Generate hook draft
+            </button>
+          ) : (
+            <span className="hint" style={{ marginLeft: "auto" }}>Set ANTHROPIC_API_KEY to generate drafts.</span>
+          )}
         </div>
 
         {/* the boilerplate row — collapsed by default, badge says its state */}
@@ -1298,24 +1288,22 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
                     ) : null}
                   </span>
                 ) : (
-                  <span
-                    key={t}
-                    className="chip neutral"
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#ffffff" }}
-                  >
-                    <span
+                  <span key={t} className="pill pill-selected">
+                    <button
+                      type="button"
+                      className="pill-main"
                       style={{ cursor: "text" }}
                       title={`${tagTooltip(t)} — click to edit`}
                       onClick={() => setEditing({ orig: t, value: t })}
                     >
                       {t}
-                    </span>
+                    </button>
                     <button
                       type="button"
+                      className="pill-x"
                       aria-label={`Remove ${t}`}
                       title="Return to the shortlist — the keyword isn't deleted"
                       disabled={busy !== null}
-                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: 0 }}
                       onClick={() => remove(t)}
                     >
                       ✕

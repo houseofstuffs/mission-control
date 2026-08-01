@@ -165,7 +165,17 @@ export function StepRunner({
           ) : null}
           {selected.note ? <div className="body-sm muted">{selected.note}</div> : null}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+          {/* two columns side by side — needs on the left, produces on the
+              right; collapses to one column when the card gets narrow.
+              Every step in both workflows uses this card. */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 12,
+              alignItems: "start",
+            }}
+          >
             <div className="well">
               <Kicker>NEEDS</Kicker>
               <ul style={{ margin: "8px 0 0 18px" }}>

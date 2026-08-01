@@ -16,6 +16,7 @@ import { needsRecompose, derivativeFor } from "@/server/recompose";
 import { isStaleKeyword } from "@/config/keywords";
 import { momentumTooltip, type MomentumDetail } from "@/server/listingCsv";
 import { Kicker } from "@/components/ui";
+import { assetUrl } from "@/lib/assets";
 
 export const dynamic = "force-dynamic";
 
@@ -252,5 +253,6 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
       : null,
     hasDesign: Boolean(designId),
     aiReady: anthropicConfigured(),
+    patternUrl: assetUrl("pattern"),
   };
 }

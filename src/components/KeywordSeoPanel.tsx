@@ -63,6 +63,8 @@ export interface SeoData {
   product: { id: string; name: string; hasVoice: boolean; voiceText: string } | null;
   hasDesign: boolean;
   aiReady: boolean;
+  /** brand pattern for the drop zone's wash — resolved server-side */
+  patternUrl: string | null;
 }
 
 const BUCKET_CHIP: Record<string, string> = {
@@ -284,6 +286,15 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [bodyDraft, setBodyDraft] = useState(seo.bodyCopy);
   const bodyCopySet = seo.bodyCopy.trim().length > 0;
   const bodyDirty = bodyDraft !== seo.bodyCopy;
+  // the expanded boilerplate sizes itself to its text — measured after
+  // render, so wrapped paragraphs are fully visible without scrolling
+  const bodyArea = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = bodyArea.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight + 8, Math.round(window.innerHeight * 0.6))}px`;
+  }, [bodyDraft, showBody]);
 
   // ONE bucket lookup for the whole panel — attached, inherited, imported
   // and AI-suggested tags all resolve through the same bank map, so the
@@ -555,28 +566,28 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     </span>
   );
 
-  /** shortlist pill + its dismiss ✕ — shared by the bucket groups */
+  /** one pill, two hit zones: the word adds it, the ✕ dismisses it */
   const shortlistPill = (k: KeywordRow & { attached: boolean }, bucket: string) => {
     const out = dismissed.has(k.id);
     return (
-      <span key={k.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span key={k.id} className={`pill${out ? " is-dismissed" : ""}`}>
         <button
           type="button"
-          className="chip neutral"
-          style={{ cursor: "pointer", textAlign: "left", opacity: out ? 0.45 : 1 }}
+          className="pill-main"
           disabled={busy !== null}
           title={`${bucket} · ${fmt(k.avgSearches)} searches · ${fmt(k.competition)} comp${k.momentum && k.momentum !== "Unknown" ? ` · ${k.momentum.toLowerCase()}` : ""}${k.tagEligible ? "" : " · over 20 chars, title-only"}${out ? " · dismissed — picking it brings it back" : ""}`}
           onClick={() => pickKeyword(k)}
         >
-          + {k.name.toUpperCase()}
+          <span aria-hidden>+</span>
+          {k.name}
           {k.momentum === "Selling now" ? " 🔥" : ""}
         </button>
         {!out ? (
           <button
             type="button"
+            className="pill-x"
             aria-label={`Dismiss ${k.name}`}
             title="Drop from the shortlist back to the pool — the next-best candidate takes its place"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
             onClick={() => {
               const next = new Set(dismissed);
               next.add(k.id);
@@ -597,14 +608,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       {/* ① import — restyled, functionally the same door */}
       <Section n={1} title="Import from eRank / Everbee">
         <div
-          className="well"
-          style={{
-            textAlign: "center",
-            cursor: "pointer",
-            borderStyle: "dashed",
-            borderWidth: 1,
-            borderColor: dragOver ? "var(--status-done)" : "var(--border, #ddd6c2)",
-          }}
+          className={`dropzone${dragOver ? " is-over" : ""}`}
           onClick={() => fileInput.current?.click()}
           onDragOver={(e) => {
             e.preventDefault();
@@ -617,6 +621,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             importFiles(Array.from(e.dataTransfer.files ?? []));
           }}
         >
+          {seo.patternUrl ? (
+            <div className="pattern-wash" style={{ backgroundImage: `url(${seo.patternUrl})` }} />
+          ) : null}
           <div className="body-sm" style={{ fontWeight: 700 }}>
             {busy === "import" ? "Importing…" : "Drop CSV exports here"}
           </div>
@@ -760,7 +767,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               return (
                 <div key={b} className="stack-12" style={{ gap: 6, marginTop: 4 }}>
                   <span className="kicker">{b.toUpperCase()} · {items.length}</span>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
+                  {/* one flowing list — pills wrap naturally, no column grid */}
+                  <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
                     {items.map((k) => shortlistPill(k, b))}
                   </div>
                 </div>
@@ -769,26 +777,26 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             {pendingSuggestions.length > 0 ? (
               <div className="stack-12" style={{ gap: 6, marginTop: 4 }}>
                 <span className="kicker">SUGGESTED BY THE DRAFT · {pendingSuggestions.length}</span>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, justifyItems: "start" }}>
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
                   {pendingSuggestions.map((t) => {
                     const bucket = bucketOf(t);
                     return (
-                      <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      <span key={t} className="pill">
                         <button
                           type="button"
-                          className={`chip ${BUCKET_CHIP[bucket ?? ""] ?? "neutral"}`}
-                          style={{ cursor: "pointer", textAlign: "left" }}
+                          className="pill-main"
                           disabled={busy !== null}
                           title={bucket ? `${bucket} — from the keyword bank` : "new phrase — not in the keyword bank, no metrics yet"}
                           onClick={() => addTag(t)}
                         >
-                          + {t.toUpperCase()}
+                          <span aria-hidden>+</span>
+                          {t}
                         </button>
                         <button
                           type="button"
+                          className="pill-x"
                           aria-label={`Dismiss suggestion ${t}`}
                           title="Dismiss suggestion"
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: 11, padding: "2px 3px" }}
                           onClick={() => setSuggestedTags((cur) => cur.filter((x) => x !== t))}
                         >
                           ✕
@@ -853,7 +861,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         {draftNotes ? <span className="hint">{draftNotes}</span> : null}
         <div className="row-gap-12">
           <button
-            className="btn btn-primary"
+            className="btn btn-save"
             disabled={busy !== null || !title.trim() || !titleDirty}
             onClick={() => call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() })}
           >
@@ -907,7 +915,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           {/* an empty save over saved attributes is a CLEAR — named and
               confirmed, never the default behavior of the same button */}
           <button
-            className="btn btn-primary"
+            className="btn btn-save"
             disabled={busy !== null || !attrsDirty}
             onClick={() => {
               if (attrsClearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
@@ -979,7 +987,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         />
         <div className="row-gap-12">
           <button
-            className="btn btn-primary"
+            className="btn btn-save"
             disabled={busy !== null || !hook.trim() || !hookDirty}
             onClick={() => call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() })}
           >
@@ -1038,16 +1046,20 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                     {bodyCopySet ? "Refresh body copy from product" : "Use product boilerplate as body copy"}
                   </button>
                 </div>
+                {/* auto-height to the WRAPPED content — a row count based on
+                    newlines badly underestimates wrapped paragraphs and cut
+                    the care copy off. Caps at 60vh, then scrolls. */}
                 <textarea
+                  ref={bodyArea}
                   className="input"
                   value={bodyDraft}
-                  rows={Math.min(24, bodyDraft.split("\n").length + 4)}
-                  style={{ resize: "vertical", width: "100%" }}
+                  rows={6}
+                  style={{ resize: "vertical", width: "100%", overflowY: "auto" }}
                   onChange={(e) => setBodyDraft(e.target.value)}
                 />
                 <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
                   <button
-                    className="btn btn-secondary"
+                    className="btn btn-save"
                     disabled={busy !== null || !bodyDirty || !bodyDraft.trim()}
                     onClick={() => call("body-edit", `/api/listings/${seo.listingId}`, "PATCH", { bodyCopy: bodyDraft })}
                   >
@@ -1240,25 +1252,28 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
       {BANDS.map((band) => {
         const items = bandItems(band);
         if (items.length === 0 && band.min == null) return null;
-        // ✓ once the band's minimum is met; a count toward it until then;
-        // over the top of the range flips to the caution treatment
-        const status =
-          band.min == null ? null : items.length >= band.min ? (
-            band.max != null && items.length > band.max ? (
-              <span className="chip stale" title={`Over the ${band.label.toLowerCase()} range`}>
-                {items.length} — over
-              </span>
-            ) : (
-              <span className="chip done" title="Target met">✓ {items.length}</span>
-            )
-          ) : (
-            <span className="hint">{items.length} of {band.min}</span>
-          );
+        // The badge carries ONE glyph — a ✓ or the count. Progress wording
+        // lives outside it as plain text, so nothing crowds inside the pill.
+        const met = band.min != null && items.length >= band.min;
+        const over = met && band.max != null && items.length > band.max;
         return (
           <div key={band.label} className="stack-12" style={{ gap: 6, marginTop: 6 }}>
-            <div className="row-gap-8" style={{ alignItems: "center" }}>
-              <span className="kicker" style={{ flex: 1 }}>{band.label}</span>
-              {status}
+            <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <span className="kicker">{band.label}</span>
+              {band.min == null ? null : (
+                <span className="hint">
+                  {over ? "over target" : met ? "on target" : `${items.length} of ${band.min}`}
+                </span>
+              )}
+              {band.min == null ? null : (
+                <span
+                  className={`chip ${over ? "stale" : met ? "done" : "neutral"}`}
+                  style={{ marginLeft: "auto" }}
+                  title={over ? `Over the ${band.label} range` : met ? "Target met" : "Below target"}
+                >
+                  {met && !over ? "✓" : items.length}
+                </span>
+              )}
             </div>
             <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
               {items.map((t) =>
@@ -1313,7 +1328,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
         );
       })}
       <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", marginTop: 10 }}>
-        <button className="btn btn-primary" onClick={save} disabled={busy !== null || !dirty}>
+        <button className="btn btn-save" onClick={save} disabled={busy !== null || !dirty}>
           {busy === "save" ? <span className="spinner" /> : null}
           Save tags to listing
         </button>

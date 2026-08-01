@@ -25,6 +25,7 @@ import { apiJson } from "@/lib/api";
 import {
   computeMargin,
   breakevenPrice,
+  priceForMargin,
   MARGIN_THIN_PCT,
   AD_PRESETS,
   offsiteAds,
@@ -62,6 +63,10 @@ export function PricingPanel({ data }: { data: PricingData }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** which way the calculator solves — both share every input below */
+  const [mode, setMode] = useState<"price" | "margin">("price");
+  const [targetInput, setTargetInput] = useState("30");
+
   // ---- exploration dials: live math, saved nowhere ----
   const [discountInput, setDiscountInput] = useState("0");
   const [shipChargedInput, setShipChargedInput] = useState("0");
@@ -80,9 +85,15 @@ export function PricingPanel({ data }: { data: PricingData }) {
     adMode,
     adValue: num(adInput),
   };
-  const margin = computeMargin(livePrice, data.cost, scenario);
+  // MARGIN → PRICE: solve for the list price that hits the target
+  const solved = mode === "margin" ? priceForMargin(data.cost, num(targetInput), scenario) : null;
+  const requiredPrice = solved && solved.ok ? solved.result.price : null;
+  /** the price the breakdown describes: typed in one mode, solved in the other */
+  const shownPrice = mode === "margin" ? requiredPrice : livePrice;
+
+  const margin = computeMargin(shownPrice, data.cost, scenario);
   // the same price with advertising switched off — what the ad is costing
-  const noAdMargin = computeMargin(livePrice, data.cost, { ...scenario, adValue: 0 });
+  const noAdMargin = computeMargin(shownPrice, data.cost, { ...scenario, adValue: 0 });
   const breakeven = data.cost != null ? breakevenPrice(data.cost, scenario) : null;
   const scenarioActive =
     scenario.discountPct > 0 ||
@@ -105,7 +116,28 @@ export function PricingPanel({ data }: { data: PricingData }) {
 
   return (
     <div className="card supporting">
-      <Kicker>PRICING — MARGIN CALCULATOR</Kicker>
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <Kicker>PRICING — MARGIN CALCULATOR</Kicker>
+        {/* solve direction — every input below is shared, so flipping this
+            never resets what you've already dialled in */}
+        <span className="row-gap-8" style={{ marginLeft: "auto", alignItems: "center" }}>
+          {([
+            ["price", "Price → Margin"],
+            ["margin", "Margin → Price"],
+          ] as const).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              className={`chip ${mode === m ? "done" : "neutral"}`}
+              style={{ cursor: "pointer" }}
+              aria-pressed={mode === m}
+              onClick={() => setMode(m)}
+            >
+              {label}
+            </button>
+          ))}
+        </span>
+      </div>
       {error ? <div className="callout blocked">{error}</div> : null}
 
       {/* the cost side — snapshot, never live */}
@@ -161,6 +193,60 @@ export function PricingPanel({ data }: { data: PricingData }) {
           </>
         )}
       </div>
+
+      {/* MARGIN → PRICE: the target, and what it demands you charge */}
+      {mode === "margin" ? (
+        <div className="well">
+          <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div className="field" style={{ width: 150 }}>
+              <label className="kicker" htmlFor="l3-target">TARGET MARGIN %</label>
+              <input
+                id="l3-target"
+                className="input"
+                type="number"
+                step="1"
+                min="0"
+                max="99"
+                value={targetInput}
+                onChange={(e) => setTargetInput(e.target.value)}
+              />
+              <span className="hint">exploration only</span>
+            </div>
+            {solved && !solved.ok ? (
+              <div className="callout blocked" style={{ flex: "1 1 260px" }}>
+                No price reaches {num(targetInput)}% in this scenario — percentage fees cap it at{" "}
+                {solved.ceilingPct.toFixed(1)}%. Cut advertising, or aim lower.
+              </div>
+            ) : requiredPrice != null ? (
+              <>
+                <div className="body-sm" style={{ flex: "1 1 200px" }}>
+                  <span className="hint">charge</span>
+                  <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2 }}>
+                    {money(requiredPrice)}
+                  </div>
+                  <span className="hint">
+                    to net {num(targetInput)}% on {money(solved!.ok ? solved!.result.orderTotal : 0)}
+                    {scenario.discountPct > 0 ? ` after ${scenario.discountPct}% off` : ""}
+                  </span>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setPriceInput(requiredPrice.toFixed(2));
+                    setMode("price");
+                  }}
+                  title="Copies it into the Price field — you still save it deliberately"
+                >
+                  Use this price →
+                </button>
+              </>
+            ) : (
+              <span className="hint">Needs a cost snapshot before it can solve.</span>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* the price — the one saved, pushed decision on this panel */}
       <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -309,22 +395,27 @@ export function PricingPanel({ data }: { data: PricingData }) {
                     </button>
                   ))}
                 </div>
-                {/* the tier assumption, printed where it gets read — it
-                    can't quietly go stale if it's on screen every visit */}
-                <span className="hint">{offsiteAds.note}</span>
               </>
             ) : (
               <span className="hint">flat spend attributed to one sale</span>
             )}
           </div>
         </div>
+        {/* the tier assumption, printed where it gets read — full width so
+            it can't squeeze the advertising column, and on screen every
+            visit so it can't quietly go stale */}
+        {adMode === "percent" ? (
+          <span className="hint" style={{ marginTop: 8 }}>{offsiteAds.note}</span>
+        ) : null}
       </div>
 
       {/* the verdict — only when both real sides exist */}
       {margin ? (
         <div className="well">
           <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <Kicker>MARGIN ON A {money(margin.orderTotal)} ORDER</Kicker>
+            <Kicker>
+              {mode === "margin" ? "AT THE REQUIRED PRICE" : "MARGIN"} ON A {money(margin.orderTotal)} ORDER
+            </Kicker>
             {margin.net < 0 ? (
               <span className="chip blocked">underwater</span>
             ) : margin.marginPct < MARGIN_THIN_PCT ? (

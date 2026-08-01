@@ -65,6 +65,8 @@ export interface SeoData {
   aiReady: boolean;
   /** brand pattern for the drop zone's wash — resolved server-side */
   patternUrl: string | null;
+  /** keyword CSVs already folded into this design's pool, newest last */
+  imports: Array<{ file: string; source: string; rows: number; at: string }>;
 }
 
 const BUCKET_CHIP: Record<string, string> = {
@@ -465,7 +467,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         skipped?: number;
         conflicts?: ImportConflict[];
         noDesign?: boolean;
-      }>("/api/keywords/import", "POST", { csv: text, listingId: seo.listingId });
+      }>("/api/keywords/import", "POST", { csv: text, listingId: seo.listingId, fileName: file.name });
       if (!res.ok) {
         failures.push(`${file.name}: ${res.error}`);
         continue;
@@ -634,8 +636,28 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     <>
       {error ? <div className="callout blocked" style={{ whiteSpace: "pre-wrap" }}>{error}</div> : null}
 
-      {/* ① import — restyled, functionally the same door */}
-      <Section n={1} title="Import from eRank / Everbee">
+      {/* ① import — restyled, functionally the same door. The header pill
+          answers "have I already fed this design its research?" */}
+      <Section
+        n={1}
+        title="Import from eRank / Everbee"
+        right={
+          seo.imports.length === 0 ? (
+            <span className="chip neutral">NO IMPORTS</span>
+          ) : (
+            <span
+              className="chip done"
+              title={seo.imports
+                .slice()
+                .reverse()
+                .map((i) => `${i.file} · ${i.source} · ${i.rows} rows · ${i.at}`)
+                .join("\n")}
+            >
+              {seo.imports.length} CSV{seo.imports.length === 1 ? "" : "S"} USED
+            </span>
+          )
+        }
+      >
         <div
           className={`dropzone${dragOver ? " is-over" : ""}`}
           onClick={() => fileInput.current?.click()}

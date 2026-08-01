@@ -170,6 +170,51 @@ export function breakevenPrice(
   return price > 0 && Number.isFinite(price) ? price : null;
 }
 
+/**
+ * The same equation solved the other way: what LIST price hits a target
+ * net margin, given the cost and the current scenario?
+ *
+ *   net = m · orderTotal, and net = orderTotal·keep − flat − cost − ship
+ *   ⇒ orderTotal = (flat + cost + ship) / (keep − m)
+ *
+ * where keep is the share of each dollar surviving percentage fees. When
+ * the target meets or exceeds `keep`, NO price achieves it — every extra
+ * dollar of price hands back the same fraction in fees — so this returns
+ * null with the ceiling, rather than an absurd number. Same refusal
+ * instinct as computeMargin: say it's impossible, don't invent a figure.
+ */
+export interface MarginTargetResult {
+  /** the list price to charge (before the exploration discount) */
+  price: number;
+  /** what the buyer's order comes to at that price */
+  orderTotal: number;
+}
+
+export function priceForMargin(
+  cost: number | null,
+  targetMarginPct: number,
+  opts: Omit<MarginInputs, "price" | "cost"> = {}
+): { ok: true; result: MarginTargetResult } | { ok: false; ceilingPct: number } | null {
+  if (cost == null || !(cost >= 0)) return null;
+  const m = clamp(targetMarginPct, -100, 100) / 100;
+  const d = clamp(opts.discountPct ?? 0, 0, 100) / 100;
+  const shippingCharged = Math.max(0, opts.shippingCharged ?? 0);
+  const shippingCost = Math.max(0, opts.shippingCost ?? 0);
+  const adPct = opts.adMode === "flat" ? 0 : clamp(opts.adValue ?? 0, 0, 100) / 100;
+  const adFlat = opts.adMode === "flat" ? Math.max(0, opts.adValue ?? 0) : 0;
+
+  const keep = 1 - (ETSY_TRANSACTION_PCT + ETSY_PAYMENT_PCT + adPct);
+  if (d >= 1) return null;
+  // the asymptote: percentage fees alone cap what margin is reachable
+  if (m >= keep) return { ok: false, ceilingPct: keep * 100 };
+
+  const flat = ETSY_LISTING_FEE + ETSY_PAYMENT_FLAT + adFlat;
+  const orderTotal = (flat + cost + shippingCost) / (keep - m);
+  const price = (orderTotal - shippingCharged) / (1 - d);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  return { ok: true, result: { price, orderTotal } };
+}
+
 function clamp(n: number, lo: number, hi: number): number {
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : lo;
 }

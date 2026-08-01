@@ -158,6 +158,29 @@ export async function POST(req: Request) {
       }
     }
 
+    // log the file against the design so the panel can say how much
+    // research has already been folded in (and not re-import blindly)
+    if (designId) {
+      const design = cachedRecord(designId);
+      let log: Array<{ file: string; source: string; rows: number; at: string }> = [];
+      try {
+        const prior = JSON.parse(String(design?.props["Keyword Imports (JSON)"] ?? "[]"));
+        if (Array.isArray(prior)) log = prior;
+      } catch {
+        /* unreadable history starts over rather than blocking the import */
+      }
+      log.push({
+        file: String(body.fileName ?? "").trim() || "keyword export",
+        source: parsed.source,
+        rows: parsed.rows.length,
+        at: new Date().toISOString().slice(0, 10),
+      });
+      // keep the tail bounded — the count is the point, not the archive
+      await updateRecord("designs", designId, {
+        "Keyword Imports (JSON)": JSON.stringify(log.slice(-40)),
+      });
+    }
+
     return NextResponse.json({
       kind: "keywords",
       source: parsed.source,

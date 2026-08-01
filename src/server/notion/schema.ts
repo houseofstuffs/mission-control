@@ -447,6 +447,10 @@ export const SCHEMA: DbSpec[] = [
       "Garment Compatibility": { type: "select", options: [...GARMENT_COMPATIBILITY] },
       "Garment Compatibility Reason": { type: "rich_text" },
       // C8 pre-flight — advisory only. Never blocks, never edits the file.
+      // Keyword-research CSVs already folded into this design's pool —
+      // [{file, source, rows, at}]. The research is design-level, so every
+      // listing of the design reports the same import history.
+      "Keyword Imports (JSON)": { type: "rich_text" },
       "Print File Checked": { type: "checkbox" },
       "Print File Check Notes": { type: "rich_text" },
       "Sample Ordered": { type: "checkbox" },

@@ -151,6 +151,25 @@ function pricingData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Pricing
   };
 }
 
+/** CSVs already folded into this design's keyword pool. */
+function keywordImports(designId: string | null): SeoData["imports"] {
+  if (!designId) return [];
+  const design = cachedRecord(designId);
+  try {
+    const parsed = JSON.parse(String(design?.props["Keyword Imports (JSON)"] ?? "[]"));
+    return Array.isArray(parsed)
+      ? parsed.map((i) => ({
+          file: String(i?.file ?? "keyword export"),
+          source: String(i?.source ?? ""),
+          rows: Number(i?.rows) || 0,
+          at: String(i?.at ?? ""),
+        }))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 function momentumTitleFor(k: NonNullable<ReturnType<typeof cachedRecord>>): string | null {
   try {
     const detail = JSON.parse(String(k.props["Momentum Detail (JSON)"] ?? "")) as MomentumDetail;
@@ -254,5 +273,6 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
     hasDesign: Boolean(designId),
     aiReady: anthropicConfigured(),
     patternUrl: assetUrl("pattern"),
+    imports: keywordImports(designId),
   };
 }

@@ -186,6 +186,7 @@ function main() {
       { name: "Recipient", value: "Women" },
       { name: "Style", value: "Retro / Goth" },
     ]),
+    Price: 48,
     "Cost At Creation": 29.83,
     "Cost Snapshot At": "2026-08-01",
     "Cost Basis": "Printify Standard",

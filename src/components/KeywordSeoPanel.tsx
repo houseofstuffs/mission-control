@@ -192,6 +192,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const [attrs, setAttrs] = useState<Array<{ name: string; value: string }>>(seo.attributes);
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [draftNotes, setDraftNotes] = useState("");
+  // saved + clean fields collapse to a compact readout with a pencil to
+  // reopen editing — an untouched input box next to already-saved copy
+  // is just clutter. Forced open again the moment there's anything unsaved.
+  const [titleEditOpen, setTitleEditOpen] = useState(false);
+  const [hookEditOpen, setHookEditOpen] = useState(false);
   // one generation of history — a regenerate must never eat an unsaved
   // draft silently. Swap flips between the current and previous versions.
   const [prevDraft, setPrevDraft] = useState<{
@@ -801,22 +806,53 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         ) : null}
         {draftNotes ? <div className="hint" style={{ marginTop: 6 }}>{draftNotes}</div> : null}
 
-        <div className="field" style={{ marginTop: 10 }}>
-          <label className="kicker" htmlFor="l2-title">TITLE · {titleWords}/15 WORDS</label>
-          <input id="l2-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
-          {titleWords >= 15 ? <span className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>Over the 15-word gate — trim it.</span> : null}
-          <div className="row-gap-12" style={{ marginTop: 6 }}>
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null || !title.trim() || title === seo.title}
-              onClick={() => call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() })}
-            >
-              {busy === "title" ? <span className="spinner" /> : null}
-              Save title
-            </button>
-            {title !== seo.title ? <span className="hint">Unsaved</span> : null}
-          </div>
-        </div>
+        {(() => {
+          const titleSaved = title.trim() !== "" && title === seo.title;
+          const showInput = !titleSaved || titleEditOpen;
+          return (
+            <div className="field" style={{ marginTop: 10 }}>
+              <label className="kicker" htmlFor="l2-title">TITLE · {titleWords}/15 WORDS</label>
+              {showInput ? (
+                <>
+                  <input id="l2-title" className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+                  {titleWords >= 15 ? <span className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>Over the 15-word gate — trim it.</span> : null}
+                  <div className="row-gap-12" style={{ marginTop: 6 }}>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={busy !== null || !title.trim() || title === seo.title}
+                      onClick={async () => {
+                        const ok = await call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() });
+                        if (ok) setTitleEditOpen(false);
+                      }}
+                    >
+                      {busy === "title" ? <span className="spinner" /> : null}
+                      Save title
+                    </button>
+                    {title !== seo.title ? <span className="hint">Unsaved</span> : null}
+                    {titleSaved ? (
+                      <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setTitleEditOpen(false)}>
+                        Done
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div className="row-gap-8" style={{ alignItems: "center" }}>
+                  <span className="body-sm" style={{ flex: 1 }}>{title}</span>
+                  <button
+                    type="button"
+                    className="btn btn-tertiary"
+                    style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
+                    title="Edit title"
+                    onClick={() => setTitleEditOpen(true)}
+                  >
+                    ✎
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {pendingSuggestions.length > 0 ? (
           <div className="field">
@@ -856,27 +892,58 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           </div>
         ) : null}
 
-        <div className="field">
-          <label className="kicker" htmlFor="l2-hook">DESCRIPTION HOOK — THE OPENER, IN SHOP VOICE</label>
-          <textarea
-            id="l2-hook"
-            className="input"
-            rows={3}
-            value={hook}
-            onChange={(e) => setHook(e.target.value)}
-          />
-          <div className="row-gap-12" style={{ marginTop: 6 }}>
-            <button
-              className="btn btn-secondary"
-              disabled={busy !== null || !hook.trim() || hook === seo.hook}
-              onClick={() => call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() })}
-            >
-              {busy === "hook" ? <span className="spinner" /> : null}
-              Save hook
-            </button>
-            {hook !== seo.hook ? <span className="hint">Unsaved</span> : null}
-          </div>
-        </div>
+        {(() => {
+          const hookSaved = hook.trim() !== "" && hook === seo.hook;
+          const showInput = !hookSaved || hookEditOpen;
+          return (
+            <div className="field">
+              <label className="kicker" htmlFor="l2-hook">DESCRIPTION HOOK IN SHOP VOICE</label>
+              {showInput ? (
+                <>
+                  <textarea
+                    id="l2-hook"
+                    className="input"
+                    rows={3}
+                    value={hook}
+                    onChange={(e) => setHook(e.target.value)}
+                  />
+                  <div className="row-gap-12" style={{ marginTop: 6 }}>
+                    <button
+                      className="btn btn-secondary"
+                      disabled={busy !== null || !hook.trim() || hook === seo.hook}
+                      onClick={async () => {
+                        const ok = await call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() });
+                        if (ok) setHookEditOpen(false);
+                      }}
+                    >
+                      {busy === "hook" ? <span className="spinner" /> : null}
+                      Save hook
+                    </button>
+                    {hook !== seo.hook ? <span className="hint">Unsaved</span> : null}
+                    {hookSaved ? (
+                      <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setHookEditOpen(false)}>
+                        Done
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div className="row-gap-8" style={{ alignItems: "flex-start" }}>
+                  <span className="body-sm" style={{ flex: 1, whiteSpace: "pre-wrap" }}>{hook}</span>
+                  <button
+                    type="button"
+                    className="btn btn-tertiary"
+                    style={{ fontSize: 12, padding: "3px 8px", flex: "0 0 auto" }}
+                    title="Edit hook"
+                    onClick={() => setHookEditOpen(true)}
+                  >
+                    ✎
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="field">
           <span className="kicker">ATTRIBUTES</span>

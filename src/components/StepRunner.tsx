@@ -7,13 +7,13 @@
  * Stale steps offer "Still valid" as a first-class action.
  */
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { apiJson } from "@/lib/api";
 import { WORKFLOWS, downstreamOf, stepIndex, type StepStatus } from "@/lib/workflows";
 import { StepIcon, Kicker } from "./ui";
 import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
-import { KeywordSeoPanel, SelectedTagsRail, TagSelectionProvider, type SeoData } from "./KeywordSeoPanel";
+import { KeywordSeoPanel, SelectedTagsRail, TagSelectionProvider, useL2Dirty, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
@@ -77,10 +77,24 @@ export function StepRunner({
 }) {
   const wf = WORKFLOWS[record.workflowKey];
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const terminal = record.workflowKey === "creative" ? "Done" : "Pushed";
   const isTerminal = record.current === terminal;
 
-  const [selectedId, setSelectedId] = useState(isTerminal ? wf.steps[wf.steps.length - 1].id : record.current);
+  // Which step is being VIEWED lives in the URL, not just client state —
+  // a step you deliberately navigated to (ahead of record.current) must
+  // survive a refresh, a browser back/forward, or a future remount
+  // without silently snapping back to the record's current step.
+  const stepParam = searchParams.get("step");
+  const validStepParam = stepParam && wf.steps.some((s) => s.id === stepParam) ? stepParam : null;
+  const [selectedId, setSelectedIdState] = useState(
+    validStepParam ?? (isTerminal ? wf.steps[wf.steps.length - 1].id : record.current)
+  );
+  function setSelectedId(id: string) {
+    setSelectedIdState(id);
+    router.replace(`${pathname}?step=${id}`, { scroll: false });
+  }
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backDialog, setBackDialog] = useState<string | null>(null);
@@ -197,17 +211,14 @@ export function StepRunner({
           {error ? <div className="field-error">{error}</div> : null}
 
           <div className="row-gap-12">
-            <button
-              className="btn btn-primary"
+            <MarkDoneButton
+              isL2={record.workflowKey === "listing" && selected.id === "L2"}
               disabled={busy !== null || selectedStatus === "done"}
-              title={doneBlocker ?? undefined}
-              // the requirement is explained on attempt, not pre-emptively —
-              // a warning shown before you've done anything is just noise
-              onClick={() => (doneBlocker ? setError(doneBlocker) : run("done", { action: "done", step: selected.id }))}
-            >
-              {busy === "done" ? <span className="spinner" /> : null}
-              Mark step done
-            </button>
+              doneBlocker={doneBlocker}
+              busy={busy === "done"}
+              onBlocked={setError}
+              onDone={() => run("done", { action: "done", step: selected.id })}
+            />
             {/* Backward navigation is a normal secondary action, never destructive */}
             <button
               className="btn btn-secondary"
@@ -437,4 +448,49 @@ function step_pos(selIdx: number, currentIdx: number): string {
   if (selIdx < currentIdx) return " · EARLIER STEP";
   if (selIdx > currentIdx) return " · UPCOMING";
   return "";
+}
+
+/**
+ * "Mark step done" — on L2 specifically, hard-blocked while any section
+ * (or the Selected tags rail) holds an edit that hasn't made it to
+ * Notion. L2's fields are free text the server can't judge "complete" —
+ * what it CAN judge is whether the browser is holding something the
+ * record doesn't have yet, and "done" should never paper over that gap.
+ * Every other step keeps the original behaviour: the requirement is
+ * explained on attempt, not pre-emptively, since a warning shown before
+ * you've done anything is just noise.
+ */
+function MarkDoneButton({
+  isL2,
+  disabled,
+  doneBlocker,
+  busy,
+  onBlocked,
+  onDone,
+}: {
+  isL2: boolean;
+  disabled: boolean;
+  doneBlocker: string | null;
+  busy: boolean;
+  onBlocked: (msg: string) => void;
+  onDone: () => void;
+}) {
+  const l2Dirty = useL2Dirty();
+  const unsavedBlocker =
+    isL2 && l2Dirty
+      ? "Unsaved changes on this step — save every section marked UNSAVED (title, attributes, description, Selected tags) before marking it done."
+      : null;
+  return (
+    <button
+      className="btn btn-primary"
+      disabled={disabled || Boolean(unsavedBlocker)}
+      title={unsavedBlocker ?? doneBlocker ?? undefined}
+      // unsaved changes hard-block (button is disabled, above); a server
+      // requirement still explains itself on attempt, per the rule above
+      onClick={() => (doneBlocker ? onBlocked(doneBlocker) : onDone())}
+    >
+      {busy ? <span className="spinner" /> : null}
+      Mark step done
+    </button>
+  );
 }

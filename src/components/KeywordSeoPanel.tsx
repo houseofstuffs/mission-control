@@ -99,6 +99,12 @@ const TagSelection = createContext<{
   setTags: React.Dispatch<React.SetStateAction<string[]>>;
   dirty: boolean;
   setDirty: (d: boolean) => void;
+  /** everything on L2 that ISN'T the tag selection — title, hook, body
+   *  copy, attributes. One combined flag so a single consumer (the step
+   *  runner's "Mark step done") can ask "is ANYTHING on this step
+   *  unsaved" without knowing about each field individually. */
+  otherDirty: boolean;
+  setOtherDirty: (d: boolean) => void;
 } | null>(null);
 
 export function TagSelectionProvider({ initial, children }: { initial: string; children: ReactNode }) {
@@ -106,8 +112,9 @@ export function TagSelectionProvider({ initial, children }: { initial: string; c
     initial.split(",").map((t) => t.trim()).filter(Boolean)
   );
   const [dirty, setDirty] = useState(false);
+  const [otherDirty, setOtherDirty] = useState(false);
   return (
-    <TagSelection.Provider value={{ tags, setTags, dirty, setDirty }}>
+    <TagSelection.Provider value={{ tags, setTags, dirty, setDirty, otherDirty, setOtherDirty }}>
       {children}
     </TagSelection.Provider>
   );
@@ -117,6 +124,18 @@ function useTagSelection() {
   const ctx = useContext(TagSelection);
   if (!ctx) throw new Error("TagSelectionProvider missing — StepRunner wraps L2 with it.");
   return ctx;
+}
+
+/**
+ * Public: "is anything on L2 unsaved" — tags plus everything KeywordSeoPanel
+ * tracks locally (title, hook, body copy, attributes). Used by the step
+ * runner to block "Mark step done" while the answer is yes; the panel
+ * itself never needs this combined view, only its consumer does.
+ */
+export function useL2Dirty(): boolean {
+  const ctx = useContext(TagSelection);
+  if (!ctx) throw new Error("TagSelectionProvider missing — StepRunner wraps L2 with it.");
+  return ctx.dirty || ctx.otherDirty;
 }
 
 /** ranking inside a bucket: markets selling NOW first, then raw volume.
@@ -203,7 +222,7 @@ interface CopyDraft {
 export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const router = useRouter();
   // tier 2 is shared with the SelectedTagsRail on the right — one state
-  const { tags, setTags, dirty, setDirty } = useTagSelection();
+  const { tags, setTags, dirty, setDirty, setOtherDirty } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -577,6 +596,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const attrsDirty = JSON.stringify(attrs) !== JSON.stringify(seo.attributes);
   const titleDirty = title !== seo.title;
   const hookDirty = hook !== seo.hook;
+  // one combined signal, pushed to the shared context so "Mark step done"
+  // can block on it without knowing about each field individually
+  useEffect(() => {
+    setOtherDirty(titleDirty || hookDirty || attrsDirty || bodyDirty);
+  }, [titleDirty, hookDirty, attrsDirty, bodyDirty, setOtherDirty]);
   // a swap re-arms every field it restored, differing or not
   const canSaveTitle = titleDirty || swapped;
   const canSaveHook = hookDirty || swapped;
@@ -928,7 +952,14 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           <button
             className="btn btn-save"
             disabled={busy !== null || !title.trim() || !canSaveTitle}
-            onClick={() => call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: title.trim() })}
+            onClick={async () => {
+              const trimmed = title.trim();
+              const ok = await call("title", `/api/listings/${seo.listingId}`, "PATCH", { title: trimmed });
+              // the PATCH trims before writing; mirror that back into local
+              // state so a leading/trailing space can never leave "title"
+              // permanently disagreeing with the saved value post-refresh
+              if (ok) setTitle(trimmed);
+            }}
           >
             {busy === "title" ? <span className="spinner" /> : null}
             Save title
@@ -1025,7 +1056,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           <button
             className="btn btn-save"
             disabled={busy !== null || !hook.trim() || !canSaveHook}
-            onClick={() => call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: hook.trim() })}
+            onClick={async () => {
+              const trimmed = hook.trim();
+              const ok = await call("hook", `/api/listings/${seo.listingId}`, "PATCH", { descriptionHook: trimmed });
+              if (ok) setHook(trimmed);
+            }}
           >
             {busy === "hook" ? <span className="spinner" /> : null}
             Save hook

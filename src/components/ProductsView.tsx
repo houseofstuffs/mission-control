@@ -204,15 +204,22 @@ function ProductCard({
           so this is only ever a default L3 pre-fills from, never a push */}
       {shippingProfiles.length > 0 ? (
         <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <span className="chip neutral" style={{ fontSize: 11 }}>Etsy shipping</span>
+          {/* full width on its own line — sharing the row with the chip
+              squeezed the option text and clipped the rate, which is the
+              part worth reading */}
           <select
             className="select input-compact"
-            style={{ flex: "1 1 160px", fontSize: 12 }}
+            style={{ flex: "1 1 100%", fontSize: 12 }}
             value={p.etsyShippingProfileId ?? ""}
             disabled={busy}
             aria-label="Etsy shipping profile"
             onChange={(e) => onShippingProfile(e.target.value)}
           >
-            <option value="">Etsy shipping profile…</option>
+            {/* a real choice, not prompt text — picking it clears the
+                relation. The chip above carries the field's name so this
+                doesn't have to double as a label. */}
+            <option value="">— none —</option>
             {shippingProfiles.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

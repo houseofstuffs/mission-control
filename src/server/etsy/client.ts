@@ -132,19 +132,55 @@ export function userIdFromToken(token: string): string {
 
 /* ---------- authenticated calls ---------- */
 
-async function apiGet<T>(path: string, accessToken: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      "x-api-key": apiKeyHeader(),
-      Authorization: `Bearer ${accessToken}`,
-    },
-    cache: "no-store",
+/**
+ * Serialised throttle: Etsy allows 10 requests/second, and a shipping-profile
+ * sync fires one destinations call per profile back-to-back, which clears
+ * that ceiling easily. ≥150ms between calls keeps us near 6 rps — the same
+ * shape as the Notion client's throttle, for the same reason.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+const GAP_MS = 150;
+
+function throttled<T>(fn: () => Promise<T>): Promise<T> {
+  const run = queue.then(async () => {
+    const result = await fn();
+    await new Promise((r) => setTimeout(r, GAP_MS));
+    return result;
   });
-  if (!res.ok) {
+  // keep the chain alive even when a call fails
+  queue = run.catch(() => undefined);
+  return run;
+}
+
+/**
+ * The throttle keeps us under the limit in the steady state; this catches
+ * the case where something else (a concurrent sync, Etsy counting more
+ * strictly than documented) pushes us over anyway. Backs off and retries
+ * rather than stranding a half-finished sync.
+ */
+const MAX_429_RETRIES = 3;
+
+async function apiGet<T>(path: string, accessToken: string): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await throttled(() =>
+      fetch(`${API_BASE}${path}`, {
+        headers: {
+          "x-api-key": apiKeyHeader(),
+          Authorization: `Bearer ${accessToken}`,
+        },
+        cache: "no-store",
+      })
+    );
+    if (res.ok) return (await res.json()) as T;
+
     const text = await res.text().catch(() => "");
+    if (res.status === 429 && attempt < MAX_429_RETRIES) {
+      // 1s, 2s, 4s — Etsy's per-second window only needs the first one
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+      continue;
+    }
     throw new Error(`Etsy ${res.status} on ${path}: ${text.slice(0, 300)}`);
   }
-  return (await res.json()) as T;
 }
 
 export interface EtsyShop {

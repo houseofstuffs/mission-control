@@ -236,6 +236,23 @@ export const SCHEMA: DbSpec[] = [
     },
   },
   {
+    key: "mockup_shots",
+    title: "Mockup Shots",
+    description:
+      "Groups the garment-colour variants of one physical photo shoot (e.g. 'CC1466 Model 1' across black/navy/heather) so one crop rectangle applies to every colour in the batch, decided once and reused. The crop runs client-side against each photo's full-resolution original BEFORE the browser's normal upload downscale ever touches it (src/lib/mockupCrop.ts) — this app never stores the pre-crop original, so changing an existing shot's framing means re-uploading its source photos again, not editing a saved asset.",
+    properties: {
+      Name: { type: "title" },
+      // {x, y, size} normalized 0–1, always square — set once, applied to
+      // every colour already in the batch and every one added later.
+      "Crop Rect (JSON)": { type: "rich_text" },
+      "Crop Set At": { type: "date" },
+      // Set by hand after actually looking at a real multi-colour batch —
+      // this app can't detect framing drift between photos on its own.
+      "Framing Flagged": { type: "checkbox" },
+      "Framing Notes": { type: "rich_text" },
+    },
+  },
+  {
     key: "mockup_templates",
     title: "Mockup Templates",
     description:
@@ -246,6 +263,9 @@ export const SCHEMA: DbSpec[] = [
       License: { type: "rich_text" },
       "File Link": { type: "url" },
       "Product Types": { type: "rich_text" },
+      // Set only by the batch shot-crop flow — links this colour variant to
+      // the shot whose shared crop rectangle produced its Base Image.
+      Shot: { type: "relation", relation: "mockup_shots" },
       // The one decision that branches everything: which fields intake asks
       // for, and which compositing method render runs.
       "Pipeline Type": { type: "select", options: [...PIPELINE_TYPES] },

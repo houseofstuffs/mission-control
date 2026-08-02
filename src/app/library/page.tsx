@@ -9,17 +9,32 @@ import { syncState } from "@/server/cache/db";
 import { RefreshButton } from "@/components/RefreshButton";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
-import { MockupTemplatesSection, type MockupTemplateCard } from "@/components/MockupTemplates";
+import { MockupTemplatesSection, type MockupTemplateCard, type MockupShotOption } from "@/components/MockupTemplates";
 import type { SimpleRecord } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 
-function templateCard(m: SimpleRecord): MockupTemplateCard {
+function shotOption(s: SimpleRecord): MockupShotOption {
+  let cropRect = null;
+  try {
+    const parsed = JSON.parse(String(s.props["Crop Rect (JSON)"] ?? ""));
+    if (parsed && typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.size === "number") {
+      cropRect = parsed;
+    }
+  } catch {
+    /* no crop set yet */
+  }
+  return { id: s.id, name: s.title || "Untitled shot", cropRect };
+}
+
+function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): MockupTemplateCard {
   const fileUrl = (prop: string): string | null => {
     const v = m.props[prop];
     if (!Array.isArray(v) || v.length === 0) return null;
     return (v[0] as { url?: string })?.url || null;
   };
+  const shotId = ((m.props["Shot"] as string[] | null) ?? [])[0];
+  const shotName = shotId ? shotsById.get(shotId)?.title ?? null : null;
   return {
     id: m.id,
     name: m.title || "Untitled template",
@@ -37,12 +52,15 @@ function templateCard(m: SimpleRecord): MockupTemplateCard {
     hasShadow: fileUrl("Shadow Layer") != null,
     hasHighlight: fileUrl("Highlight Layer") != null,
     sourceLink: String(m.props["File Link"] ?? ""),
+    shotName: shotName || null,
   };
 }
 
 export default function LibraryPage() {
   const textures = cachedRecords("textures");
   const mockups = cachedRecords("mockup_templates");
+  const mockupShots = cachedRecords("mockup_shots");
+  const shotsById = new Map(mockupShots.map((s) => [s.id, s]));
   const designs = cachedRecords("designs");
   const sync = syncState()["textures"];
 
@@ -85,7 +103,10 @@ export default function LibraryPage() {
             </div>
           </section>
 
-          <MockupTemplatesSection templates={mockups.map(templateCard)} />
+          <MockupTemplatesSection
+            templates={mockups.map((m) => templateCard(m, shotsById))}
+            shots={mockupShots.map(shotOption)}
+          />
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { createRecord } from "@/server/notion/store";
+import { createRecord, cachedRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import {
   PIPELINE_TYPES,
@@ -9,6 +9,7 @@ import {
   SURFACE_TAGS,
   DEFAULT_BLEND,
   DEFAULT_FIT,
+  MOCKUP_CROP_SIZE,
   parseQuad,
   type PipelineType,
 } from "@/config/mockups";
@@ -24,12 +25,18 @@ export const maxDuration = 120; // up to four file uploads, throttled
  * 2000px comes out a few hundred KB, safely under the cap. Render quality
  * is untouched at these settings; the master artwork never passes through
  * here anyway.
+ *
+ * Base Image gets a bigger cap than the other layers: a shot-batch crop
+ * (src/lib/mockupCrop.ts) hands this route an already-standardized
+ * MOCKUP_CROP_SIZE square, and re-shrinking it back to 2000px here would
+ * silently undo the whole point of cropping against the full-resolution
+ * original client-side.
  */
-async function compressLayer(file: File): Promise<File> {
+async function compressLayer(file: File, maxEdge = 2000): Promise<File> {
   const raw = Buffer.from(await file.arrayBuffer());
   const out = await sharp(raw)
-    .resize(2000, 2000, { fit: "inside", withoutEnlargement: true })
-    .webp({ quality: 82 })
+    .resize(maxEdge, maxEdge, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: maxEdge > 2000 ? 90 : 82 })
     .toBuffer();
   return new File([out], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });
 }
@@ -101,6 +108,17 @@ export async function POST(req: Request) {
     if (str("shotType")) values["Shot Type"] = str("shotType");
     if (quad) values["Print Area Quad (JSON)"] = JSON.stringify(quad);
 
+    // batch shot-crop uploads (src/components/MockupTemplates.tsx's
+    // MockupShotIntake) attach the resulting colour variant to its shot
+    const shotId = str("shotId");
+    if (shotId) {
+      const shot = cachedRecord(shotId);
+      if (!shot || shot.dbKey !== "mockup_shots") {
+        return NextResponse.json({ error: "That shot wasn't found — refresh and try again." }, { status: 400 });
+      }
+      values["Shot"] = [shotId];
+    }
+
     // uploads last — no orphaned Notion files if validation bounced above
     const uploads: Array<[string, File]> = [["Base Image", baseImage]];
     // a displacement map on a Simple Placement template is stored if sent —
@@ -109,7 +127,10 @@ export async function POST(req: Request) {
     if (shadowLayer) uploads.push(["Shadow Layer", shadowLayer]);
     if (highlightLayer) uploads.push(["Highlight Layer", highlightLayer]);
     for (const [prop, file] of uploads) {
-      const up = await uploadFileToNotion(await compressLayer(file));
+      // a shot-batch Base Image is already cropped to the standard square at
+      // full resolution — only that one file gets the bigger cap
+      const maxEdge = shotId && prop === "Base Image" ? MOCKUP_CROP_SIZE : 2000;
+      const up = await uploadFileToNotion(await compressLayer(file, maxEdge));
       values[prop] = [{ name: file.name, uploadId: up.id }];
     }
 

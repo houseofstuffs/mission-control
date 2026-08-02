@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
+import { nativeDimensions, cropFeasible, cropToStandardSize, type CropRect } from "@/lib/mockupCrop";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
@@ -25,6 +26,8 @@ import {
   DEFAULT_BLEND,
   DEFAULT_FIT,
   DEFAULT_QUAD,
+  MOCKUP_CROP_SIZE,
+  DEFAULT_CROP_RECT,
   type Quad,
 } from "@/config/mockups";
 
@@ -44,6 +47,8 @@ export interface MockupTemplateCard {
   hasShadow: boolean;
   hasHighlight: boolean;
   sourceLink: string;
+  /** set only for colour variants created via the shot-crop batch flow */
+  shotName: string | null;
 }
 
 /* ---------- corner placement ---------- */
@@ -84,9 +89,20 @@ function rectQuad(x: number, y: number, w: number, h: number): Quad {
  * Coordinates normalized 0–1 so the quad survives every resize between
  * preview and render.
  */
-function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange: (q: Quad) => void }) {
+function QuadEditor({
+  src,
+  quad,
+  onChange,
+  squareOnly = false,
+}: {
+  src: string;
+  quad: Quad;
+  onChange: (q: Quad) => void;
+  /** hides the unlock-corners toggle — the resize math already preserves whatever ratio a quad starts with, so a square-initialized quad stays square through every drag as long as it's never unlocked */
+  squareOnly?: boolean;
+}) {
   const boxRef = useRef<HTMLDivElement>(null);
-  const [locked, setLocked] = useState(() => isRectangle(quad));
+  const [locked, setLocked] = useState(() => squareOnly || isRectangle(quad));
   // drag session — captured at pointerdown so mid-drag math has a stable base
   const session = useRef<
     | { kind: "corner"; index: number }
@@ -254,13 +270,17 @@ function QuadEditor({ src, quad, onChange }: { src: string; quad: Quad; onChange
       </div>
       <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
         <span className="hint" style={{ flex: 1 }}>
-          {locked
-            ? "Drag inside to position · pull a corner to resize (ratio stays put)."
-            : "Each corner moves free — for angled shots. TL, TR, BR, BL."}
+          {squareOnly
+            ? "Drag inside to position · pull a corner to resize — stays square."
+            : locked
+              ? "Drag inside to position · pull a corner to resize (ratio stays put)."
+              : "Each corner moves free — for angled shots. TL, TR, BR, BL."}
         </span>
-        <button type="button" className="chip count" style={{ cursor: "pointer", border: "none" }} onClick={toggleMode}>
-          {locked ? "unlock corners" : "lock ratio"}
-        </button>
+        {squareOnly ? null : (
+          <button type="button" className="chip count" style={{ cursor: "pointer", border: "none" }} onClick={toggleMode}>
+            {locked ? "unlock corners" : "lock ratio"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -603,6 +623,7 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
       <div className="title">{t.name}</div>
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         <span className="chip count">{t.pipelineType || "no pipeline"}</span>
+        {t.shotName ? <span className="chip neutral" title="Base Image is a standardized crop from this shot">{t.shotName}</span> : null}
         {t.garmentColor ? <span className="chip neutral">{t.garmentColor}</span> : null}
         {t.surface ? <span className="chip neutral">{t.surface}</span> : null}
         {t.pipelineType === "Full Displacement" ? (
@@ -734,12 +755,271 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
   );
 }
 
-export function MockupTemplatesSection({ templates }: { templates: MockupTemplateCard[] }) {
+export interface MockupShotOption {
+  id: string;
+  name: string;
+  cropRect: CropRect | null;
+}
+
+function rectToQuad(r: CropRect): Quad {
+  return rectQuad(r.x, r.y, r.size, r.size);
+}
+
+function quadToRect(q: Quad): CropRect {
+  const xs = q.map((p) => p.x);
+  const ys = q.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  // squareOnly guarantees width === height, but average defensively in case
+  // a stale non-square quad ever gets passed in
+  const size = (Math.max(...xs) - x + (Math.max(...ys) - y)) / 2;
+  return { x, y, size };
+}
+
+interface ShotColorRow {
+  key: number;
+  file: File | null;
+  color: string;
+  dims: { width: number; height: number } | null;
+}
+
+/**
+ * Batch intake for one photo shoot's colour variants — draw the crop
+ * rectangle ONCE against the reference photo (or reuse an existing shot's
+ * saved one), and it applies to every colour uploaded here and every one
+ * added to this shot later. Scoped to Simple Placement: each resulting
+ * template still gets its own "Re-place corners" pass afterward, same as
+ * any Simple Placement template — the crop decides framing, not print area.
+ */
+function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [shotChoice, setShotChoice] = useState<string>(""); // "" = new shot
+  const [newShotName, setNewShotName] = useState("");
+  const [rect, setRect] = useState<CropRect>(DEFAULT_CROP_RECT);
+  const [rows, setRows] = useState<ShotColorRow[]>([
+    { key: 0, file: null, color: "", dims: null },
+    { key: 1, file: null, color: "", dims: null },
+  ]);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nextKey = useRef(2);
+
+  const existingShot = shots.find((s) => s.id === shotChoice) ?? null;
+  const savedRect = existingShot?.cropRect ?? null;
+  const activeRect = savedRect ?? rect;
+  const drawingNew = !savedRect;
+
+  useEffect(() => {
+    const first = rows.find((r) => r.file)?.file ?? null;
+    if (!first) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(first);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.map((r) => r.file).join()]);
+
+  async function setFile(key: number, file: File | null) {
+    const dims = file ? await nativeDimensions(file) : null;
+    setRows((cur) => cur.map((r) => (r.key === key ? { ...r, file, dims } : r)));
+  }
+
+  function setColor(key: number, color: string) {
+    setRows((cur) => cur.map((r) => (r.key === key ? { ...r, color } : r)));
+  }
+
+  function addRow() {
+    setRows((cur) => [...cur, { key: nextKey.current++, file: null, color: "", dims: null }]);
+  }
+
+  function removeRow(key: number) {
+    setRows((cur) => (cur.length > 1 ? cur.filter((r) => r.key !== key) : cur));
+  }
+
+  const activeRows = rows.filter((r) => r.file);
+  const infeasible = activeRows.filter(
+    (r) => r.dims && !cropFeasible(r.dims.width, r.dims.height, activeRect, MOCKUP_CROP_SIZE)
+  );
+  const shotName = existingShot?.name ?? newShotName.trim();
+  const blocked = !shotName
+    ? "Name the shot (or pick an existing one)."
+    : activeRows.length === 0
+      ? "Add at least one colour photo."
+      : activeRows.some((r) => !r.color.trim())
+        ? "Every photo needs its garment colour."
+        : infeasible.length > 0
+          ? `${infeasible.length} photo${infeasible.length === 1 ? "" : "s"} can't produce a sharp ${MOCKUP_CROP_SIZE}×${MOCKUP_CROP_SIZE} crop at this framing — shrink the rectangle or drop them.`
+          : null;
+
+  async function apply() {
+    setBusy(true);
+    setError(null);
+    try {
+      let shotId = existingShot?.id ?? null;
+      if (!shotId) {
+        const res = await apiJson<{ record?: { id: string } }>("/api/mockup-shots", "POST", { name: shotName });
+        if (!res.ok || !res.data.record) throw new Error(res.error ?? "Couldn't create the shot.");
+        shotId = res.data.record.id;
+      }
+      for (const row of activeRows) {
+        if (!row.file) continue;
+        const cropped = await cropToStandardSize(row.file, activeRect, MOCKUP_CROP_SIZE);
+        const form = new FormData();
+        form.append("name", `${shotName} — ${row.color.trim()}`);
+        form.append("pipelineType", "Simple Placement");
+        form.append("blendMode", DEFAULT_BLEND);
+        form.append("fitMode", DEFAULT_FIT);
+        form.append("garmentColor", row.color.trim());
+        form.append("shotId", shotId);
+        form.append("quad", JSON.stringify(DEFAULT_QUAD));
+        form.append("baseImage", cropped);
+        const res = await apiCall("/api/mockup-templates", { method: "POST", body: form });
+        if (!res.ok) throw new Error(res.error ?? "Upload failed.");
+      }
+      if (drawingNew) {
+        const res = await apiJson(`/api/mockup-shots/${shotId}`, "PATCH", { cropRect: activeRect });
+        if (!res.ok) throw new Error(res.error ?? "Couldn't save the shot's crop.");
+      }
+      setOpen(false);
+      setShotChoice("");
+      setNewShotName("");
+      setRect(DEFAULT_CROP_RECT);
+      setRows([
+        { key: 0, file: null, color: "", dims: null },
+        { key: 1, file: null, color: "", dims: null },
+      ]);
+      router.refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setBusy(false);
+  }
+
+  if (!open) {
+    return (
+      <button className="btn btn-secondary" onClick={() => setOpen(true)}>
+        ＋ New mockup shot (colour batch)
+      </button>
+    );
+  }
+
+  return (
+    <div className="card supporting stack-12">
+      <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
+        <div className="field" style={{ flex: "1 1 220px" }}>
+          <label className="kicker" htmlFor="ms-shot">SHOT</label>
+          <select
+            id="ms-shot"
+            className="select"
+            value={shotChoice}
+            onChange={(e) => setShotChoice(e.target.value)}
+          >
+            <option value="">＋ New shot…</option>
+            {shots.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}{s.cropRect ? " · crop set" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        {!existingShot ? (
+          <div className="field" style={{ flex: "2 1 220px" }}>
+            <label className="kicker" htmlFor="ms-name">SHOT NAME</label>
+            <input
+              id="ms-name"
+              className="input"
+              placeholder="e.g. CC1466 Model 1"
+              value={newShotName}
+              onChange={(e) => setNewShotName(e.target.value)}
+            />
+          </div>
+        ) : (
+          <span className="hint" style={{ alignSelf: "center" }}>
+            {savedRect
+              ? "This shot already has a crop — new colours reuse it automatically."
+              : "This shot has no crop yet — draw one below."}
+          </span>
+        )}
+      </div>
+
+      <div className="stack-12">
+        {rows.map((row, i) => (
+          <div key={row.key} className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+            <FileSlot
+              label={`COLOUR ${i + 1} PHOTO`}
+              file={row.file}
+              onFile={(f) => setFile(row.key, f)}
+            />
+            <div className="field" style={{ flex: "1 1 140px" }}>
+              <label className="kicker">GARMENT COLOR</label>
+              <input
+                className="input"
+                placeholder="e.g. Pepper"
+                value={row.color}
+                onChange={(e) => setColor(row.key, e.target.value)}
+              />
+            </div>
+            {row.dims ? (
+              <span className={`chip ${infeasible.includes(row) ? "blocked" : "done"}`} style={{ fontSize: 11 }}>
+                {row.dims.width}×{row.dims.height}
+                {infeasible.includes(row) ? " — too small at this crop" : " ✓"}
+              </span>
+            ) : null}
+            {rows.length > 1 ? (
+              <button className="btn btn-tertiary" style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => removeRow(row.key)}>
+                ✕
+              </button>
+            ) : null}
+          </div>
+        ))}
+        <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "5px 10px", alignSelf: "flex-start" }} onClick={addRow}>
+          + another colour
+        </button>
+      </div>
+
+      {drawingNew && preview ? (
+        <div className="field">
+          <label className="kicker">CROP — SQUARE, APPLIES TO EVERY COLOUR ABOVE</label>
+          <QuadEditor src={preview} quad={rectToQuad(rect)} onChange={(q) => setRect(quadToRect(q))} squareOnly />
+        </div>
+      ) : drawingNew ? (
+        <span className="hint">Add a photo above to draw the crop against it.</span>
+      ) : null}
+
+      {error ? <div className="callout blocked">{error}</div> : null}
+      <div className="row-gap-12">
+        <button className="btn btn-primary" onClick={apply} disabled={busy || Boolean(blocked)} title={blocked ?? undefined}>
+          <Spinner active={busy} />
+          Crop &amp; save {activeRows.length || ""} colour{activeRows.length === 1 ? "" : "s"}
+        </button>
+        <button className="btn btn-tertiary" onClick={() => setOpen(false)} disabled={busy}>
+          Cancel
+        </button>
+        {blocked && !busy ? <span className="hint">{blocked}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+export function MockupTemplatesSection({
+  templates,
+  shots,
+}: {
+  templates: MockupTemplateCard[];
+  shots: MockupShotOption[];
+}) {
   return (
     <section className="stack-12">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <Kicker>MOCKUP TEMPLATES · {templates.length}</Kicker>
-        <MockupTemplateIntake />
+        <div className="row-gap-12">
+          <MockupTemplateIntake />
+          <MockupShotIntake shots={shots} />
+        </div>
       </div>
       <div className="inbox-grid">
         {templates.map((t) => (

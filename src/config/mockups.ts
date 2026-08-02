@@ -90,6 +90,17 @@ export const DEFAULT_QUAD: Quad = [
   { x: 0.3, y: 0.7 },
 ];
 
+/**
+ * Standard output crop for a mockup shot batch — one square framing
+ * decision per shot, reused by every colour variant and every render
+ * forever after (src/lib/mockupCrop.ts). 1:1 so it works as a listing
+ * thumbnail directly, no letterboxing.
+ */
+export const MOCKUP_CROP_SIZE = 4000;
+
+/** A fresh shot crop starts centred, sized to whatever fits — the guard corrects it if it's infeasible. */
+export const DEFAULT_CROP_RECT = { x: 0.15, y: 0.15, size: 0.7 };
+
 /* ---------- render tunables ---------- */
 
 /** Long edge the render works at — Etsy wants ~2000px; bigger is wasted work. */

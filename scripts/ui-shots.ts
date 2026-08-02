@@ -57,7 +57,8 @@ const SHOTS: Shot[] = [
   { name: "design-c9", path: "/designs/design-1", full: true },
   { name: "products", path: "/products", full: true },
   { name: "listings", path: "/listings" },
-  { name: "library", path: "/library" },
+  { name: "library", path: "/library", full: true },
+  { name: "library-shot-form", path: "/library", clicks: ["＋ New mockup shot (colour batch)"], full: true },
 ];
 
 async function main() {

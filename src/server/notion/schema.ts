@@ -524,6 +524,12 @@ export const SCHEMA: DbSpec[] = [
       // L1) — the set mockup templates are filtered against. JSON array of
       // Printify colour names.
       "Colorways (JSON)": { type: "rich_text" },
+      // The colours this listing actually generates MOCKUPS for — a subset
+      // of Colorways (JSON). A shop can sell 8 colours but only shoot/mock
+      // up 4 of them. Empty means "same as Colorways" (every sold colour
+      // gets a mockup slot) rather than "none" — the L5 offered-template
+      // filter treats blank as the sold-colours set, never as zero.
+      "Mockup Colors (JSON)": { type: "rich_text" },
       // Keyword ids ✕'d off the L2 shortlist — "not for this listing",
       // persisted so the shortlist doesn't re-offer them every visit.
       // They stay in the bank and the full pool; picking one from

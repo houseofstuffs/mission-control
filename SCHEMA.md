@@ -29,7 +29,7 @@ Generated 2026-08-02 · 19 databases
 | 11 | `products` | Products | 39 |
 | 12 | `product_variants` | Product Variants | 10 |
 | 13 | `designs` | Designs | 43 |
-| 14 | `etsy_listings` | Etsy Listings | 33 |
+| 14 | `etsy_listings` | Etsy Listings | 34 |
 | 15 | `change_log` | Change Log | 7 |
 | 16 | `workflow_log` | Workflow Log | 9 |
 | 17 | `keywords` | Keywords | 17 |
@@ -368,6 +368,7 @@ Market offerings referencing one or more Designs — named EtsyListing deliberat
 | Designs | relation | → Designs |
 | Variant Design Map (JSON) | rich_text |  |
 | Colorways (JSON) | rich_text |  |
+| Mockup Colors (JSON) | rich_text |  |
 | Dismissed Keywords (JSON) | rich_text |  |
 | Is Multi Variant | checkbox |  |
 | Product | relation | → Products |

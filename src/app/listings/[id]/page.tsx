@@ -36,7 +36,7 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       <StepRunner
         record={runnerRecord(rec)}
         seo={seoData(rec)}
-        slots={slotsData(rec, compatForListing(rec), selectedColorways(rec))}
+        slots={slotsData(rec, compatForListing(rec))}
         colorways={colorwaysData(rec)}
         pricing={pricingData(rec)}
         printFile={printFileData(rec)}
@@ -48,6 +48,15 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
 function selectedColorways(rec: NonNullable<ReturnType<typeof cachedRecord>>): string[] {
   try {
     const parsed = JSON.parse(String(rec.props["Colorways (JSON)"] ?? "[]"));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function selectedMockupColors(rec: NonNullable<ReturnType<typeof cachedRecord>>): string[] {
+  try {
+    const parsed = JSON.parse(String(rec.props["Mockup Colors (JSON)"] ?? "[]"));
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
     return [];
@@ -75,6 +84,7 @@ function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Color
     colors,
     excluded: colors.filter((c) => !variantAllowed(compat, c)),
     selected: selectedColorways(rec),
+    mockupColors: selectedMockupColors(rec),
     printifyReady: printifyConfigured(),
     connected: String(rec.props["Printify Product ID"] ?? "").trim().length > 0,
   };
@@ -86,13 +96,25 @@ const PRODUCT_LINK_FIELD: Record<string, string> = {
   Colorways: "Colorways Graphic Link",
 };
 
-function slotsData(
-  rec: NonNullable<ReturnType<typeof cachedRecord>>,
-  compatibility: string,
-  colorways: string[]
-): SlotsData {
+function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibility: string): SlotsData {
   const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
   const product = productId ? cachedRecord(productId) : null;
+
+  // The three-way intersection: sold (or the mockup-colors subset if one's
+  // set) ∩ a real, currently-available Product Variant in that colour.
+  // Failing either check means no mockup template for that colour should
+  // ever be offered at L5, even if a photo technically exists for it.
+  const norm = (c: string) => c.trim().toLowerCase();
+  const soldColors = selectedColorways(rec);
+  const mockupColors = selectedMockupColors(rec);
+  const wantedColors = new Set((mockupColors.length > 0 ? mockupColors : soldColors).map(norm));
+  const availableVariantColors = new Set(
+    (productId ? cachedRecords("product_variants") : [])
+      .filter((v) => ((v.props["Product"] as string[] | null) ?? []).includes(productId ?? "") && v.props["Available"])
+      .map((v) => norm(String(v.props["Color"] ?? "")))
+      .filter(Boolean)
+  );
+  const availableColors = [...wantedColors].filter((c) => availableVariantColors.has(c));
 
   const slots: SlotRow[] = cachedRecords("image_slots")
     .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(rec.id))
@@ -137,7 +159,7 @@ function slotsData(
     compatibility,
     slots,
     templates,
-    colorways,
+    availableColors,
     hasProductLinks: slots.some((s) => s.productLinkRole),
   };
 }

@@ -93,13 +93,30 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
+    // the subset of colourways this listing actually generates mockups for
+    let mockupColorsChanged = false;
+    if (body.mockupColors !== undefined) {
+      const list = Array.isArray(body.mockupColors)
+        ? body.mockupColors.map((c: unknown) => String(c).trim()).filter(Boolean)
+        : [];
+      values["Mockup Colors (JSON)"] = JSON.stringify(list);
+      try {
+        const prior = JSON.parse(String(listing.props["Mockup Colors (JSON)"] ?? "[]"));
+        mockupColorsChanged =
+          JSON.stringify((Array.isArray(prior) ? prior : []).slice().sort()) !==
+          JSON.stringify(list.slice().sort());
+      } catch {
+        mockupColorsChanged = true;
+      }
+    }
+
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
     const record = await updateRecord("etsy_listings", id, values);
     // colourways feed L4/L5 — changing them after those steps are done makes
     // the images a lie until re-checked. Stale, never silent.
-    if (colorwaysChanged) {
+    if (colorwaysChanged || mockupColorsChanged) {
       await markStepsStale(id, ["L4", "L5"], "Colorways changed — re-check images and slots.");
     }
     // Saving tags syncs keyword ATTACHMENTS to the committed selection —

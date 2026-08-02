@@ -24,6 +24,8 @@ export interface ColorwaysData {
   excluded: string[];
   /** current selection on the record */
   selected: string[];
+  /** the subset of `selected` this listing actually generates mockups for — empty means "same as selected" */
+  mockupColors: string[];
   /** PRINTIFY_API_TOKEN present — the pull button needs it */
   printifyReady: boolean;
   /** already connected to a real Printify product */
@@ -33,6 +35,11 @@ export interface ColorwaysData {
 export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
   const router = useRouter();
   const [picked, setPicked] = useState<Set<string>>(new Set(data.selected));
+  // blank on the record means "same as selected" — the picker shows that
+  // as everything checked, not empty, so it never LOOKS like zero mockups
+  const [mockupPicked, setMockupPicked] = useState<Set<string>>(
+    new Set(data.mockupColors.length > 0 ? data.mockupColors : data.selected)
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -82,6 +89,30 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
     setError(null);
     const res = await apiJson(`/api/listings/${data.listingId}`, "PATCH", {
       colorways: [...picked],
+    });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(false);
+  }
+
+  const savedMockupSet = new Set(data.mockupColors.length > 0 ? data.mockupColors : data.selected);
+  const mockupDirty =
+    mockupPicked.size !== savedMockupSet.size || [...savedMockupSet].some((c) => !mockupPicked.has(c));
+
+  function toggleMockup(color: string) {
+    setMockupPicked((cur) => {
+      const next = new Set(cur);
+      if (next.has(color)) next.delete(color);
+      else next.add(color);
+      return next;
+    });
+  }
+
+  async function saveMockupColors() {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson(`/api/listings/${data.listingId}`, "PATCH", {
+      mockupColors: [...mockupPicked],
     });
     if (!res.ok) setError(res.error);
     else router.refresh();
@@ -164,6 +195,36 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
         </button>
         <span className="hint">
           {picked.size} selected{dirty ? " — unsaved" : " · saved"}
+        </span>
+      </div>
+
+      {/* a shop can sell more colours than it bothers to shoot mockups for
+          — this is which of the SAVED colorways actually get an L5 slot */}
+      <Kicker>MOCKUP COLORS</Kicker>
+      <div className="hint">Which of the saved colorways to actually generate mockups for — defaults to all of them.</div>
+      <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+        {data.selected.map((color) => {
+          const on = mockupPicked.has(color);
+          return (
+            <button
+              key={color}
+              className={`chip ${on ? "done" : "neutral"}`}
+              style={{ cursor: "pointer", border: on ? undefined : "1px solid #ddd6c2" }}
+              disabled={busy}
+              onClick={() => toggleMockup(color)}
+            >
+              {on ? "✓ " : ""}{color}
+            </button>
+          );
+        })}
+      </div>
+      <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn btn-save" onClick={saveMockupColors} disabled={busy || !mockupDirty}>
+          <Spinner active={busy} />
+          Save mockup colors
+        </button>
+        <span className="hint">
+          {mockupPicked.size} of {data.selected.length}{mockupDirty ? " — unsaved" : " · saved"}
         </span>
       </div>
       {error ? <div className="callout blocked">{error}</div> : null}

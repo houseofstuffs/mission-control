@@ -41,8 +41,8 @@ export interface SlotsData {
   compatibility: string;
   slots: SlotRow[];
   templates: Array<{ id: string; name: string; shotType: string; garmentColor: string }>;
-  /** the listing's colourways — template offers filter against these */
-  colorways: string[];
+  /** already the full intersection — sold (or mockup-colors subset) ∩ an Available Product Variant. Template offers filter against this, not raw colorways. */
+  availableColors: string[];
   /** true when any slot is tied to a Product graphic — shows the Refresh from Product button */
   hasProductLinks: boolean;
 }
@@ -67,11 +67,12 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
   const filled = data.slots.filter((s) => s.status === "Made" || s.status === "Placed");
 
-  // Offer colour-neutral templates always; colour-tagged ones only in the
-  // listing's colourways. No colourways recorded yet = no filtering, with a
-  // nudge to set them at L1.
+  // Offer colour-neutral templates always; colour-tagged ones only when the
+  // colour survives the full intersection (sold/mockup-colors ∩ an
+  // Available Product Variant) — computed server-side. No colours recorded
+  // yet = no filtering, with a nudge to set them at L1.
   const norm = (c: string) => c.trim().toLowerCase();
-  const sells = new Set(data.colorways.map(norm));
+  const sells = new Set(data.availableColors.map(norm));
   const offered = data.templates.filter(
     (t) => !t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))
   );

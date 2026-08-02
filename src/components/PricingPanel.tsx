@@ -77,7 +77,6 @@ export function PricingPanel({ data }: { data: PricingData }) {
   const [shipCostInput, setShipCostInput] = useState(
     defaultShipCost != null ? String(defaultShipCost) : "0"
   );
-  const shipCostIsDefault = defaultShipCost != null && shipCostInput === String(defaultShipCost);
   const [adMode, setAdMode] = useState<AdMode>("percent");
   const [adInput, setAdInput] = useState("15");
 
@@ -281,17 +280,16 @@ export function PricingPanel({ data }: { data: PricingData }) {
         {priceDirty && livePrice != null ? <span className="chip stale">UNSAVED</span> : null}
       </div>
 
-      {/* the scenario dials — grouped apart because none of them save */}
+      {/* unified scenario + margin — two columns, one panel, neither saves */}
       <div className="well">
         <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-          <Kicker>SCENARIO — EXPLORATION ONLY</Kicker>
-          <span className="hint">
-            Nothing here saves or pushes. Adjust and the margin below moves with it.
-          </span>
+          <span className="panel-title" style={{ fontSize: 16 }}>Scenario &amp; margin</span>
+          <span className="chip stale">EXPLORATION ONLY</span>
+          <span className="hint">Nothing here saves or pushes.</span>
           {scenarioActive ? (
             <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 11, padding: "3px 9px", marginLeft: "auto" }}
+              className="btn btn-secondary"
+              style={{ fontSize: 12, padding: "5px 14px", marginLeft: "auto" }}
               onClick={() => {
                 setDiscountInput("0");
                 setShipChargedInput("0");
@@ -299,185 +297,179 @@ export function PricingPanel({ data }: { data: PricingData }) {
                 setAdInput("0");
               }}
             >
-              Reset to plain sale
+              Reset
             </button>
           ) : null}
         </div>
+
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-            gap: 12,
-            marginTop: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: 20,
+            marginTop: 14,
           }}
         >
-          <div className="field">
-            <label className="kicker" htmlFor="l3-discount">SALE / DISCOUNT %</label>
-            <input
-              id="l3-discount"
-              className="input"
-              type="number"
-              step="1"
-              min="0"
-              max="100"
-              value={discountInput}
-              onChange={(e) => setDiscountInput(e.target.value)}
-            />
-            <span className="hint">
-              {margin && margin.discount > 0 ? `−${money(margin.discount)} → ${money(margin.salePrice)}` : "models a sale without touching the price"}
-            </span>
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="l3-ship-charged">SHIPPING CHARGED</label>
-            <input
-              id="l3-ship-charged"
-              className="input"
-              type="number"
-              step="0.01"
-              min="0"
-              value={shipChargedInput}
-              onChange={(e) => setShipChargedInput(e.target.value)}
-            />
-            <span className="hint">what the buyer pays · 0 = free shipping</span>
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="l3-ship-cost">SHIPPING COST</label>
-            <input
-              id="l3-ship-cost"
-              className="input"
-              type="number"
-              step="0.01"
-              min="0"
-              value={shipCostInput}
-              onChange={(e) => setShipCostInput(e.target.value)}
-            />
-            <span className="hint">
-              what Printify bills you, on top of product cost
-              {defaultShipCost != null ? (
-                <>
-                  {" · "}
-                  {shipCostIsDefault ? "from " : "was "}
-                  Printify catalog (${defaultShipCost.toFixed(2)}
-                  {data.product?.shippingPulledAt ? `, pulled ${data.product.shippingPulledAt}` : ""}) — edit freely
-                </>
-              ) : (
-                <> · no Printify shipping pull yet for this product, starts at $0</>
-              )}
-            </span>
-          </div>
-          <div className="field">
-            <label className="kicker" htmlFor="l3-ad">
-              ADVERTISING {adMode === "percent" ? "%" : "$"}
-            </label>
-            <div className="row-gap-8" style={{ alignItems: "center" }}>
-              <input
-                id="l3-ad"
-                className="input"
-                type="number"
-                step={adMode === "percent" ? "1" : "0.01"}
-                min="0"
-                max={adMode === "percent" ? "100" : undefined}
-                style={{ minWidth: 0 }}
-                value={adInput}
-                onChange={(e) => setAdInput(e.target.value)}
-              />
-              <select
-                className="select"
-                aria-label="Advertising mode"
-                style={{ width: "auto", padding: "6px 8px", fontSize: 12 }}
-                value={adMode}
-                onChange={(e) => setAdMode(e.target.value as AdMode)}
-              >
-                <option value="percent">% of order</option>
-                <option value="flat">$ per sale</option>
-              </select>
+          {/* left — the dials */}
+          <div>
+            <Kicker>SCENARIO INPUTS</Kicker>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                gap: 12,
+                marginTop: 10,
+              }}
+            >
+              <div className="field">
+                <label className="kicker" htmlFor="l3-discount">SALE / DISCOUNT %</label>
+                <input
+                  id="l3-discount"
+                  className="input"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="kicker" htmlFor="l3-ship-charged">SHIPPING CHARGED</label>
+                <input
+                  id="l3-ship-charged"
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={shipChargedInput}
+                  onChange={(e) => setShipChargedInput(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="kicker" htmlFor="l3-ship-cost">SHIPPING COST</label>
+                <input
+                  id="l3-ship-cost"
+                  className="input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={shipCostInput}
+                  onChange={(e) => setShipCostInput(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label className="kicker" htmlFor="l3-ad">
+                  ADVERTISING {adMode === "percent" ? "%" : "$"}
+                </label>
+                <div className="row-gap-8" style={{ alignItems: "center" }}>
+                  <input
+                    id="l3-ad"
+                    className="input"
+                    type="number"
+                    step={adMode === "percent" ? "1" : "0.01"}
+                    min="0"
+                    max={adMode === "percent" ? "100" : undefined}
+                    style={{ minWidth: 0 }}
+                    value={adInput}
+                    onChange={(e) => setAdInput(e.target.value)}
+                  />
+                  <select
+                    className="select"
+                    aria-label="Advertising mode"
+                    style={{ width: "auto", padding: "6px 8px", fontSize: 12 }}
+                    value={adMode}
+                    onChange={(e) => setAdMode(e.target.value as AdMode)}
+                  >
+                    <option value="percent">%</option>
+                    <option value="flat">$</option>
+                  </select>
+                </div>
+              </div>
             </div>
             {adMode === "percent" ? (
-              <>
-                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                  {AD_PRESETS.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      className={`chip ${num(adInput) === p ? "done" : "neutral"}`}
-                      style={{ cursor: "pointer" }}
-                      title={
-                        p === 15
-                          ? "Etsy Offsite Ads, mandatory tier (under $10k/yr)"
-                          : p === 12
-                            ? "Etsy Offsite Ads once the shop clears $10k/yr"
-                            : "no advertising on this sale"
-                      }
-                      onClick={() => setAdInput(String(p))}
-                    >
-                      {p === 0 ? "none" : `${p}%`}
-                    </button>
-                  ))}
-                </div>
-              </>
+              <div className="row-gap-8" style={{ flexWrap: "wrap", marginTop: 10 }}>
+                {AD_PRESETS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`chip ${num(adInput) === p ? "done" : "neutral"}`}
+                    style={{ cursor: "pointer" }}
+                    title={
+                      p === 15
+                        ? "Etsy Offsite Ads, mandatory tier (under $10k/yr)"
+                        : p === 12
+                          ? "Etsy Offsite Ads once the shop clears $10k/yr"
+                          : "no advertising on this sale"
+                    }
+                    onClick={() => setAdInput(String(p))}
+                  >
+                    {p === 0 ? "none" : `${p}%`}
+                  </button>
+                ))}
+              </div>
             ) : (
-              <span className="hint">flat spend attributed to one sale</span>
+              <span className="hint" style={{ display: "block", marginTop: 10 }}>flat spend attributed to one sale</span>
             )}
+            {/* the tier assumption — the one caption kept, since it's a fact
+                that changes, not a restatement of the field's own label */}
+            {adMode === "percent" ? (
+              <span className="hint" style={{ display: "block", marginTop: 8 }}>{offsiteAds.note}</span>
+            ) : null}
           </div>
-        </div>
-        {/* the tier assumption, printed where it gets read — full width so
-            it can't squeeze the advertising column, and on screen every
-            visit so it can't quietly go stale */}
-        {adMode === "percent" ? (
-          <span className="hint" style={{ marginTop: 8 }}>{offsiteAds.note}</span>
-        ) : null}
-      </div>
 
-      {/* the verdict — only when both real sides exist */}
-      {margin ? (
-        <div className="well">
-          <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <Kicker>
-              {mode === "margin" ? "AT THE REQUIRED PRICE" : "MARGIN"} ON A {money(margin.orderTotal)} ORDER
-            </Kicker>
-            {margin.net < 0 ? (
-              <span className="chip blocked">underwater</span>
-            ) : margin.marginPct < MARGIN_THIN_PCT ? (
-              <span className="chip stale">thin — under {pct(MARGIN_THIN_PCT)}</span>
-            ) : (
-              <span className="chip done">✓ {pct(margin.marginPct)}</span>
-            )}
-            <span className="hint" style={{ marginLeft: "auto" }}>
-              {breakeven != null ? `breakeven price ${money(breakeven)}` : "no price breaks even in this scenario"}
-            </span>
-          </div>
-          {/* one line per real deduction — nothing hidden in a constant */}
-          <div className="stack-12" style={{ gap: 2, marginTop: 8 }}>
-            <Row label="Order total" value={margin.orderTotal} strong />
-            {margin.discount > 0 ? (
-              <Row label={`Sale price (after ${discountInput}% off)`} value={margin.salePrice} muted />
-            ) : null}
-            {margin.shippingCharged > 0 ? (
-              <Row label="Shipping charged to buyer" value={margin.shippingCharged} muted />
-            ) : null}
-            <Row label="Product cost" value={-margin.cost} />
-            {margin.shippingCost > 0 ? <Row label="Shipping cost" value={-margin.shippingCost} /> : null}
-            <Row label="Listing fee" value={-margin.listingFee} />
-            <Row label={`Transaction fee (${pct(ETSY_TRANSACTION_PCT)})`} value={-margin.transactionFee} />
-            <Row
-              label={`Processing (${pct(ETSY_PAYMENT_PCT)} + ${money(ETSY_PAYMENT_FLAT)})`}
-              value={-margin.paymentFee}
-            />
-            <Row
-              label={`Advertising (${adMode === "percent" ? `${num(adInput)}% of order` : "flat"})`}
-              value={-margin.adCost}
-            />
-            <div style={{ borderTop: "1px solid var(--border-soft)", margin: "6px 0" }} />
-            <Row label={`Net · ${pct(margin.marginPct)}`} value={margin.net} strong />
-          </div>
-          {noAdMargin && margin.adCost > 0 ? (
-            <span className="hint">
-              Advertising is costing {money(margin.adCost)} of this order — without it the same sale
-              nets {money(noAdMargin.net)} ({pct(noAdMargin.marginPct)}).
-            </span>
+          {/* right — the verdict, only when both real sides exist */}
+          {margin ? (
+            <div style={{ borderLeft: "1px solid var(--border-soft)", paddingLeft: 20 }}>
+              <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                <Kicker>
+                  {mode === "margin" ? "AT THE REQUIRED PRICE" : "MARGIN"} ON A {money(margin.orderTotal)} ORDER
+                </Kicker>
+                {margin.net < 0 ? (
+                  <span className="chip blocked">underwater</span>
+                ) : margin.marginPct < MARGIN_THIN_PCT ? (
+                  <span className="chip stale">thin — under {pct(MARGIN_THIN_PCT)}</span>
+                ) : (
+                  <span className="chip done">✓ {pct(margin.marginPct)}</span>
+                )}
+                <span className="hint" style={{ marginLeft: "auto" }}>
+                  {breakeven != null ? `breakeven ${money(breakeven)}` : "no price breaks even in this scenario"}
+                </span>
+              </div>
+              {/* one line per real deduction — nothing hidden in a constant */}
+              <div className="stack-12" style={{ gap: 2, marginTop: 8 }}>
+                <Row label="Order total" value={margin.orderTotal} strong />
+                {margin.discount > 0 ? (
+                  <Row label={`Sale price (after ${discountInput}% off)`} value={margin.salePrice} muted />
+                ) : null}
+                {margin.shippingCharged > 0 ? (
+                  <Row label="Shipping charged to buyer" value={margin.shippingCharged} muted />
+                ) : null}
+                <Row label="Product cost" value={-margin.cost} />
+                {margin.shippingCost > 0 ? <Row label="Shipping cost" value={-margin.shippingCost} /> : null}
+                <Row label="Listing fee" value={-margin.listingFee} />
+                <Row label={`Transaction fee (${pct(ETSY_TRANSACTION_PCT)})`} value={-margin.transactionFee} />
+                <Row
+                  label={`Processing (${pct(ETSY_PAYMENT_PCT)} + ${money(ETSY_PAYMENT_FLAT)})`}
+                  value={-margin.paymentFee}
+                />
+                <Row
+                  label={`Advertising (${adMode === "percent" ? `${num(adInput)}% of order` : "flat"})`}
+                  value={-margin.adCost}
+                />
+                <div style={{ borderTop: "1px solid var(--border-soft)", margin: "6px 0" }} />
+                <Row label={`Net Profit · ${pct(margin.marginPct)}`} value={margin.net} strong />
+              </div>
+              {noAdMargin && margin.adCost > 0 ? (
+                <span className="hint">
+                  Advertising is costing {money(margin.adCost)} of this order — without it the same sale
+                  nets {money(noAdMargin.net)} ({pct(noAdMargin.marginPct)}).
+                </span>
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : null}
+      </div>
       <span className="hint">
         Etsy US fees: listing {money(ETSY_LISTING_FEE)}, transaction {pct(ETSY_TRANSACTION_PCT)},
         processing {pct(ETSY_PAYMENT_PCT)} + {money(ETSY_PAYMENT_FLAT)} — all charged on the order

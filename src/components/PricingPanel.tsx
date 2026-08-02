@@ -52,6 +52,9 @@ export interface PricingData {
     /** what Printify bills to ship one unit, US domestic — pre-fills the scenario dial below */
     estimatedShippingCost: number | null;
     shippingPulledAt: string | null;
+    /** what the BUYER is charged, from the product's Etsy Shipping Profile */
+    shippingCharged: number | null;
+    shippingProfileName: string | null;
   } | null;
 }
 
@@ -72,7 +75,10 @@ export function PricingPanel({ data }: { data: PricingData }) {
 
   // ---- exploration dials: live math, saved nowhere ----
   const [discountInput, setDiscountInput] = useState("0");
-  const [shipChargedInput, setShipChargedInput] = useState("0");
+  const defaultShipCharged = data.product?.shippingCharged ?? null;
+  const [shipChargedInput, setShipChargedInput] = useState(
+    defaultShipCharged != null ? String(defaultShipCharged) : "0"
+  );
   const defaultShipCost = data.product?.estimatedShippingCost ?? null;
   const [shipCostInput, setShipCostInput] = useState(
     defaultShipCost != null ? String(defaultShipCost) : "0"
@@ -343,6 +349,11 @@ export function PricingPanel({ data }: { data: PricingData }) {
                   step="0.01"
                   min="0"
                   value={shipChargedInput}
+                  title={
+                    data.product?.shippingProfileName
+                      ? `Pre-filled from the Etsy shipping profile "${data.product.shippingProfileName}" (US domestic) — override freely.`
+                      : "Set an Etsy shipping profile on the Product to pre-fill this."
+                  }
                   onChange={(e) => setShipChargedInput(e.target.value)}
                 />
               </div>

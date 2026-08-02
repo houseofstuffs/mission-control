@@ -70,6 +70,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (body[key] !== undefined) values[field] = String(body[key]).trim() || null;
     }
 
+    // which synced Etsy profile sets what the buyer pays; "" clears it
+    if (body.etsyShippingProfileId !== undefined) {
+      if (body.etsyShippingProfileId) {
+        const profile = cachedRecord(String(body.etsyShippingProfileId));
+        if (!profile || profile.dbKey !== "shipping_profiles") {
+          return NextResponse.json(
+            { error: "That shipping profile wasn't found — sync from the Today page and retry." },
+            { status: 400 }
+          );
+        }
+        values["Etsy Shipping Profile"] = [profile.id];
+      } else {
+        values["Etsy Shipping Profile"] = [];
+      }
+    }
+
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }

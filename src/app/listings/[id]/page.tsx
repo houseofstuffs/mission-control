@@ -13,6 +13,7 @@ import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
 import type { PrintFileData } from "@/components/PrintFilePanel";
 import { needsRecompose, derivativeFor } from "@/server/recompose";
+import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { isStaleKeyword } from "@/config/keywords";
 import { momentumTooltip, type MomentumDetail } from "@/server/listingCsv";
 import { Kicker } from "@/components/ui";
@@ -212,6 +213,17 @@ function pricingData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Pricing
               ? productRec.props["Estimated Shipping Cost"]
               : null,
           shippingPulledAt: String(productRec.props["Shipping Pulled At"] ?? "") || null,
+          // the buyer's side — from the Etsy profile this product points at
+          ...(() => {
+            const profileId = ((productRec.props["Etsy Shipping Profile"] as string[] | null) ?? [])[0];
+            const profile = profileId
+              ? cachedRecords("shipping_profiles").find((s) => s.id === profileId)
+              : null;
+            return {
+              shippingCharged: profile ? usDomesticCharge(profile) : null,
+              shippingProfileName: profile?.title ?? null,
+            };
+          })(),
         }
       : null,
   };

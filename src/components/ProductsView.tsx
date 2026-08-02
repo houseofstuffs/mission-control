@@ -48,6 +48,9 @@ export interface ProductCardData {
   /** what Printify bills to ship one unit, US domestic — the L3 calculator's default */
   estimatedShippingCost: number | null;
   shippingPulledAt: string | null;
+  /** which synced Etsy Shipping Profile applies — sets what the BUYER is charged */
+  etsyShippingProfileId: string | null;
+  etsyShippingCharged: number | null;
   /** reusable per-blueprint graphic cards — L5 auto-fills the matching named slot from these */
   highlightsSizingGraphicLink: string;
   carePoliciesGraphicLink: string;
@@ -86,20 +89,31 @@ const CLAMP: React.CSSProperties = {
 
 type GraphicLinkField = "highlightsSizingGraphicLink" | "carePoliciesGraphicLink" | "colorwaysGraphicLink";
 
+export interface ShippingProfileOption {
+  id: string;
+  name: string;
+  /** what a US buyer is charged — null when the profile has no US destination row */
+  usCharge: number | null;
+}
+
 function ProductCard({
   p,
   busy,
+  shippingProfiles,
   onCategory,
   onRepresentative,
   onVoice,
   onGraphicLink,
+  onShippingProfile,
 }: {
   p: ProductCardData;
   busy: boolean;
+  shippingProfiles: ShippingProfileOption[];
   onCategory: (category: string) => void;
   onRepresentative: (variantId: string) => void;
   onVoice: () => void;
   onGraphicLink: (field: GraphicLinkField, value: string) => void;
+  onShippingProfile: (profileId: string) => void;
 }) {
   // the method means something different per value — say so on hover
   const methodExplained =
@@ -184,6 +198,33 @@ function ProductCard({
           title={p.shippingPulledAt ? `Printify catalog, US domestic · pulled ${p.shippingPulledAt}` : "Printify catalog, US domestic"}
         >
           ship <strong>${p.estimatedShippingCost.toFixed(2)}</strong>
+        </div>
+      ) : null}
+      {/* the buyer's side of shipping — Etsy assigns a profile per LISTING,
+          so this is only ever a default L3 pre-fills from, never a push */}
+      {shippingProfiles.length > 0 ? (
+        <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <select
+            className="select input-compact"
+            style={{ flex: "1 1 160px", fontSize: 12 }}
+            value={p.etsyShippingProfileId ?? ""}
+            disabled={busy}
+            aria-label="Etsy shipping profile"
+            onChange={(e) => onShippingProfile(e.target.value)}
+          >
+            <option value="">Etsy shipping profile…</option>
+            {shippingProfiles.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.usCharge != null ? ` — $${s.usCharge.toFixed(2)}` : " — no US rate"}
+              </option>
+            ))}
+          </select>
+          {p.etsyShippingProfileId && p.etsyShippingCharged == null ? (
+            <span className="chip stale" style={{ fontSize: 11 }} title="This profile has no US destination row, so L3 can't pre-fill what the buyer pays.">
+              no US rate
+            </span>
+          ) : null}
         </div>
       ) : null}
       {/* reusable per-blueprint graphic cards — L5 auto-fills the matching
@@ -311,10 +352,13 @@ export function ProductsView({
   products,
   printifyReady,
   anthropicReady,
+  shippingProfiles = [],
 }: {
   products: ProductCardData[];
   printifyReady: boolean;
   anthropicReady: boolean;
+  /** synced Etsy profiles — empty until Etsy is connected and synced */
+  shippingProfiles?: ShippingProfileOption[];
 }) {
   const router = useRouter();
   const [seeding, setSeeding] = useState(false);
@@ -668,6 +712,10 @@ export function ProductsView({
                   }
                   onVoice={() => openVoice(p)}
                   onGraphicLink={(field, value) => patchProduct(p.id, { [field]: value })}
+                  shippingProfiles={shippingProfiles}
+                  onShippingProfile={(profileId) =>
+                    patchProduct(p.id, { etsyShippingProfileId: profileId })
+                  }
                 />
               ))}
             </div>

@@ -130,6 +130,9 @@ function main() {
     "Estimated Shipping Cost": 5.99,
     "Shipping Cost Source": "Printify catalog",
     "Shipping Pulled At": "2026-07-31",
+    // pointed at a real profile so L3's SHIPPING CHARGED pre-fills — the
+    // buyer-facing counterpart to the Printify cost above
+    "Etsy Shipping Profile": ["ship-2"],
     "Highlights & Sizing Graphic Link": "https://cdn.example.com/graphics/cc1466-sizing.png",
     "Care & Policies Graphic Link": "https://cdn.example.com/graphics/cc1466-care.png",
     // deliberately blank — exercises the "needs Colorways graphic" badge
@@ -262,6 +265,50 @@ function main() {
     })
   );
 
+  // two profiles, one deliberately without a US destination row — that's the
+  // state that renders the "no US rate" chip and leaves L3's SHIPPING CHARGED
+  // un-prefilled, which source review can't tell apart from the happy path
+  const shippingProfiles = [
+    rec("shipping_profiles", "ship-1", "Free US shipping", {
+      Name: "Free US shipping",
+      "Etsy Shipping Profile ID": 312091099058,
+      "Origin Country": "US",
+      "Destinations (JSON)": JSON.stringify([
+        {
+          destination_country_iso: "US",
+          primary_cost: { amount: 0, divisor: 100, currency_code: "USD" },
+          min_delivery_days: 3,
+          max_delivery_days: 7,
+        },
+      ]),
+      "Synced At": NOW,
+    }),
+    rec("shipping_profiles", "ship-2", "Standard flat rate", {
+      Name: "Standard flat rate",
+      "Etsy Shipping Profile ID": 312091099059,
+      "Origin Country": "US",
+      "Destinations (JSON)": JSON.stringify([
+        {
+          destination_country_iso: "US",
+          primary_cost: { amount: 495, divisor: 100, currency_code: "USD" },
+        },
+      ]),
+      "Synced At": NOW,
+    }),
+    rec("shipping_profiles", "ship-3", "International only", {
+      Name: "International only",
+      "Etsy Shipping Profile ID": 312091099060,
+      "Origin Country": "US",
+      "Destinations (JSON)": JSON.stringify([
+        {
+          destination_country_iso: "CA",
+          primary_cost: { amount: 1200, divisor: 100, currency_code: "USD" },
+        },
+      ]),
+      "Synced At": NOW,
+    }),
+  ];
+
   const template = rec("mockup_templates", "tpl-1", "CC1466 Flat Lay Folded", {
     Name: "CC1466 Flat Lay Folded",
     "Pipeline Type": "Simple Placement",
@@ -284,6 +331,7 @@ function main() {
     keywords: keywords(),
     image_slots: slots,
     mockup_templates: [template],
+    shipping_profiles: shippingProfiles,
   };
   for (const db of SCHEMA) replaceDbRecords(db.key, byDb[db.key] ?? []);
 

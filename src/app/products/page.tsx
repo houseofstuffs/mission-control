@@ -1,4 +1,4 @@
-import { productCards } from "@/server/viewmodels";
+import { productCards, shippingProfileOptions } from "@/server/viewmodels";
 import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { syncState } from "@/server/cache/db";
@@ -13,6 +13,7 @@ export default function ProductsPage() {
   const products = productCards();
   const sync = syncState()["products"];
   const ready = printifyConfigured();
+  const profiles = shippingProfileOptions();
 
   return (
     <div className="content-inner">
@@ -32,7 +33,12 @@ export default function ProductsPage() {
           />
         </>
       ) : (
-        <ProductsView products={products} printifyReady={ready} anthropicReady={anthropicConfigured()} />
+        <ProductsView
+          products={products}
+          printifyReady={ready}
+          anthropicReady={anthropicConfigured()}
+          shippingProfiles={profiles}
+        />
       )}
     </div>
   );

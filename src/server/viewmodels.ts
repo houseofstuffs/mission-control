@@ -7,13 +7,14 @@ import { parseStepState, unmetRequirement } from "@/server/steps";
 import { compatForListing } from "@/server/imageSlots";
 import { needsRecompose, derivativeFor } from "@/server/recompose";
 import { estimateFor, variantCostsFor } from "@/server/productCost";
+import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { asCategory } from "@/config/product-categories";
 import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
 import type { ListingRow } from "@/components/ListingsTable";
 import type { IdeaCardData, NicheOption } from "@/components/InboxGrid";
-import type { ProductCardData } from "@/components/ProductsView";
+import type { ProductCardData, ShippingProfileOption } from "@/components/ProductsView";
 import type { NicheCardData } from "@/components/NichesPanel";
 import type { RunnerRecord } from "@/components/StepRunner";
 
@@ -24,6 +25,21 @@ const rel = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : []);
 function titleOf(records: SimpleRecord[], id: string | undefined): string {
   if (!id) return "";
   return records.find((r) => r.id === id)?.title ?? "";
+}
+
+/** The Etsy Shipping Profile a product points at, if any. */
+const etsyProfileId = (p: SimpleRecord): string | null =>
+  rel(p.props["Etsy Shipping Profile"])[0] ?? null;
+
+/** The synced Etsy profiles, as the Products picker's options. */
+export function shippingProfileOptions(): ShippingProfileOption[] {
+  return cachedRecords("shipping_profiles")
+    .map((s) => ({
+      id: s.id,
+      name: s.title || "Untitled profile",
+      usCharge: usDomesticCharge(s),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /* ---------- designs / kanban ---------- */
@@ -335,6 +351,14 @@ export function productCards(): ProductCardData[] {
     costReason: num(p.props["Estimated Cost"]) != null ? null : estimateFor(p).reason,
     estimatedShippingCost: num(p.props["Estimated Shipping Cost"]),
     shippingPulledAt: str(p.props["Shipping Pulled At"]) || null,
+    // what the BUYER pays, from the Etsy profile this product is pointed at
+    // — the other side of the shipping coin from the Printify cost above
+    etsyShippingProfileId: etsyProfileId(p),
+    etsyShippingCharged: (() => {
+      const linked = etsyProfileId(p);
+      const rec = linked ? cachedRecords("shipping_profiles").find((s) => s.id === linked) : null;
+      return rec ? usDomesticCharge(rec) : null;
+    })(),
     highlightsSizingGraphicLink: str(p.props["Highlights & Sizing Graphic Link"]),
     carePoliciesGraphicLink: str(p.props["Care & Policies Graphic Link"]),
     colorwaysGraphicLink: str(p.props["Colorways Graphic Link"]),

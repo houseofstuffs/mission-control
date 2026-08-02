@@ -89,6 +89,10 @@ const CLAMP: React.CSSProperties = {
 
 type GraphicLinkField = "highlightsSizingGraphicLink" | "carePoliciesGraphicLink" | "colorwaysGraphicLink";
 
+/** How many catalog matches the seed picker renders at once. Printify's
+ *  catalog runs to hundreds; the list is scrollable, not paginated. */
+const BLUEPRINT_RESULT_CAP = 60;
+
 export interface ShippingProfileOption {
   id: string;
   name: string;
@@ -597,14 +601,17 @@ export function ProductsView({
       .catch((e) => setError(String(e)));
   }, [chosen]);
 
-  const filtered = useMemo(() => {
+  // Every blueprint that matches, before the render cap — the cap has to
+  // be able to say what it's hiding. Silently showing the first N read as
+  // "Printify doesn't carry this", which is a very different conclusion
+  // from "narrow your search".
+  const matches = useMemo(() => {
     if (!blueprints) return [];
     const q = query.toLowerCase().trim();
-    if (!q) return blueprints.slice(0, 30);
-    return blueprints
-      .filter((b) => `${b.brand} ${b.model} ${b.title}`.toLowerCase().includes(q))
-      .slice(0, 30);
+    if (!q) return blueprints;
+    return blueprints.filter((b) => `${b.brand} ${b.model} ${b.title}`.toLowerCase().includes(q));
   }, [blueprints, query]);
+  const filtered = matches.slice(0, BLUEPRINT_RESULT_CAP);
 
   async function seed() {
     if (!chosen || !providerId) return;
@@ -821,6 +828,20 @@ export function ProductsView({
                     {filtered.length === 0 ? <div className="hint">No blueprints match.</div> : null}
                   </div>
                 )}
+                {/* a blueprint absent from this list because of the cap is
+                    not a blueprint Printify lacks — say which it is */}
+                {blueprints && matches.length > filtered.length ? (
+                  <span className="hint">
+                    Showing {filtered.length} of {matches.length} matches — keep typing to narrow it.
+                    Nothing is excluded for already having a Product; the same blueprint can be
+                    seeded again under a different print provider.
+                  </span>
+                ) : blueprints && matches.length > 0 ? (
+                  <span className="hint">
+                    {matches.length} match{matches.length === 1 ? "" : "es"}. A blueprint you already
+                    seeded can be seeded again under a different print provider.
+                  </span>
+                ) : null}
               </>
             ) : (
               <>

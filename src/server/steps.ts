@@ -17,6 +17,7 @@ import {
 } from "@/lib/workflows";
 import { cachedRecord, createRecord, updateRecord } from "@/server/notion/store";
 import { compatForListing } from "@/server/imageSlots";
+import { TAG_COUNT } from "@/config/keywords";
 import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
 
 export interface StepEntry {
@@ -116,6 +117,24 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
         return "Save a price — verifying pricing is this step's whole job.";
       }
     }
+    // Etsy's tag cap is hard: 13, and a listing carrying more can't publish.
+    // Over-filling WHILE sifting is deliberate (see KeywordSeoPanel), so the
+    // limit binds when the step is declared finished, not while working —
+    // L2 refuses to close over the cap, and the publish steps require the
+    // exact 13 the gate has always displayed but never enforced.
+    const tagCount = String(rec.props["Tags"] ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean).length;
+    if (stepId === "L2" && tagCount > TAG_COUNT) {
+      return `${tagCount - TAG_COUNT} tag${tagCount - TAG_COUNT === 1 ? "" : "s"} over Etsy's limit of ${TAG_COUNT} — trim the selection before closing L2.`;
+    }
+    if ((stepId === "L6" || stepId === "L7") && tagCount !== TAG_COUNT) {
+      return tagCount > TAG_COUNT
+        ? `${tagCount - TAG_COUNT} tag${tagCount - TAG_COUNT === 1 ? "" : "s"} over Etsy's limit of ${TAG_COUNT} — trim before publishing.`
+        : `Only ${tagCount} of ${TAG_COUNT} tags — Etsy listings publish with all ${TAG_COUNT}.`;
+    }
+
     // The publish gate is where an unexamined design stops being harmless:
     // it decides which garment colours ship. No default is safe here.
     if ((stepId === "L6" || stepId === "L7") && compatForListing(rec) === "Unset") {

@@ -63,7 +63,12 @@ export async function seedSlots(
   let colorwaysKept = 0;
   const seed: SeedSlot[] = [];
   for (const s of base) {
-    if (s.label.startsWith("colorway")) {
+    // Exact label, and never a Product-linked slot. A prefix test here
+    // ("colorway") also swallowed the "colorways" GRAPHIC CARD at the end
+    // of the template: by the time the loop reached it the photo quota was
+    // spent, so the one slot that pulls the Product's colorways graphic was
+    // dropped from every listing.
+    if (!s.productLink && s.label === "colorway") {
       if (colorwaysKept >= allowed) continue; // freed — stays empty
       colorwaysKept++;
       seed.push({ ...s, label: family ? `colorway — ${family}` : s.label });

@@ -341,9 +341,13 @@ function GraphicLinkRow({
       ) : (
         <span className="chip stale" style={{ fontSize: 11 }}>needs {label.toLowerCase()} graphic</span>
       )}
+      {/* full width, so the field always sits under its own chip. At a
+          narrower basis the rows wrapped differently per chip length —
+          one field detached from its label and read as belonging to the
+          row below it. */}
       <input
         className="input input-compact"
-        style={{ flex: "1 1 160px", fontSize: 12 }}
+        style={{ flex: "1 1 100%", fontSize: 12 }}
         placeholder={`${label} graphic link…`}
         defaultValue={value}
         disabled={busy}

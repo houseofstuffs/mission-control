@@ -6,9 +6,12 @@ import Link from "next/link";
 import { todaySummary } from "@/server/viewmodels";
 import { syncState, getMeta } from "@/server/cache/db";
 import { notionConfigured } from "@/server/notion/client";
+import { etsyConfigured } from "@/server/etsy/client";
+import { connectionStatus } from "@/server/etsy/connection";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ProvisionButton } from "@/components/ProvisionButton";
 import { DedupePanel } from "@/components/DedupePanel";
+import { EtsyConnectCard } from "@/components/EtsyConnectCard";
 import { EmptyState, Kicker } from "@/components/ui";
 import { TimeStamp } from "@/components/TimeStamp";
 import { assetUrl } from "@/lib/assets";
@@ -58,6 +61,8 @@ export default function TodayPage() {
           <RefreshButton lastSyncedAt={lastSync ?? null} />
         </div>
       </div>
+
+      {etsyConfigured() ? <EtsyConnectCard status={connectionStatus()} /> : null}
 
       {nothingYet ? (
         <EmptyState

@@ -12,7 +12,7 @@
  */
 export {};
 
-import { setDbId, replaceDbRecords } from "../src/server/cache/db";
+import { setDbId, setMeta, replaceDbRecords } from "../src/server/cache/db";
 import { SCHEMA } from "../src/server/notion/schema";
 import type { SimpleRecord, SimpleValue } from "../src/server/notion/props";
 
@@ -103,6 +103,9 @@ function main() {
     throw new Error("Refusing to seed: set CACHE_DB_PATH to a throwaway file (never data/cache.db).");
   }
   for (const db of SCHEMA) setDbId(db.key, `fake-db-${db.key}`);
+  // Today's Notion gate checks this too — the fixture simulates an
+  // already-provisioned app, not first-run setup.
+  setMeta("schema_provisioned_at", NOW);
 
   const product = rec("products", "product-1", "Comfort Colors® Garment-Dyed Sweatshirt — SwiftPOD", {
     Name: "Comfort Colors® Garment-Dyed Sweatshirt — SwiftPOD",

@@ -55,6 +55,10 @@ export function setMeta(key: string, value: string): void {
     .run(key, value);
 }
 
+export function deleteMeta(key: string): void {
+  cacheDb().prepare("DELETE FROM meta WHERE key = ?").run(key);
+}
+
 export function getDbId(dbKey: string): string | null {
   return getMeta(`notion_db_id:${dbKey}`);
 }

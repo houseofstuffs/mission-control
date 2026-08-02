@@ -47,6 +47,7 @@ interface Shot {
 }
 
 const SHOTS: Shot[] = [
+  { name: "today", path: "/", full: true },
   { name: "listing-l2", path: "/listings/listing-1", full: true },
   { name: "listing-l2-boilerplate", path: "/listings/listing-1", clicks: ["Expand"], full: true },
   { name: "listing-l1", path: "/listings/listing-1?step=L1", full: true },

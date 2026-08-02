@@ -292,6 +292,25 @@ export const SCHEMA: DbSpec[] = [
     },
   },
   {
+    key: "shipping_profiles",
+    title: "Shipping Profiles",
+    description:
+      "Mirrors Etsy's own Shipping Profiles (Shop Manager → Settings → Shipping settings) — read-only, pulled via the Etsy OAuth connection, never written back. Etsy owns these records the same way Printify owns the catalog data Products mirrors; this cache exists so a Product can point at one and the L3 calculator can pre-fill SHIPPING CHARGED from it. Etsy's ShippingProfile object went through a processing-time migration shortly before this was built (min/max processing days moved to a separate Processing Profile resource) — the lifted fields below are the ones confirmed stable; Raw Profile (JSON) carries everything else so nothing pulled is ever lost to a wrong guess about field names.",
+    properties: {
+      Name: { type: "title" },
+      "Etsy Shipping Profile ID": { type: "number" },
+      "Origin Country": { type: "rich_text" },
+      "Domestic Handling Fee": { type: "number" },
+      "International Handling Fee": { type: "number" },
+      // One row per destination — country, buyer-facing cost, delivery
+      // window. Etsy exposes destinations as a sub-resource, not embedded
+      // on the profile itself.
+      "Destinations (JSON)": { type: "rich_text" },
+      "Raw Profile (JSON)": { type: "rich_text" },
+      "Synced At": { type: "date" },
+    },
+  },
+  {
     key: "products",
     title: "Products",
     description:
@@ -355,6 +374,12 @@ export const SCHEMA: DbSpec[] = [
       "Estimated Shipping Cost": { type: "number" },
       "Shipping Cost Source": { type: "select", options: ["Printify catalog"] },
       "Shipping Pulled At": { type: "date" },
+      // Which of the synced Etsy Shipping Profiles applies to this product —
+      // set by hand (Etsy assigns a profile per LISTING, not per product, so
+      // this is a default this app never overrides). The L3 calculator reads
+      // this to pre-fill SHIPPING CHARGED the same way it already reads the
+      // Printify pull for SHIPPING COST.
+      "Etsy Shipping Profile": { type: "relation", relation: "shipping_profiles" },
       // Representative Variant relation is patched in provisioning pass 2 —
       // product_variants doesn't exist yet when products is created.
       Currency: { type: "select", options: ["USD"] },

@@ -4,6 +4,8 @@ import path from "node:path";
 import { notionConfigured } from "@/server/notion/client";
 import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured, model } from "@/server/anthropic/client";
+import { etsyConfigured } from "@/server/etsy/client";
+import { connectionStatus } from "@/server/etsy/connection";
 import { getMeta, syncState } from "@/server/cache/db";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,7 @@ export async function GET() {
     anthropic: anthropicConfigured(),
     anthropicModel: anthropicConfigured() ? model() : null,
     etsyPublishMode: process.env.ETSY_PUBLISH_MODE ?? "draft-only",
+    etsy: { configured: etsyConfigured(), ...connectionStatus() },
     cache: {
       configuredPath: cacheDbPath,
       resolvedPath: resolved,

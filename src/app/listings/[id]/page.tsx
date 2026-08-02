@@ -36,7 +36,7 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       <StepRunner
         record={runnerRecord(rec)}
         seo={seoData(rec)}
-        slots={slotsData(rec.id, Boolean(rec.props["Is Multi Variant"]), compatForListing(rec), selectedColorways(rec))}
+        slots={slotsData(rec, compatForListing(rec), selectedColorways(rec))}
         colorways={colorwaysData(rec)}
         pricing={pricingData(rec)}
         printFile={printFileData(rec)}
@@ -80,27 +80,66 @@ function colorwaysData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Color
   };
 }
 
-function slotsData(listingId: string, isMultiVariant: boolean, compatibility: string, colorways: string[]): SlotsData {
+const PRODUCT_LINK_FIELD: Record<string, string> = {
+  "Highlights & Sizing": "Highlights & Sizing Graphic Link",
+  "Care & Policies": "Care & Policies Graphic Link",
+  Colorways: "Colorways Graphic Link",
+};
+
+function slotsData(
+  rec: NonNullable<ReturnType<typeof cachedRecord>>,
+  compatibility: string,
+  colorways: string[]
+): SlotsData {
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const product = productId ? cachedRecord(productId) : null;
+
   const slots: SlotRow[] = cachedRecords("image_slots")
-    .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(listingId))
+    .filter((s) => ((s.props["Listing"] as string[] | null) ?? []).includes(rec.id))
     .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))
-    .map((s) => ({
-      id: s.id,
-      position: Number(s.props["Position"]) || 0,
-      label: s.title,
-      bucket: String(s.props["Bucket"] ?? "Sell Design"),
-      shotType: String(s.props["Shot Type"] ?? ""),
-      status: String(s.props["Status"] ?? "Planned"),
-      assetRef: String(s.props["Asset Ref"] ?? ""),
-      templateId: ((s.props["Mockup Template"] as string[] | null) ?? [])[0] ?? null,
-    }));
+    .map((s) => {
+      const role = String(s.props["Product Link Role"] ?? "");
+      const assetRef = String(s.props["Asset Ref"] ?? "");
+      // "from Product" when the slot's own asset still matches what the
+      // Product currently carries; "custom" when it's been hand-replaced
+      // (e.g. a combined graphic for a multi-garment bundle) — never
+      // stored, always compared live so it can't go stale itself
+      const productLink = role && product ? String(product.props[PRODUCT_LINK_FIELD[role]] ?? "").trim() : "";
+      const provenance: SlotRow["provenance"] = !role
+        ? null
+        : assetRef && productLink && assetRef === productLink
+          ? "product"
+          : assetRef
+            ? "custom"
+            : null;
+      return {
+        id: s.id,
+        position: Number(s.props["Position"]) || 0,
+        label: s.title,
+        bucket: String(s.props["Bucket"] ?? "Sell Design"),
+        shotType: String(s.props["Shot Type"] ?? ""),
+        status: String(s.props["Status"] ?? "Planned"),
+        assetRef,
+        templateId: ((s.props["Mockup Template"] as string[] | null) ?? [])[0] ?? null,
+        productLinkRole: role || null,
+        provenance,
+      };
+    });
   const templates = cachedRecords("mockup_templates").map((t) => ({
     id: t.id,
     name: t.title,
     shotType: String(t.props["Shot Type"] ?? ""),
     garmentColor: String(t.props["Garment Color"] ?? ""),
   }));
-  return { listingId, isMultiVariant, compatibility, slots, templates, colorways };
+  return {
+    listingId: rec.id,
+    isMultiVariant: Boolean(rec.props["Is Multi Variant"]),
+    compatibility,
+    slots,
+    templates,
+    colorways,
+    hasProductLinks: slots.some((s) => s.productLinkRole),
+  };
 }
 
 /** L1's print-file question: does this garment need a recomposed master? */

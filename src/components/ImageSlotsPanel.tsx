@@ -28,6 +28,10 @@ export interface SlotRow {
   status: string;
   assetRef: string;
   templateId: string | null;
+  /** set only on slots seeded to pull from a Product-level reusable graphic */
+  productLinkRole: string | null;
+  /** "product" = current asset still matches the Product's link; "custom" = hand-replaced; null = not a Product-linked slot */
+  provenance: "product" | "custom" | null;
 }
 
 export interface SlotsData {
@@ -39,6 +43,8 @@ export interface SlotsData {
   templates: Array<{ id: string; name: string; shotType: string; garmentColor: string }>;
   /** the listing's colourways — template offers filter against these */
   colorways: string[];
+  /** true when any slot is tied to a Product graphic — shows the Refresh from Product button */
+  hasProductLinks: boolean;
 }
 
 export function ImageSlotsPanel({ data }: { data: SlotsData }) {
@@ -91,17 +97,33 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     <div className="card supporting">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
         <Kicker>IMAGE SLOTS · {filled.length} FILLED / {data.slots.length} PLANNED (CAP {MAX_IMAGES})</Kicker>
-        <label className="row-gap-8" style={{ alignItems: "center", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={data.isMultiVariant}
-            disabled={busy !== null}
-            onChange={(e) =>
-              call("multi", `/api/listings/${data.listingId}`, "PATCH", { isMultiVariant: e.target.checked })
-            }
-          />
-          <span className="body-sm">Multi-variant listing</span>
-        </label>
+        <div className="row-gap-12" style={{ alignItems: "center" }}>
+          {data.hasProductLinks ? (
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              disabled={busy !== null}
+              title="Re-pulls the size chart / care info / colorways slots from the Product's current graphic links"
+              onClick={() =>
+                call("refresh-product", `/api/listings/${data.listingId}/refresh-slots-from-product`, "POST")
+              }
+            >
+              {busy === "refresh-product" ? <span className="spinner" /> : null}
+              Refresh from Product
+            </button>
+          ) : null}
+          <label className="row-gap-8" style={{ alignItems: "center", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={data.isMultiVariant}
+              disabled={busy !== null}
+              onChange={(e) =>
+                call("multi", `/api/listings/${data.listingId}`, "PATCH", { isMultiVariant: e.target.checked })
+              }
+            />
+            <span className="body-sm">Multi-variant listing</span>
+          </label>
+        </div>
       </div>
 
       {error ? <div className="callout blocked">{error}</div> : null}
@@ -177,6 +199,19 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                     if (e.target.value !== s.label) patch(s.id, { label: e.target.value });
                   }}
                 />
+                {s.provenance === "product" ? (
+                  <span className="chip done" style={{ fontSize: 10 }} title={`Pulled from this listing's Product (${s.productLinkRole})`}>
+                    from Product
+                  </span>
+                ) : s.provenance === "custom" ? (
+                  <span className="chip count" style={{ fontSize: 10 }} title={`Replaced by hand — no longer matches the Product's ${s.productLinkRole} graphic`}>
+                    custom
+                  </span>
+                ) : s.productLinkRole ? (
+                  <span className="chip stale" style={{ fontSize: 10 }} title={`Waiting on the Product's ${s.productLinkRole} graphic link`}>
+                    needs Product graphic
+                  </span>
+                ) : null}
                 <select
                   className="select input-compact"
                   style={{ width: 130 }}

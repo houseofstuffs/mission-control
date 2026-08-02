@@ -386,6 +386,14 @@ export const SCHEMA: DbSpec[] = [
       "Variant Count": { type: "number" },
       "Vendor Text Raw": { type: "rich_text" },
       "Shop Voice Text": { type: "rich_text" },
+      // Reusable per-blueprint graphic cards — generated once, reused by
+      // every listing on this product (same reuse pattern as Shop Voice
+      // Text). L5 auto-fills the matching named slot from these; the
+      // Refresh from Product button re-pulls them if added/changed after a
+      // listing already exists.
+      "Highlights & Sizing Graphic Link": { type: "url" },
+      "Care & Policies Graphic Link": { type: "url" },
+      "Colorways Graphic Link": { type: "url" },
       // When the shop-voice rewrite was generated/approved — a freshness
       // stamp, not a gate. Empty Shop Voice Text is what the badge reads.
       "Voice Generated At": { type: "date" },
@@ -645,6 +653,15 @@ export const SCHEMA: DbSpec[] = [
       "Asset Ref": { type: "url" },
       "Mockup Template": { type: "relation", relation: "mockup_templates" },
       Notes: { type: "rich_text" },
+      // Set only on the slots seeded to pull from a Product-level reusable
+      // graphic (blank on every other slot, including the per-listing
+      // announcement card). Position and label are both freely edited per
+      // listing, so this — not either of those — is what the Refresh from
+      // Product button and the "(from Product)" badge key off of.
+      "Product Link Role": {
+        type: "select",
+        options: ["Highlights & Sizing", "Care & Policies", "Colorways"],
+      },
     },
   },
   {

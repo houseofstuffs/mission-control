@@ -2,10 +2,17 @@
  * Image-slot seeding and reads. Slots are Notion pages (system of record)
  * related to their listing and, once chosen, a mockup template.
  */
-import { cachedRecords, createRecord } from "@/server/notion/store";
-import { SINGLE_SEED, MULTI_SEED, type SeedSlot } from "@/config/images";
+import { cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
+import { SINGLE_SEED, MULTI_SEED, type SeedSlot, type ProductLinkRole } from "@/config/images";
 import { COLORWAY_SLOTS, type GarmentCompatibility } from "@/config/design-prompt";
-import type { SimpleRecord } from "@/server/notion/props";
+import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
+
+/** Product Link Role → the Notion field on Products carrying that reusable graphic. */
+const PRODUCT_LINK_FIELD: Record<ProductLinkRole, string> = {
+  "Highlights & Sizing": "Highlights & Sizing Graphic Link",
+  "Care & Policies": "Care & Policies Graphic Link",
+  Colorways: "Colorways Graphic Link",
+};
 
 export function slotsForListing(listingId: string): SimpleRecord[] {
   return cachedRecords("image_slots")
@@ -45,7 +52,9 @@ export function compatForListing(listing: SimpleRecord): GarmentCompatibility {
 export async function seedSlots(
   listingId: string,
   multiVariant: boolean,
-  compat: GarmentCompatibility = "Unset"
+  compat: GarmentCompatibility = "Unset",
+  /** when known at creation time, auto-fills the three Product-linked slots immediately */
+  product?: SimpleRecord | null
 ): Promise<number> {
   const base: SeedSlot[] = multiVariant ? MULTI_SEED : SINGLE_SEED;
   const allowed = COLORWAY_SLOTS[compat] ?? COLORWAY_SLOTS.Any;
@@ -68,16 +77,54 @@ export async function seedSlots(
   let position = 0;
   for (const s of seed) {
     position++;
-    await createRecord("image_slots", {
+    const values: Record<string, SimpleValue> = {
       Name: s.label,
       Listing: [listingId],
       Position: position,
       Bucket: s.bucket,
       "Shot Type": s.shotType,
       Status: "Planned",
-    });
+    };
+    if (s.productLink) {
+      values["Product Link Role"] = s.productLink;
+      const link = product ? String(product.props[PRODUCT_LINK_FIELD[s.productLink]] ?? "").trim() : "";
+      if (link) {
+        values["Asset Ref"] = link;
+        values["Status"] = "Placed";
+      }
+    }
+    await createRecord("image_slots", values);
   }
   return seed.length;
+}
+
+/**
+ * Re-pulls the three Product-linked slots from the listing's current
+ * Product — for when a graphic link gets added or changed after the
+ * listing (and its slots) already exist. Never touches a slot whose
+ * Product Link Role is blank, and never blanks a slot back out if the
+ * Product's field is empty (a manually-placed asset stays put).
+ */
+export async function refreshFromProduct(listingId: string): Promise<number> {
+  const listing = cachedRecords("etsy_listings").find((l) => l.id === listingId);
+  const productId = ((listing?.props["Product"] as string[] | null) ?? [])[0];
+  const product = productId ? cachedRecords("products").find((p) => p.id === productId) : null;
+  if (!product) return 0;
+
+  const slots = slotsForListing(listingId).filter((s) => {
+    const role = String(s.props["Product Link Role"] ?? "");
+    return role in PRODUCT_LINK_FIELD;
+  });
+
+  let updated = 0;
+  for (const slot of slots) {
+    const role = String(slot.props["Product Link Role"]) as ProductLinkRole;
+    const link = String(product.props[PRODUCT_LINK_FIELD[role]] ?? "").trim();
+    if (!link) continue; // nothing to pull yet — leave whatever's there
+    await updateRecord("image_slots", slot.id, { "Asset Ref": link, Status: "Placed" });
+    updated++;
+  }
+  return updated;
 }
 
 /** A slot counts as filled when its image exists: status Made or Placed. */

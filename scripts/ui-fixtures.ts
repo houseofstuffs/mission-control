@@ -130,6 +130,9 @@ function main() {
     "Estimated Shipping Cost": 5.99,
     "Shipping Cost Source": "Printify catalog",
     "Shipping Pulled At": "2026-07-31",
+    "Highlights & Sizing Graphic Link": "https://cdn.example.com/graphics/cc1466-sizing.png",
+    "Care & Policies Graphic Link": "https://cdn.example.com/graphics/cc1466-care.png",
+    // deliberately blank — exercises the "needs Colorways graphic" badge
     "Shop Voice Text":
       "🧵 Fabric: 100% ring-spun cotton, which is the soft kind. It is a lighter sweatshirt at 6.4 oz/yd² (217 g/m²), so it is more \"cool evening on a porch\" than \"blizzard armor.\"\n\n📏 Fit: unisex fit, relaxed, with a rolled forward shoulder so it sits nicely instead of doing that weird bunching thing. Room to slouch, room to breathe, room to eat a whole sandwich. See the size chart photo for exact measurements.\n\n🧼 Care: wash cold, tumble dry low, and do not iron directly over the print.",
     "Voice Generated At": "2026-08-01",
@@ -222,6 +225,40 @@ function main() {
       Position: i + 1,
       Bucket: i < 4 ? "Sell Design" : i < 6 ? "Sell Belief" : "Sell Specifics",
       Status: "Planned",
+    })
+  );
+  // Product-linked slots — one synced (asset matches the Product's current
+  // link), one gone stale/custom (matches the "hand-replaced" case), one
+  // still waiting on a Product graphic that doesn't exist yet.
+  slots.push(
+    rec("image_slots", "slot-sizing", "size chart", {
+      Name: "size chart",
+      Listing: ["listing-1"],
+      Position: 9,
+      Bucket: "Sell Specifics",
+      "Shot Type": "Graphic Card",
+      Status: "Placed",
+      "Asset Ref": "https://cdn.example.com/graphics/cc1466-sizing.png",
+      "Product Link Role": "Highlights & Sizing",
+    }),
+    rec("image_slots", "slot-care", "care info", {
+      Name: "care info",
+      Listing: ["listing-1"],
+      Position: 10,
+      Bucket: "Sell Specifics",
+      "Shot Type": "Graphic Card",
+      Status: "Placed",
+      "Asset Ref": "https://cdn.example.com/graphics/cc1466-care-CUSTOM.png",
+      "Product Link Role": "Care & Policies",
+    }),
+    rec("image_slots", "slot-colorways", "colorways", {
+      Name: "colorways",
+      Listing: ["listing-1"],
+      Position: 11,
+      Bucket: "Sell Specifics",
+      "Shot Type": "Graphic Card",
+      Status: "Planned",
+      "Product Link Role": "Colorways",
     })
   );
 

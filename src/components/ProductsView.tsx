@@ -48,6 +48,10 @@ export interface ProductCardData {
   /** what Printify bills to ship one unit, US domestic — the L3 calculator's default */
   estimatedShippingCost: number | null;
   shippingPulledAt: string | null;
+  /** reusable per-blueprint graphic cards — L5 auto-fills the matching named slot from these */
+  highlightsSizingGraphicLink: string;
+  carePoliciesGraphicLink: string;
+  colorwaysGraphicLink: string;
   needsRepresentative: boolean;
   representativeVariantId: string | null;
   /** true once probe or hand-entered costs exist */
@@ -80,18 +84,22 @@ const CLAMP: React.CSSProperties = {
   textOverflow: "ellipsis",
 };
 
+type GraphicLinkField = "highlightsSizingGraphicLink" | "carePoliciesGraphicLink" | "colorwaysGraphicLink";
+
 function ProductCard({
   p,
   busy,
   onCategory,
   onRepresentative,
   onVoice,
+  onGraphicLink,
 }: {
   p: ProductCardData;
   busy: boolean;
   onCategory: (category: string) => void;
   onRepresentative: (variantId: string) => void;
   onVoice: () => void;
+  onGraphicLink: (field: GraphicLinkField, value: string) => void;
 }) {
   // the method means something different per value — say so on hover
   const methodExplained =
@@ -178,6 +186,29 @@ function ProductCard({
           ship <strong>${p.estimatedShippingCost.toFixed(2)}</strong>
         </div>
       ) : null}
+      {/* reusable per-blueprint graphic cards — L5 auto-fills the matching
+          named slot (size chart, care info, colorways) from these on every
+          listing that uses this product */}
+      <div className="stack-8">
+        <GraphicLinkRow
+          label="Highlights & sizing"
+          value={p.highlightsSizingGraphicLink}
+          busy={busy}
+          onSave={(v) => onGraphicLink("highlightsSizingGraphicLink", v)}
+        />
+        <GraphicLinkRow
+          label="Care & policies"
+          value={p.carePoliciesGraphicLink}
+          busy={busy}
+          onSave={(v) => onGraphicLink("carePoliciesGraphicLink", v)}
+        />
+        <GraphicLinkRow
+          label="Colorways"
+          value={p.colorwaysGraphicLink}
+          busy={busy}
+          onSave={(v) => onGraphicLink("colorwaysGraphicLink", v)}
+        />
+      </div>
       {/* wall_art without its anchor: same treatment as needs-shop-voice,
           plus the picker that resolves it in place */}
       {p.needsRepresentative ? (
@@ -240,6 +271,38 @@ function ProductCard({
           </select>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function GraphicLinkRow({
+  label,
+  value,
+  busy,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  busy: boolean;
+  onSave: (value: string) => void;
+}) {
+  return (
+    <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+      {value ? (
+        <span className="chip done" style={{ fontSize: 11 }}>{label} ✓</span>
+      ) : (
+        <span className="chip stale" style={{ fontSize: 11 }}>needs {label.toLowerCase()} graphic</span>
+      )}
+      <input
+        className="input input-compact"
+        style={{ flex: "1 1 160px", fontSize: 12 }}
+        placeholder={`${label} graphic link…`}
+        defaultValue={value}
+        disabled={busy}
+        onBlur={(e) => {
+          if (e.target.value !== value) onSave(e.target.value);
+        }}
+      />
     </div>
   );
 }
@@ -604,6 +667,7 @@ export function ProductsView({
                     patchProduct(p.id, { representativeVariantId: variantId })
                   }
                   onVoice={() => openVoice(p)}
+                  onGraphicLink={(field, value) => patchProduct(p.id, { [field]: value })}
                 />
               ))}
             </div>

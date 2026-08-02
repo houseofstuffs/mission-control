@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cachedRecord, createRecord } from "@/server/notion/store";
 import { seedSlots, compatForListing } from "@/server/imageSlots";
 import { getDbId } from "@/server/cache/db";
-import type { SimpleValue } from "@/server/notion/props";
+import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60; // slot seeding writes 17 throttled pages
@@ -27,8 +27,9 @@ export async function POST(req: Request) {
       Designs: designIds,
     };
 
+    let product: SimpleRecord | null = null;
     if (body.productId) {
-      const product = cachedRecord(String(body.productId));
+      product = cachedRecord(String(body.productId));
       values["Product"] = [String(body.productId)];
       // cost_at_creation is a snapshot, not a live lookup (§3.4) — Printify
       // prices change and would silently rewrite margin history. The
@@ -51,7 +52,7 @@ export async function POST(req: Request) {
     // seed the image-slot plan (advisory, fully editable at L5) — how many
     // colourway slots it gets depends on what the designs can print on
     if (getDbId("image_slots")) {
-      await seedSlots(record.id, Boolean(body.isMultiVariant), compatForListing(record));
+      await seedSlots(record.id, Boolean(body.isMultiVariant), compatForListing(record), product);
     }
     await createRecord("workflow_log", {
       Name: `${record.title} — Created new`,

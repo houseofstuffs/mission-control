@@ -26,14 +26,14 @@ Generated 2026-08-02 · 19 databases
 | 8 | `textures` | Textures | 7 |
 | 9 | `mockup_templates` | Mockup Templates | 17 |
 | 10 | `shipping_profiles` | Shipping Profiles | 8 |
-| 11 | `products` | Products | 36 |
+| 11 | `products` | Products | 39 |
 | 12 | `product_variants` | Product Variants | 10 |
 | 13 | `designs` | Designs | 43 |
 | 14 | `etsy_listings` | Etsy Listings | 33 |
 | 15 | `change_log` | Change Log | 7 |
 | 16 | `workflow_log` | Workflow Log | 9 |
 | 17 | `keywords` | Keywords | 17 |
-| 18 | `image_slots` | Image Slots | 9 |
+| 18 | `image_slots` | Image Slots | 10 |
 | 19 | `design_derivatives` | Design Derivatives | 10 |
 
 Order matters: databases are created in this order so a relation's target already exists when the relation is written. Forward and self-references are patched in a second pass.
@@ -273,6 +273,9 @@ Blueprint × print provider pairs — NOT product types (§3.3). Auto-seeded fro
 | Variant Count | number |  |
 | Vendor Text Raw | rich_text |  |
 | Shop Voice Text | rich_text |  |
+| Highlights & Sizing Graphic Link | url |  |
+| Care & Policies Graphic Link | url |  |
+| Colorways Graphic Link | url |  |
 | Voice Generated At | date |  |
 | Status | select | Active · Retired |
 | Synced At | date |  |
@@ -467,6 +470,7 @@ Per-listing image plan — up to 20 ordered slots (Etsy's cap since Aug 2025, +1
 | Asset Ref | url |  |
 | Mockup Template | relation | → Mockup Templates |
 | Notes | rich_text |  |
+| Product Link Role | select | Highlights & Sizing · Care & Policies · Colorways |
 
 ## Design Derivatives
 

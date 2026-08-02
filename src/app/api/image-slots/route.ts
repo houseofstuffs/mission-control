@@ -23,10 +23,13 @@ export async function POST(req: Request) {
       if (existing.length > 0) {
         return NextResponse.json({ error: "This listing already has slots — seeding never overwrites." }, { status: 400 });
       }
+      const productId = ((listing.props["Product"] as string[] | null) ?? [])[0];
+      const product = productId ? cachedRecord(productId) : null;
       const count = await seedSlots(
         listing.id,
         Boolean(listing.props["Is Multi Variant"]),
-        compatForListing(listing)
+        compatForListing(listing),
+        product
       );
       return NextResponse.json({ seeded: count });
     }

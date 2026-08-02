@@ -36,16 +36,24 @@ export type ShotType = (typeof SHOT_TYPES)[number];
 export const SLOT_STATUSES = ["Planned", "Made", "Placed"] as const;
 export type SlotStatus = (typeof SLOT_STATUSES)[number];
 
+/** The three Product-level reusable graphics an L5 slot can pull from — exact match to the Notion select options on image_slots' "Product Link Role". */
+export const PRODUCT_LINK_ROLES = ["Highlights & Sizing", "Care & Policies", "Colorways"] as const;
+export type ProductLinkRole = (typeof PRODUCT_LINK_ROLES)[number];
+
 export interface SeedSlot {
   position: number;
   label: string;
   bucket: ImageBucket;
   shotType: ShotType;
+  /** ties this slot to a Product-level reusable graphic, auto-filled at seed time and by the Refresh from Product button — never regenerated per listing */
+  productLink?: ProductLinkRole;
 }
 
 /**
- * Single-variant seed — slots 1-17; 18-20 stay empty by default, never
- * force-filled. Position 1 is the search thumbnail.
+ * Single-variant seed — 20 named slots, no buffer left once the three
+ * graphic-card additions below land (was 17 of 20; adding colorways, video
+ * and announcement uses the rest). Every slot stays deletable per listing —
+ * this is the default plan, not a quota. Position 1 is the search thumbnail.
  */
 export const SINGLE_SEED: SeedSlot[] = [
   { position: 1, label: "hero — best-selling color", bucket: "Sell Design", shotType: "On Model" },
@@ -63,8 +71,12 @@ export const SINGLE_SEED: SeedSlot[] = [
   { position: 13, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
   { position: 14, label: "objection", bucket: "Sell Belief", shotType: "Closeup Fabric" },
   { position: 15, label: "color grid", bucket: "Sell Design", shotType: "Grid Composite" },
-  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card" },
-  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card" },
+  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Highlights & Sizing" },
+  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Care & Policies" },
+  { position: 18, label: "colorways", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Colorways" },
+  { position: 19, label: "video", bucket: "Sell Belief", shotType: "Video" },
+  // design-specific — never pulled from a Product, filled in by hand per listing
+  { position: 20, label: "announcement", bucket: "Sell Specifics", shotType: "Graphic Card" },
 ];
 
 /**
@@ -88,6 +100,13 @@ export const MULTI_SEED: SeedSlot[] = [
   { position: 13, label: "print detail", bucket: "Sell Belief", shotType: "Closeup Print" },
   { position: 14, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
   { position: 15, label: "personalisation — how to submit custom text", bucket: "Sell Specifics", shotType: "Graphic Card" },
-  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card" },
-  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card" },
+  { position: 16, label: "size chart", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Highlights & Sizing" },
+  { position: 17, label: "care info", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Care & Policies" },
+  // usable per listing, not forced — a complex multi-garment bundle may
+  // replace this with one hand-compiled graphic instead (still just an
+  // editable slot either way)
+  { position: 18, label: "colorways", bucket: "Sell Specifics", shotType: "Graphic Card", productLink: "Colorways" },
+  { position: 19, label: "video", bucket: "Sell Belief", shotType: "Video" },
+  // design-specific — never pulled from a Product, filled in by hand per listing
+  { position: 20, label: "announcement", bucket: "Sell Specifics", shotType: "Graphic Card" },
 ];

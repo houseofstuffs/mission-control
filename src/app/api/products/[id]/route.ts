@@ -59,6 +59,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       values["Voice Generated At"] = new Date().toISOString().slice(0, 10);
     }
 
+    // reusable per-blueprint graphic cards — L5 auto-fills the matching
+    // named slot from these; blank is a valid value (clears the link)
+    const GRAPHIC_FIELDS: Record<string, string> = {
+      highlightsSizingGraphicLink: "Highlights & Sizing Graphic Link",
+      carePoliciesGraphicLink: "Care & Policies Graphic Link",
+      colorwaysGraphicLink: "Colorways Graphic Link",
+    };
+    for (const [key, field] of Object.entries(GRAPHIC_FIELDS)) {
+      if (body[key] !== undefined) values[field] = String(body[key]).trim() || null;
+    }
+
     if (Object.keys(values).length === 0) {
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }

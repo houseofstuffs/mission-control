@@ -53,6 +53,15 @@ export interface SeoData {
   >;
   /** keyword ids ✕'d off the shortlist — persisted, excluded from recommendations */
   dismissed: string[];
+  /** other listings on the same Design that already have approved tags —
+   *  a second reference source beside the shortlist, never a replacement */
+  siblings: Array<{
+    id: string;
+    name: string;
+    /** which garment this sibling sells — the reason to trust or skip its wording */
+    productName: string | null;
+    tags: string[];
+  }>;
   /** saved copy fields, editable here */
   title: string;
   hook: string;
@@ -352,6 +361,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   // Dismissal is "not for this listing": the word stays in the bank and
   // the full pool, and picking it from Show-all un-dismisses it.
   const [dismissed, setDismissed] = useState<Set<string>>(new Set(seo.dismissed));
+  // sibling tag sets stay collapsed until asked for — reference material,
+  // not something to scroll past on every visit
+  const [openSiblings, setOpenSiblings] = useState<Set<string>>(new Set());
   async function persistDismissed(next: Set<string>) {
     setDismissed(new Set(next));
     const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", {
@@ -659,6 +671,87 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     );
   };
 
+  /**
+   * Already-approved tag sets from other listings on this design. Its own
+   * list, deliberately apart from the shortlist: these words earned their
+   * place by being screened elsewhere, not by ranking here. Tap-to-add is
+   * the same gesture; nothing bulk-copies, and nothing writes back to the
+   * sibling. Rendered whether or not this listing has a keyword pool —
+   * a spinoff whose siblings hold hand-typed words has no pool at all,
+   * and that's exactly when this is worth the most.
+   */
+  const siblingReference = seo.siblings.map((sib) => {
+    const open = openSiblings.has(sib.id);
+    const carried = sib.tags.filter(inTagList).length;
+    return (
+      <div key={sib.id} className="stack-12" style={{ gap: 6, marginTop: 4 }}>
+        <button
+          type="button"
+          className="row-gap-8"
+          style={{
+            alignItems: "center",
+            flexWrap: "wrap",
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            textAlign: "left",
+          }}
+          aria-expanded={open}
+          onClick={() =>
+            setOpenSiblings((cur) => {
+              const next = new Set(cur);
+              if (next.has(sib.id)) next.delete(sib.id);
+              else next.add(sib.id);
+              return next;
+            })
+          }
+        >
+          <span className="kicker">
+            {open ? "▾" : "▸"} APPROVED ON {(sib.productName || sib.name).toUpperCase()} · {sib.tags.length}
+          </span>
+          {carried > 0 ? (
+            <span className="chip done" style={{ fontSize: 10 }}>{carried} already here</span>
+          ) : null}
+        </button>
+        {open ? (
+          <>
+            <span className="hint">
+              {sib.name} — screened and saved there. Tap + to reuse a word here; it never changes
+              that listing.
+            </span>
+            <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+              {sib.tags.map((t) => {
+                const bucket = bucketOf(t);
+                const already = inTagList(t);
+                return (
+                  <span key={t} className={`pill${already ? " is-dismissed" : ""}`}>
+                    <button
+                      type="button"
+                      className="pill-main"
+                      disabled={busy !== null || already}
+                      title={
+                        already
+                          ? "already in this listing's Selected tags"
+                          : bucket
+                            ? `${bucket} — from the keyword bank`
+                            : "not in the keyword bank — no metrics, approved by hand there"
+                      }
+                      onClick={() => addTag(t)}
+                    >
+                      <span aria-hidden>{already ? "✓" : "+"}</span>
+                      {t}
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  });
+
   return (
     <>
       {error ? <div className="callout blocked" style={{ whiteSpace: "pre-wrap" }}>{error}</div> : null}
@@ -836,6 +929,9 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               ? "Drop a CSV above, or run the cleanup on the sibling listing holding the research — design-pool keywords appear on every listing of the design."
               : "This listing has no Design attached — set that first; research has nowhere to land without it."}
           </div>
+        ) : null}
+        {pool.length === 0 ? (
+          siblingReference
         ) : (
           <>
             <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
@@ -863,6 +959,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                 </div>
               );
             })}
+            {siblingReference}
             {pendingSuggestions.length > 0 ? (
               <div className="stack-12" style={{ gap: 6, marginTop: 4 }}>
                 <span className="kicker">SUGGESTED BY THE DRAFT · {pendingSuggestions.length}</span>

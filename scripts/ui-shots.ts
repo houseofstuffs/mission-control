@@ -50,6 +50,7 @@ const SHOTS: Shot[] = [
   { name: "today", path: "/", full: true },
   { name: "listing-l2", path: "/listings/listing-1", full: true },
   { name: "listing-l2-boilerplate", path: "/listings/listing-1", clicks: ["Expand"], full: true },
+  { name: "listing-l2-siblings", path: "/listings/listing-1", clicks: ["APPROVED ON"], full: true },
   { name: "listing-l1", path: "/listings/listing-1?step=L1", full: true },
   { name: "listing-l3", path: "/listings/listing-1?step=L3", full: true },
   { name: "listing-l3-margin", path: "/listings/listing-1?step=L3", clicks: ["Margin → Price"], full: true },

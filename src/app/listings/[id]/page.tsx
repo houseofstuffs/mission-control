@@ -314,6 +314,40 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
     /* unreadable renders as none dismissed — the next ✕ rewrites it clean */
   }
 
+  // Other listings on the SAME design that already carry approved tags —
+  // a spinoff (hoodie off a sweatshirt) shouldn't re-screen the shortlist
+  // from scratch. Matched on any shared design, not just the first: a
+  // listing can carry several, and sharing one is enough to make the tag
+  // work relevant. Read-only reference; nothing here writes to a sibling.
+  const myDesigns = new Set((rec.props["Designs"] as string[] | null) ?? []);
+  const siblings: SeoData["siblings"] =
+    myDesigns.size === 0
+      ? []
+      : cachedRecords("etsy_listings")
+          .filter((l) => {
+            if (l.id === listingId) return false;
+            const theirs = (l.props["Designs"] as string[] | null) ?? [];
+            return theirs.some((d) => myDesigns.has(d));
+          })
+          .map((l) => {
+            const productRel = ((l.props["Product"] as string[] | null) ?? [])[0];
+            const prod = productRel
+              ? cachedRecords("products").find((p) => p.id === productRel)
+              : null;
+            return {
+              id: l.id,
+              name: l.title || "Untitled listing",
+              productName: prod ? productLabel(prod) : null,
+              tags: String(l.props["Tags"] ?? "")
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean),
+            };
+          })
+          // a sibling with no saved tags has nothing to offer yet
+          .filter((s) => s.tags.length > 0)
+          .sort((a, b) => a.name.localeCompare(b.name));
+
   let attributes: Array<{ name: string; value: string }> = [];
   try {
     const parsed = JSON.parse(String(rec.props["Attributes (JSON)"] ?? "[]"));
@@ -348,6 +382,7 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
           voiceText,
         }
       : null,
+    siblings,
     hasDesign: Boolean(designId),
     aiReady: anthropicConfigured(),
     patternUrl: assetUrl("pattern"),

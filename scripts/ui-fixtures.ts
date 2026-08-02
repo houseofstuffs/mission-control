@@ -207,6 +207,39 @@ function main() {
     Channel: "Etsy",
   });
 
+  // The spinoff case: a second garment off the SAME design, already
+  // carrying its own hand-approved tags. Some overlap listing-1's set and
+  // some don't — that's what makes the sibling panel worth opening, and
+  // it exercises both the tappable and the already-carried pill states.
+  const siblingProduct = rec("products", "product-2", "Unisex Heavy Blend Hoodie — Monster Digital", {
+    Name: "Unisex Heavy Blend Hoodie — Monster Digital",
+    "Blueprint Title": "Unisex Heavy Blend Hooded Sweatshirt",
+    "Blueprint Brand": "Gildan",
+    "Blueprint Model": "18500",
+    "Print Provider Name": "Monster Digital",
+    "Printify Blueprint ID": 49,
+    "Printify Print Provider ID": 29,
+    Category: "apparel",
+    "Variant Count": 60,
+    Status: "Active",
+  });
+
+  const siblingListing = rec(
+    "etsy_listings",
+    "listing-2",
+    "Midnight Margaritas Retro — Unisex Heavy Blend Hoodie",
+    {
+      Name: "Midnight Margaritas Retro — Unisex Heavy Blend Hoodie",
+      "Current Step": "L6",
+      "Etsy State": "Not pushed",
+      Designs: ["design-1"],
+      Product: ["product-2"],
+      Tags: "practical magic gift, midnight margarita, witchy tee, spooky gift, cozy hoodie, oversized hoodie, halloween hoodie, witch hoodie, fall layering, gift for her, autumn vibes, cottagecore witch, samhain gift",
+      Shop: "STUFFS",
+      Channel: "Etsy",
+    }
+  );
+
   const variants = ["Black", "Espresso", "Pepper", "Butter"].flatMap((color, ci) =>
     ["S", "M", "L", "XL", "2XL"].map((size, si) =>
       rec("product_variants", `var-${ci}-${si}`, `${color} / ${size}`, {
@@ -323,11 +356,11 @@ function main() {
   // every database gets an explicit (possibly empty) set, so sync_state
   // exists for all of them and "never synced" banners don't fire
   const byDb: Record<string, SimpleRecord[]> = {
-    products: [product],
+    products: [product, siblingProduct],
     product_variants: variants,
     designs: [design],
     niches: [niche],
-    etsy_listings: [listing],
+    etsy_listings: [listing, siblingListing],
     keywords: keywords(),
     image_slots: slots,
     mockup_templates: [template],

@@ -1,13 +1,14 @@
 /**
- * Etsy Open API v3 client — OAuth 2.0 with PKCE. Etsy issues a Keystring
- * (the "client_id") to every app, personal-access or not, and never a
- * confidential client secret for this flow — PKCE is the only thing
- * protecting the code exchange, not optional the way it is for some
- * providers.
+ * Etsy Open API v3 client — OAuth 2.0 with PKCE for the authorization code
+ * exchange itself (client_id is the Keystring; PKCE protects the code, no
+ * secret needed there). But as of Etsy's Feb 9 2026 platform change, the
+ * x-api-key header on EVERY v3 call — including the token exchange — must
+ * carry both credentials together as "<keystring>:<shared secret>", not
+ * the Keystring alone. Pre-Feb-2026 docs (and this file, until this fix)
+ * described the Shared Secret as unused under PKCE; that's no longer true.
  *
- * Every authenticated call needs BOTH headers — a documented Etsy quirk,
- * not a mistake:
- *   x-api-key: <keystring>
+ * Every authenticated call needs BOTH headers:
+ *   x-api-key: <keystring>:<shared secret>
  *   Authorization: Bearer <access_token>
  */
 import { createHash, randomBytes } from "node:crypto";
@@ -17,13 +18,28 @@ const TOKEN_URL = "https://api.etsy.com/v3/public/oauth/token";
 const API_BASE = "https://api.etsy.com/v3/application";
 
 export function etsyConfigured(): boolean {
-  return Boolean(process.env.ETSY_KEYSTRING);
+  return Boolean(process.env.ETSY_KEYSTRING) && Boolean(process.env.ETSY_SHARED_SECRET);
 }
 
 function keystring(): string {
   const key = process.env.ETSY_KEYSTRING;
   if (!key) throw new Error("ETSY_KEYSTRING is not set. Register an app at etsy.com/developers first.");
   return key;
+}
+
+function sharedSecret(): string {
+  const secret = process.env.ETSY_SHARED_SECRET;
+  if (!secret) {
+    throw new Error(
+      "ETSY_SHARED_SECRET is not set. Etsy's x-api-key header requires it alongside the Keystring since Feb 2026 — copy it from etsy.com/developers, same page as the Keystring."
+    );
+  }
+  return secret;
+}
+
+/** The x-api-key header value every v3 call needs — Keystring and Shared Secret together. */
+function apiKeyHeader(): string {
+  return `${keystring()}:${sharedSecret()}`;
 }
 
 /* ---------- PKCE ---------- */
@@ -74,7 +90,7 @@ async function tokenRequest(body: URLSearchParams): Promise<TokenResponse> {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      "x-api-key": keystring(),
+      "x-api-key": apiKeyHeader(),
     },
     body: body.toString(),
   });
@@ -119,7 +135,7 @@ export function userIdFromToken(token: string): string {
 async function apiGet<T>(path: string, accessToken: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
-      "x-api-key": keystring(),
+      "x-api-key": apiKeyHeader(),
       Authorization: `Bearer ${accessToken}`,
     },
     cache: "no-store",

@@ -14,7 +14,10 @@ function originFromRequest(req: Request): string {
 
 export async function GET(req: Request) {
   if (!etsyConfigured()) {
-    return NextResponse.json({ error: "ETSY_KEYSTRING is not set." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Etsy isn't configured — both ETSY_KEYSTRING and ETSY_SHARED_SECRET must be set." },
+      { status: 500 }
+    );
   }
   const redirectUri = `${originFromRequest(req)}/api/etsy/oauth/callback`;
   const url = beginConnect(redirectUri);

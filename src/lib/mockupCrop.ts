@@ -34,9 +34,14 @@ export async function cropToStandardSize(file: File, rect: CropRect, target: num
   canvas.width = target;
   canvas.height = target;
   const ctx = canvas.getContext("2d");
-  bitmap.close?.();
-  if (!ctx) throw new Error("Canvas 2D context unavailable.");
+  if (!ctx) {
+    bitmap.close?.();
+    throw new Error("Canvas 2D context unavailable.");
+  }
+  // close only AFTER the draw — a closed bitmap is detached, and drawing
+  // one throws InvalidStateError
   ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, target, target);
+  bitmap.close?.();
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob) throw new Error("Couldn't encode the cropped image.");
   const name = file.name.replace(/\.[^.]+$/, "") + `-${target}.png`;

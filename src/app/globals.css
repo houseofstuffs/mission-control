@@ -788,6 +788,11 @@ a:hover { color: var(--candy); }
   background: var(--surface-well);
 }
 .idea-card .title { font-family: var(--font-display); font-weight: 700; font-size: 14.5px; color: var(--text-primary); }
+/* controls that appear on hover — and on keyboard focus, which hover-only
+   reveals always forget */
+.idea-card .hover-reveal { opacity: 0; transition: opacity 0.12s ease; }
+.idea-card:hover .hover-reveal,
+.idea-card:focus-within .hover-reveal { opacity: 1; }
 .idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .idea-actions .btn { font-size: 12px; padding: 6px 12px; }
 

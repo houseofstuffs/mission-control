@@ -250,6 +250,10 @@ export const SCHEMA: DbSpec[] = [
       // starts from it, so "Re-place corners" per colour stops being a
       // mandatory chore and becomes a correction.
       "Print Region Quad (JSON)": { type: "rich_text" },
+      // The cropped sample the geometry was drawn on, preview-sized. Kept
+      // as the template's card thumbnail — text-only cards stop being
+      // tellable apart around the fourth template.
+      "Sample Image": { type: "files" },
       // Where this template's colour photos live. Remembered so the Drive
       // auto-import (pending Google OAuth) can list the folder and detect
       // colours from filenames without any manual dropping.

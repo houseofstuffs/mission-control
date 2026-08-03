@@ -45,6 +45,20 @@ export function rectNormalizedSize(
 }
 
 /**
+ * The biggest square this photo can give, centred.
+ *
+ * The common case for a mockup shot is "the whole frame, squared off", so
+ * that is where the box should start — dragging it out to the edges by hand
+ * every time was work the default could have done. Needs the dimensions
+ * because centring a square in a non-square photo depends on which edge is
+ * shorter, which is why this isn't a constant.
+ */
+export function maxCenteredSquare(width: number, height: number): CropRect {
+  const side = Math.min(width, height);
+  return { x: (width - side) / 2 / width, y: (height - side) / 2 / height, size: 1 };
+}
+
+/**
  * The side this crop should be written at: its own pixels, capped at `max`
  * and never upscaled. Returns null when the crop can't reach `min` — that
  * one is too small to use, and no resampling fixes it.

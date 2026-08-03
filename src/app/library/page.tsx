@@ -17,7 +17,7 @@ import type { SimpleRecord } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 
-function shotOption(s: SimpleRecord, mockups: SimpleRecord[]): MockupShotOption {
+function shotOption(s: SimpleRecord, mockups: SimpleRecord[], slots: SimpleRecord[]): MockupShotOption {
   let cropRect = null;
   try {
     const parsed = JSON.parse(String(s.props["Crop Rect (JSON)"] ?? ""));
@@ -27,6 +27,16 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[]): MockupShotOption 
   } catch {
     /* no crop set yet */
   }
+  const variants = mockups.filter((m) => ((m.props["Shot"] as string[] | null) ?? []).includes(s.id));
+  const variantIds = new Set(variants.map((v) => v.id));
+  // distinct listings whose slots hold one of this template's variants —
+  // the honest count for "delete anyway?"
+  const listingIds = new Set(
+    slots
+      .filter((sl) => (((sl.props["Mockup Template"] as string[] | null) ?? []).some((t) => variantIds.has(t))))
+      .flatMap((sl) => (sl.props["Listing"] as string[] | null) ?? [])
+  );
+  const hasSample = Array.isArray(s.props["Sample Image"]) && (s.props["Sample Image"] as unknown[]).length > 0;
   return {
     id: s.id,
     name: s.title || "Untitled template",
@@ -35,10 +45,10 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[]): MockupShotOption 
     driveFolderLink: String(s.props["Drive Folder Link"] ?? ""),
     // colours already saved under this template — the Drive review list
     // starts these unticked so a re-run can't duplicate them
-    existingColours: mockups
-      .filter((m) => ((m.props["Shot"] as string[] | null) ?? []).includes(s.id))
-      .map((m) => String(m.props["Garment Color"] ?? "").trim())
-      .filter(Boolean),
+    existingColours: variants.map((m) => String(m.props["Garment Color"] ?? "").trim()).filter(Boolean),
+    thumbUrl: hasSample ? `/api/mockup-shots/${s.id}/thumb?v=${encodeURIComponent(s.lastEdited)}` : null,
+    variantCount: variants.length,
+    listingCount: listingIds.size,
   };
 }
 
@@ -76,6 +86,7 @@ export default function LibraryPage() {
   const mockups = cachedRecords("mockup_templates");
   const mockupShots = cachedRecords("mockup_shots");
   const shotsById = new Map(mockupShots.map((s) => [s.id, s]));
+  const imageSlots = cachedRecords("image_slots");
   const designs = cachedRecords("designs");
   // the closed set filenames are matched against — every colour any
   // product variant actually comes in
@@ -135,7 +146,7 @@ export default function LibraryPage() {
 
         <MockupTemplatesSection
           templates={mockups.map((m) => templateCard(m, shotsById))}
-          shots={mockupShots.map((s) => shotOption(s, mockups))}
+          shots={mockupShots.map((s) => shotOption(s, mockups, imageSlots))}
           palette={palette}
           drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
         />

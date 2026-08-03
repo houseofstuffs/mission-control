@@ -62,6 +62,8 @@ export interface SeoData {
     /** which garment this sibling sells — the reason to trust or skip its wording */
     productName: string | null;
     tags: string[];
+    /** the sibling's saved Description Hook — spinoffs reuse the voice, read-only */
+    hook: string;
   }>;
   /** saved copy fields, editable here */
   title: string;
@@ -382,6 +384,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   // sibling tag sets stay collapsed until asked for — reference material,
   // not something to scroll past on every visit
   const [openSiblings, setOpenSiblings] = useState<Set<string>>(new Set());
+  // which sibling's hook was last copied — flips the button label briefly
+  const [copiedHook, setCopiedHook] = useState<string | null>(null);
   async function persistDismissed(next: Set<string>) {
     setDismissed(new Set(next));
     const res = await apiJson(`/api/listings/${seo.listingId}`, "PATCH", {
@@ -830,6 +834,29 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                 );
               })}
             </div>
+            {sib.hook ? (
+              <div className="well stack-12" style={{ gap: 6, padding: "8px 10px" }}>
+                <div className="row-gap-8" style={{ alignItems: "center", justifyContent: "space-between" }}>
+                  <span className="kicker" style={{ fontSize: 10 }}>THEIR HOOK — READ-ONLY</span>
+                  <button
+                    type="button"
+                    className="btn btn-tertiary"
+                    style={{ fontSize: 11, padding: "2px 10px" }}
+                    onClick={() => {
+                      navigator.clipboard?.writeText(sib.hook);
+                      setCopiedHook(sib.id);
+                    }}
+                  >
+                    {copiedHook === sib.id ? "✓ Copied" : "Copy"}
+                  </button>
+                </div>
+                <span className="body-sm" style={{ whiteSpace: "pre-wrap" }}>{sib.hook}</span>
+                <span className="hint">
+                  A spinoff usually wants this voice with the garment swapped — paste it into the
+                  hook field below and edit, or let the generator rewrite it against your title.
+                </span>
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

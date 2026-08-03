@@ -24,6 +24,7 @@ import {
   cropOutputSize,
   cropSquarePixels,
   cropToStandardSize,
+  maxCenteredSquare,
   rectNormalizedSize,
   type CropRect,
 } from "@/lib/mockupCrop";
@@ -800,6 +801,11 @@ export interface MockupShotOption {
   driveFolderLink: string;
   /** colours already saved as variants under this template — the review list unticks them */
   existingColours: string[];
+  /** cropped-sample preview through the thumb proxy; null for templates saved before samples were kept */
+  thumbUrl: string | null;
+  /** live counts for the delete guard — what removing this template orphans */
+  variantCount: number;
+  listingCount: number;
 }
 
 /**
@@ -807,37 +813,203 @@ export interface MockupShotOption {
  * this page — the variant grid is keyed off variants — so without this a
  * successful save looked exactly like a failed one: form closes, counts
  * unchanged, nothing new on screen.
+ *
+ * Edit and delete live here, on hover: name and Drive link are the two
+ * fields that change after creation, and neither should need a Notion
+ * detour. Everything references the template by id, so a rename is safe —
+ * the server re-derives the "{template} - …" strings on variant names.
  */
 function TemplateRow({ s, driveConnected }: { s: MockupShotOption; driveConnected: boolean }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"view" | "edit" | "confirm-delete">("view");
+  const [name, setName] = useState(s.name);
+  const [link, setLink] = useState(s.driveFolderLink);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function saveEdits() {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson(`/api/mockup-shots/${s.id}`, "PATCH", {
+      name: name.trim(),
+      driveFolderLink: link.trim(),
+    });
+    if (!res.ok) setError(res.error);
+    else {
+      setMode("view");
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
+  async function destroy() {
+    setBusy(true);
+    setError(null);
+    const res = await apiCall(`/api/mockup-shots/${s.id}`, { method: "DELETE" });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(false);
+  }
+
   const folderId = s.driveFolderLink.trim();
   return (
     <div className="idea-card">
-      <div className="title">{s.name}</div>
-      <div className="row-gap-12" style={{ flexWrap: "wrap", marginTop: 6 }}>
-        <span className={`chip ${s.cropRect ? "done" : "stale"}`}>
-          {s.cropRect ? "crop set" : "no crop"}
-        </span>
-        <span className={`chip ${s.printRegionQuad ? "done" : "stale"}`}>
-          {s.printRegionQuad ? "print region set" : "no print region"}
-        </span>
-        <span className="chip count">
-          {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
-        </span>
-        {folderId ? (
-          <span className={`chip ${driveConnected ? "done" : "stale"}`}>
-            {driveConnected ? "Drive folder linked" : "Drive folder — not connected"}
-          </span>
-        ) : (
-          <span className="chip">no Drive folder</span>
-        )}
-      </div>
-      {s.existingColours.length > 0 ? (
-        <div className="hint" style={{ marginTop: 6 }}>{s.existingColours.join(" · ")}</div>
+      {s.thumbUrl ? (
+        // the cropped sample — the frame every variant shares, which is
+        // exactly what makes cards tellable apart at a glance
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="idea-thumb" src={s.thumbUrl} alt={`${s.name} sample`} loading="lazy" />
       ) : (
-        <div className="hint" style={{ marginTop: 6 }}>
-          No colours yet — use ＋ Add colour variants to populate it.
+        <div
+          className="idea-thumb"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <span className="hint">no sample kept</span>
         </div>
       )}
+
+      <div className="row-gap-8" style={{ alignItems: "center", justifyContent: "space-between" }}>
+        <div className="title" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+          {s.name}
+        </div>
+        {mode === "view" ? (
+          <span className="row-gap-8 hover-reveal">
+            <button
+              type="button"
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 10px" }}
+              title="Rename, or change the Drive folder link"
+              onClick={() => {
+                setName(s.name);
+                setLink(s.driveFolderLink);
+                setError(null);
+                setMode("edit");
+              }}
+            >
+              ✎ Edit
+            </button>
+            <button
+              type="button"
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 10px" }}
+              title="Delete this template"
+              onClick={() => {
+                setError(null);
+                setMode("confirm-delete");
+              }}
+            >
+              🗑
+            </button>
+          </span>
+        ) : null}
+      </div>
+
+      {mode === "edit" ? (
+        <div className="stack-12" style={{ gap: 6 }}>
+          <div className="field">
+            <label className="kicker" htmlFor={`tr-name-${s.id}`} style={{ fontSize: 10 }}>TEMPLATE NAME</label>
+            <input id={`tr-name-${s.id}`} className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="field">
+            <label className="kicker" htmlFor={`tr-link-${s.id}`} style={{ fontSize: 10 }}>GOOGLE DRIVE FOLDER</label>
+            <input
+              id={`tr-link-${s.id}`}
+              className="input"
+              placeholder="paste the folder link — blank removes it"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+            />
+          </div>
+          {name.trim() !== s.name && s.variantCount > 0 ? (
+            <span className="hint">
+              Renaming also renames its {s.variantCount} {s.variantCount === 1 ? "variant" : "variants"} to match.
+            </span>
+          ) : null}
+          <div className="row-gap-8">
+            <button className="btn btn-save" style={{ fontSize: 12, padding: "4px 12px" }} onClick={saveEdits} disabled={busy || !name.trim()}>
+              <Spinner active={busy} />
+              Save
+            </button>
+            <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={() => setMode("view")} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : mode === "confirm-delete" ? (
+        <div className="stack-12" style={{ gap: 6 }}>
+          <div className="callout blocked">
+            {s.variantCount > 0 || s.listingCount > 0 ? (
+              <>
+                This template has {s.variantCount} {s.variantCount === 1 ? "variant" : "variants"}
+                {s.listingCount > 0
+                  ? `, used in ${s.listingCount} ${s.listingCount === 1 ? "listing" : "listings"}`
+                  : ""}{" "}
+                — delete anyway? The variants stay and keep working; they only lose the shared
+                geometry for future batches.
+              </>
+            ) : (
+              <>Delete this template? It has no variants yet.</>
+            )}
+          </div>
+          <div className="row-gap-8">
+            <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={destroy} disabled={busy}>
+              <Spinner active={busy} />
+              Delete template
+            </button>
+            <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={() => setMode("view")} disabled={busy}>
+              Keep it
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="row-gap-12" style={{ flexWrap: "wrap", marginTop: 2 }}>
+            <span className={`chip ${s.cropRect ? "done" : "stale"}`}>
+              {s.cropRect ? "crop set" : "no crop"}
+            </span>
+            <span className={`chip ${s.printRegionQuad ? "done" : "stale"}`}>
+              {s.printRegionQuad ? "print region set" : "no print region"}
+            </span>
+            <span className="chip count">
+              {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
+            </span>
+            {folderId ? (
+              driveConnected ? (
+                <span className="chip done">Drive folder linked</span>
+              ) : (
+                // the pill IS the fix — a yellow label you can't act on is
+                // just a longer way to feel stuck
+                <a className="chip stale" href="/api/drive/oauth/start" title="Reconnect Google Drive" style={{ textDecoration: "none" }}>
+                  Drive not connected — reconnect ↗
+                </a>
+              )
+            ) : (
+              <button
+                type="button"
+                className="chip"
+                style={{ cursor: "pointer" }}
+                title="Add the Drive folder this template's photos live in"
+                onClick={() => {
+                  setName(s.name);
+                  setLink(s.driveFolderLink);
+                  setError(null);
+                  setMode("edit");
+                }}
+              >
+                no Drive folder — add one
+              </button>
+            )}
+          </div>
+          {s.existingColours.length > 0 ? (
+            <div className="hint" style={{ marginTop: 2 }}>{s.existingColours.join(" · ")}</div>
+          ) : (
+            <div className="hint" style={{ marginTop: 2 }}>
+              No colours yet — use ＋ Add colour variants to populate it.
+            </div>
+          )}
+        </>
+      )}
+      {error ? <div className="callout blocked">{error}</div> : null}
     </div>
   );
 }
@@ -898,6 +1070,8 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
   const [rect, setRect] = useState<CropRect>(DEFAULT_CROP_RECT);
   const [phase, setPhase] = useState<"crop" | "region">("crop");
   const [croppedPreview, setCroppedPreview] = useState<string | null>(null);
+  // the cropped sample as a File — uploaded with the save as the card thumbnail
+  const [croppedFile, setCroppedFile] = useState<File | null>(null);
   const [regionQuad, setRegionQuad] = useState<Quad>(DEFAULT_QUAD);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -914,7 +1088,11 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
 
   async function pickSample(f: File | null) {
     setSample(f);
-    setDims(f ? await nativeDimensions(f) : null);
+    const d = f ? await nativeDimensions(f) : null;
+    setDims(d);
+    // start at the whole frame squared off — the common case, so it costs
+    // no dragging; pulling in is easier than pushing out
+    setRect(d ? maxCenteredSquare(d.width, d.height) : DEFAULT_CROP_RECT);
     setPhase("crop");
     setCroppedPreview(null);
   }
@@ -931,6 +1109,7 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
       // preview-sized and never upscaled — this file goes nowhere
       const target = Math.max(64, Math.min(1200, cropPx ?? 1200));
       const { file } = await cropToStandardSize(sample, rect, target);
+      setCroppedFile(file);
       setCroppedPreview((old) => {
         if (old) URL.revokeObjectURL(old);
         return URL.createObjectURL(file);
@@ -945,12 +1124,14 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
   async function save() {
     setBusy(true);
     setError(null);
-    const res = await apiJson("/api/mockup-shots", "POST", {
-      name: name.trim(),
-      cropRect: rect,
-      printRegionQuad: regionQuad,
-      driveFolderLink: driveLink.trim() || undefined,
-    });
+    // multipart: the cropped sample rides along as the card thumbnail
+    const form = new FormData();
+    form.append("name", name.trim());
+    form.append("cropRect", JSON.stringify(rect));
+    form.append("printRegionQuad", JSON.stringify(regionQuad));
+    if (driveLink.trim()) form.append("driveFolderLink", driveLink.trim());
+    if (croppedFile) form.append("sampleImage", croppedFile);
+    const res = await apiCall("/api/mockup-shots", { method: "POST", body: form });
     if (!res.ok) setError(res.error);
     else {
       router.refresh();
@@ -1031,7 +1212,9 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
       {phase === "region" && croppedPreview ? (
         <div className="field">
           <label className="kicker">PRINT REGION — WHERE ARTWORK LANDS ON THE GARMENT</label>
-          <QuadEditor src={croppedPreview} quad={regionQuad} onChange={setRegionQuad} />
+          {/* same centre guides as the crop step — placing a print region
+              off-centre by a few pixels is exactly as easy to do by eye */}
+          <QuadEditor src={croppedPreview} quad={regionQuad} onChange={setRegionQuad} centerGuides />
           <span className="hint">
             Drawn on the cropped frame, so every variant inherits it exactly. Unlock the corners for
             folded or on-model shots — the zone is a quad, not just a rectangle, on purpose.
@@ -1085,27 +1268,39 @@ function DriveImport({
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(false);
   const [results, setResults] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
+  const [subfolders, setSubfolders] = useState<Array<{ id: string; name: string }>>([]);
+  // hand corrections to the detected colour, by file id. Detection reads a
+  // closed palette out of arbitrary supplier filenames, so it will be wrong
+  // sometimes; the fix belongs on the row, not in an untick-and-redo cycle.
+  const [override, setOverride] = useState<Record<string, string>>({});
 
   const have = new Set(template.existingColours.map((c) => c.toLowerCase()));
   const activeRect = template.cropRect;
-  const colourOf = (f: ClassifiedFile): string | null =>
+  const detectedOf = (f: ClassifiedFile): string | null =>
     f.role.kind === "variant" ? f.role.colour : null;
+  const colourOf = (f: ClassifiedFile): string | null => {
+    const edited = override[f.id];
+    if (edited !== undefined) return edited.trim() || null;
+    return detectedOf(f);
+  };
 
   async function list() {
     setBusy("list");
     setError(null);
     setResults(null);
-    const res = await apiJson<{ files?: Array<{ id: string; name: string }>; needsReconnect?: boolean }>(
-      `/api/drive/folder?link=${encodeURIComponent(template.driveFolderLink)}`,
-      "GET",
-      undefined
-    );
+    const res = await apiJson<{
+      files?: Array<{ id: string; name: string }>;
+      subfolders?: Array<{ id: string; name: string }>;
+      needsReconnect?: boolean;
+    }>(`/api/drive/folder?link=${encodeURIComponent(template.driveFolderLink)}`, "GET", undefined);
     if (!res.ok) {
       setError(res.error);
       if (res.data?.needsReconnect) setNeedsReconnect(true);
     } else {
       const classified = classifyFolder(res.data.files ?? [], palette);
       setFiles(classified);
+      setSubfolders(res.data.subfolders ?? []);
+      setOverride({});
       // everything with a fresh colour starts ticked; already-added
       // colours start unticked so a re-run doesn't duplicate them
       setPicked(
@@ -1127,7 +1322,8 @@ function DriveImport({
     setBusy("import");
     setError(null);
     const out: Array<{ name: string; detail: string; ok: boolean }> = [];
-    const targets = files.filter((f) => f.role.kind === "variant" && picked.has(f.id));
+    // effective colour, so a row corrected by hand imports like any other
+    const targets = files.filter((f) => colourOf(f) !== null && picked.has(f.id));
     let i = 0;
     for (const f of targets) {
       i++;
@@ -1186,8 +1382,7 @@ function DriveImport({
     router.refresh();
   }
 
-  const variants = files?.filter((f) => f.role.kind === "variant") ?? [];
-  const excluded = files?.filter((f) => f.role.kind !== "variant") ?? [];
+  const importable = files?.filter((f) => colourOf(f) !== null) ?? [];
 
   return (
     <div className="well stack-12" style={{ gap: 8 }}>
@@ -1223,15 +1418,17 @@ function DriveImport({
           ) : (
             <>
               <div className="stack-12" style={{ gap: 4 }}>
-                {variants.map((f) => {
-                  const colour = colourOf(f)!;
-                  const already = have.has(colour.toLowerCase());
+                {files.map((f) => {
+                  const colour = colourOf(f);
+                  const already = colour ? have.has(colour.toLowerCase()) : false;
+                  const detected = detectedOf(f);
                   return (
-                    <label key={f.id} className="row-gap-8" style={{ alignItems: "center", cursor: "pointer" }}>
+                    <div key={f.id} className="row-gap-8" style={{ alignItems: "center" }}>
                       <input
                         type="checkbox"
+                        aria-label={`Import ${f.name}`}
                         checked={picked.has(f.id)}
-                        disabled={busy !== null}
+                        disabled={busy !== null || !colour}
                         onChange={(e) =>
                           setPicked((cur) => {
                             const next = new Set(cur);
@@ -1241,33 +1438,57 @@ function DriveImport({
                           })
                         }
                       />
-                      <span className="body-sm" style={{ flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span
+                        className={colour ? "body-sm" : "hint"}
+                        style={{ flex: "1 1 180px", overflow: "hidden", textOverflow: "ellipsis" }}
+                        title={f.name}
+                      >
                         {f.name}
                       </span>
-                      <span className="chip count" style={{ fontSize: 10 }}>{colour}</span>
+                      <input
+                        className="input"
+                        style={{ flex: "0 0 140px", fontSize: 12, padding: "4px 8px" }}
+                        aria-label={`Colour for ${f.name}`}
+                        placeholder={f.role.kind === "info-graphic" ? "not a colour" : "no colour matched"}
+                        value={override[f.id] ?? detected ?? ""}
+                        disabled={busy !== null}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setOverride((cur) => ({ ...cur, [f.id]: value }));
+                          // typing a colour onto an unmatched row is the
+                          // point — tick it so the correction isn't lost to
+                          // a second click
+                          setPicked((cur) => {
+                            const next = new Set(cur);
+                            if (value.trim()) next.add(f.id);
+                            else next.delete(f.id);
+                            return next;
+                          });
+                        }}
+                      />
                       {already ? (
                         <span className="chip neutral" style={{ fontSize: 10 }} title="A variant in this colour already exists on this template">
                           already added
                         </span>
+                      ) : f.role.kind === "info-graphic" ? (
+                        <span className="chip stale" style={{ fontSize: 10 }}>
+                          info graphic — Product&apos;s {f.role.role} link
+                        </span>
                       ) : null}
-                    </label>
+                    </div>
                   );
                 })}
-                {excluded.map((f) => (
-                  <div key={f.id} className="row-gap-8" style={{ alignItems: "center", opacity: 0.75 }}>
-                    <span style={{ width: 13 }} />
-                    <span className="hint" style={{ flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {f.name}
-                    </span>
-                    <span className="chip stale" style={{ fontSize: 10 }}>
-                      {f.role.kind === "info-graphic"
-                        ? `info graphic — use as the Product's ${f.role.role} link`
-                        : "no colour matched — excluded"}
-                    </span>
+                {files.length === 0 && subfolders.length > 0 ? (
+                  <div className="callout blocked">
+                    This folder holds {subfolders.length} subfolder{subfolders.length === 1 ? "" : "s"}, not
+                    images — link one of them instead: {subfolders.map((s) => s.name).join(", ")}
                   </div>
-                ))}
-                {variants.length === 0 ? (
-                  <span className="hint">No colour variants recognised in this folder.</span>
+                ) : files.length === 0 ? (
+                  <span className="hint">This folder has no image files in it at all.</span>
+                ) : importable.length === 0 ? (
+                  <span className="hint">
+                    No filename matched a palette colour. Type the colour on any row to import it anyway.
+                  </span>
                 ) : null}
               </div>
               {progress ? <span className="hint">{progress}</span> : null}

@@ -77,7 +77,11 @@ export function PricingPanel({ data }: { data: PricingData }) {
   const [targetInput, setTargetInput] = useState("30");
 
   // ---- exploration dials: live math, saved nowhere ----
-  const [discountInput, setDiscountInput] = useState("0");
+  // Discount starts at the shop's standing 20%-off sale, because that's the
+  // price buyers actually pay — a margin computed at list price would be
+  // the exploration, not the default. Still a dial: zero it to see full-price
+  // margin. (If the standing sale ever changes, this is the only number.)
+  const [discountInput, setDiscountInput] = useState("20");
   const defaultShipCharged = data.product?.shippingCharged ?? null;
   const [shipChargedInput, setShipChargedInput] = useState(
     defaultShipCharged != null ? String(defaultShipCharged) : "0"

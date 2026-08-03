@@ -1,11 +1,28 @@
 import { NextResponse } from "next/server";
-import { cachedRecord, updateRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords, updateRecord, archiveRecord } from "@/server/notion/store";
 import { parseQuad } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 120; // a rename may touch every variant under the template
 
-/** Saves the shot's shared crop rectangle, or the hand-set framing-inconsistency flag. */
+/** The variants attached to this template — everything a rename or delete has to reckon with. */
+function variantsOf(shotId: string) {
+  return cachedRecords("mockup_templates").filter((m) =>
+    (((m.props["Shot"] as string[] | null) ?? [])).includes(shotId)
+  );
+}
+
+/**
+ * Saves the shot's shared crop rectangle, the hand-set framing flag, or —
+ * post-creation edits — the name and Drive folder link.
+ *
+ * Rename safety: every relation references the template by id, so nothing
+ * structural moves on rename. The one thing that would silently rot is
+ * cosmetic — the "{template} - {colour} - {px}" strings on variant names —
+ * so a rename re-derives those, matched by their old prefix. A variant
+ * named by hand (no prefix match) is left alone.
+ */
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -15,6 +32,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     const body = await req.json();
     const values: Record<string, SimpleValue> = {};
+
+    const oldName = shot.title || "";
+    const newName = body.name !== undefined ? String(body.name).trim() : null;
+    if (newName !== null) {
+      if (!newName) return NextResponse.json({ error: "A template needs a name." }, { status: 400 });
+      values["Name"] = newName;
+    }
 
     if (body.cropRect !== undefined) {
       const r = body.cropRect as { x?: unknown; y?: unknown; size?: unknown } | null;
@@ -47,7 +71,42 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
     }
     const record = await updateRecord("mockup_shots", id, values);
-    return NextResponse.json({ record });
+
+    let renamedVariants = 0;
+    if (newName && oldName && newName !== oldName) {
+      const prefix = `${oldName} - `;
+      for (const v of variantsOf(id)) {
+        const title = v.title || "";
+        if (!title.startsWith(prefix)) continue; // hand-named — not ours to rewrite
+        await updateRecord("mockup_templates", v.id, {
+          Name: `${newName} - ${title.slice(prefix.length)}`,
+        });
+        renamedVariants++;
+      }
+    }
+
+    return NextResponse.json({ record, renamedVariants });
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
+
+/**
+ * Delete (archive) a template. The UI warns with live counts first; the
+ * variants themselves are left alone — they keep rendering wherever they're
+ * already used, they just lose the shared geometry for future batches.
+ * Deleting them too would turn "remove a grouping" into "destroy finished
+ * work".
+ */
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await ctx.params;
+    const rec = cachedRecord(id);
+    if (!rec || rec.dbKey !== "mockup_shots") {
+      return NextResponse.json({ error: "Template not found." }, { status: 404 });
+    }
+    await archiveRecord("mockup_shots", id);
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

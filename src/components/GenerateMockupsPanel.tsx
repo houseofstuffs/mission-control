@@ -35,8 +35,10 @@ export interface MockupsData {
     colours: string[];
   };
   tiles: MockupTile[];
-  /** the Product's reusable graphics — built once per blueprint, not per listing */
-  infoGraphics: Array<{ label: string; url: string }>;
+  /** the Product's reusable graphics — built once per blueprint, not per
+   *  listing. url null = expected by the slot plan but not built yet; that
+   *  absence renders as a "needed" pill, never silence. */
+  infoGraphics: Array<{ label: string; url: string | null }>;
 }
 
 type Verdict = "approved" | "flagged";
@@ -51,6 +53,9 @@ const READY_LABEL: Array<[keyof MockupsData["ready"], string]> = [
 ];
 
 export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
+  // only built graphics count toward the plan — a missing one is a pill
+  // below, not a phantom in the sum
+  const builtGraphics = data.infoGraphics.filter((g) => g.url).length;
   // Approve/Flag lives in the browser for now: with nothing rendered there
   // is no image for a verdict to attach to, and persisting a judgement
   // about an image that doesn't exist would be inventing state.
@@ -129,7 +134,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 <strong>
                   {data.tiles.length} {plural(data.tiles.length, "mockup")}
                 </strong>
-                {data.infoGraphics.length > 0 ? <> + {data.infoGraphics.length} info graphics</> : null}
+                {builtGraphics > 0 ? <> + {builtGraphics} info graphics</> : null}
               </>
             ) : (
               // a colour-locked template composites onto its own colour
@@ -142,7 +147,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 from {data.ready.templateCount} {plural(data.ready.templateCount, "template")} across{" "}
                 {data.ready.colours.length} {plural(data.ready.colours.length, "colour")} — some
                 templates are locked to one colour
-                {data.infoGraphics.length > 0 ? <> · + {data.infoGraphics.length} info graphics</> : null}
+                {builtGraphics > 0 ? <> · + {builtGraphics} info graphics</> : null}
               </>
             )}
           </span>
@@ -255,22 +260,31 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         </div>
       ) : null}
 
-      {data.infoGraphics.length > 0 ? (
-        <div className="card supporting">
-          <Kicker>BRANDED INFO GRAPHICS · FROM THE PRODUCT RECORD</Kicker>
-          <span className="hint">
-            Reused by every listing on this blueprint — L5 pulls them into their named slots, so they
-            aren&apos;t part of the approve/send flow here.
-          </span>
-          <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-            {data.infoGraphics.map((g) => (
+      <div className="card supporting">
+        <Kicker>BRANDED INFO GRAPHICS · FROM THE PRODUCT RECORD</Kicker>
+        <span className="hint">
+          Reused by every listing on this blueprint — L5 pulls them into their named slots, so they
+          aren&apos;t part of the approve/send flow here.
+        </span>
+        <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+          {data.infoGraphics.map((g) =>
+            g.url ? (
               <span key={g.label} className="chip done" style={{ fontSize: 11 }} title={g.url}>
                 ✓ {g.label}
               </span>
-            ))}
-          </div>
+            ) : (
+              <span
+                key={g.label}
+                className="chip stale"
+                style={{ fontSize: 11 }}
+                title="L5 has a Graphic Card slot waiting for this — add the link on the Product record"
+              >
+                {g.label} — needed
+              </span>
+            )
+          )}
         </div>
-      ) : null}
+      </div>
 
       <div className="card supporting">
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>

@@ -239,6 +239,10 @@ function main() {
       Designs: ["design-1"],
       Product: ["product-2"],
       Tags: "practical magic gift, midnight margarita, witchy tee, spooky gift, cozy hoodie, oversized hoodie, halloween hoodie, witch hoodie, fall layering, gift for her, autumn vibes, cottagecore witch, samhain gift",
+      // the spinoff-reuse case: L2 shows this hook read-only with a copy
+      // button, so the sibling panel needs one saved to exercise it
+      "Description Hook":
+        "Some nights call for midnight margaritas and a little practical magic. This cozy hoodie is for the witchy one who owns both.",
       Shop: "STUFFS",
       Channel: "Etsy",
     }

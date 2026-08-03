@@ -202,15 +202,18 @@ function mockupsData(
     }
   }
 
+  // every branded graphic the slot plan expects, present or not — a missing
+  // one must show as missing here, because L5's Graphic Card slots will
+  // want it and silence now means discovering the gap two steps later
   const graphic = (field: string, label: string) => {
     const url = String(product?.props[field] ?? "").trim();
-    return url ? { label, url } : null;
+    return { label, url: url || null };
   };
   const infoGraphics = [
     graphic("Highlights & Sizing Graphic Link", "Size chart"),
     graphic("Care & Policies Graphic Link", "Care info"),
     graphic("Colorways Graphic Link", "Colourways"),
-  ].filter(Boolean) as MockupsData["infoGraphics"];
+  ];
 
   return {
     listingId: rec.id,
@@ -404,10 +407,11 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
                 .split(",")
                 .map((t) => t.trim())
                 .filter(Boolean),
+              hook: String(l.props["Description Hook"] ?? "").trim(),
             };
           })
-          // a sibling with no saved tags has nothing to offer yet
-          .filter((s) => s.tags.length > 0)
+          // a sibling with neither tags nor a hook has nothing to offer yet
+          .filter((s) => s.tags.length > 0 || s.hook)
           .sort((a, b) => a.name.localeCompare(b.name));
 
   let attributes: Array<{ name: string; value: string }> = [];

@@ -156,6 +156,25 @@ export async function listFolderImages(folderId: string, accessToken: string): P
   return out;
 }
 
+/**
+ * The folders directly inside this one. Only asked for when the image list
+ * came back empty: "0 recognised" and "you linked the parent folder, the
+ * photos are one level down" are the same screen otherwise, and only one of
+ * them tells you what to do next.
+ */
+export async function listSubfolders(folderId: string, accessToken: string): Promise<DriveFile[]> {
+  const params = new URLSearchParams({
+    q: `'${folderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.folder'`,
+    fields: "files(id, name, mimeType)",
+    pageSize: "100",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  });
+  const res = await apiGet(`/files?${params.toString()}`, accessToken);
+  const json = (await res.json()) as { files?: Array<{ id: string; name: string; mimeType: string }> };
+  return (json.files ?? []).map((f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: 0 }));
+}
+
 /** The file's bytes — the crop itself stays in the browser, where the proven pipeline lives. */
 export async function fetchFileBytes(
   fileId: string,

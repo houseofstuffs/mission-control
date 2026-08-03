@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
-import { provisionSchema } from "@/server/notion/provision";
+import { provisionSchema, checkSchema } from "@/server/notion/provision";
 import { notionConfigured } from "@/server/notion/client";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // ~30 throttled Notion calls on first run
+
+/**
+ * Read-only: what Notion actually carries versus what this build writes.
+ * Answers "did my last Provision run include field X?" — which the run's own
+ * success message can't, since it only ever patches the SCHEMA it shipped with.
+ */
+export async function GET() {
+  try {
+    if (!notionConfigured()) {
+      return NextResponse.json({ error: "Notion is not configured on this host." }, { status: 400 });
+    }
+    return NextResponse.json(await checkSchema());
+  } catch (err) {
+    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
 
 /**
  * Browser-triggered equivalent of `npm run notion:provision` — makes the

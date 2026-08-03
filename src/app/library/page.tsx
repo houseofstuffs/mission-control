@@ -88,7 +88,10 @@ export default function LibraryPage() {
   ).sort();
   const sync = syncState()["textures"];
 
-  const empty = textures.length === 0 && mockups.length === 0;
+  // Templates count as content — a library holding only templates is not
+  // empty. (And the empty state must never be the whole page: it hides the
+  // create button, which would make a first template impossible.)
+  const empty = textures.length === 0 && mockups.length === 0 && mockupShots.length === 0;
 
   const textureUsage = (textureId: string) =>
     designs.filter((d) => (d.props["Texture"] as string[] | null)?.includes(textureId)).length;
@@ -103,13 +106,15 @@ export default function LibraryPage() {
       {empty ? (
         <EmptyState
           title="Your library builds itself"
-          copy="Textures and mockup variants arrive with the browser clipper. Favorites derive from usage, not a hand-maintained list. Styles live on their own page now."
+          copy="Textures arrive with the browser clipper. Mockup templates you define here — start with ＋ New template below."
           hint="The browser extension arrives in Phase 3."
           patternUrl={assetUrl("pattern")}
           figureUrl={assetUrl("figure")}
         />
-      ) : (
-        <div className="stack-22">
+      ) : null}
+
+      <div className="stack-22">
+        {empty ? null : (
           <section className="stack-12">
             <Kicker>TEXTURES · {textures.length}</Kicker>
             <div className="inbox-grid">
@@ -126,15 +131,15 @@ export default function LibraryPage() {
               {textures.length === 0 ? <div className="hint">No textures yet — owned files unlock real composite previews.</div> : null}
             </div>
           </section>
+        )}
 
-          <MockupTemplatesSection
-            templates={mockups.map((m) => templateCard(m, shotsById))}
-            shots={mockupShots.map((s) => shotOption(s, mockups))}
-            palette={palette}
-            drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
-          />
-        </div>
-      )}
+        <MockupTemplatesSection
+          templates={mockups.map((m) => templateCard(m, shotsById))}
+          shots={mockupShots.map((s) => shotOption(s, mockups))}
+          palette={palette}
+          drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
+        />
+      </div>
     </div>
   );
 }

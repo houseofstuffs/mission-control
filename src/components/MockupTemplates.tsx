@@ -802,6 +802,46 @@ export interface MockupShotOption {
   existingColours: string[];
 }
 
+/**
+ * Templates, listed. A template with no colours yet renders nowhere else on
+ * this page — the variant grid is keyed off variants — so without this a
+ * successful save looked exactly like a failed one: form closes, counts
+ * unchanged, nothing new on screen.
+ */
+function TemplateRow({ s, driveConnected }: { s: MockupShotOption; driveConnected: boolean }) {
+  const folderId = s.driveFolderLink.trim();
+  return (
+    <div className="idea-card">
+      <div className="title">{s.name}</div>
+      <div className="row-gap-12" style={{ flexWrap: "wrap", marginTop: 6 }}>
+        <span className={`chip ${s.cropRect ? "done" : "stale"}`}>
+          {s.cropRect ? "crop set" : "no crop"}
+        </span>
+        <span className={`chip ${s.printRegionQuad ? "done" : "stale"}`}>
+          {s.printRegionQuad ? "print region set" : "no print region"}
+        </span>
+        <span className="chip count">
+          {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
+        </span>
+        {folderId ? (
+          <span className={`chip ${driveConnected ? "done" : "stale"}`}>
+            {driveConnected ? "Drive folder linked" : "Drive folder — not connected"}
+          </span>
+        ) : (
+          <span className="chip">no Drive folder</span>
+        )}
+      </div>
+      {s.existingColours.length > 0 ? (
+        <div className="hint" style={{ marginTop: 6 }}>{s.existingColours.join(" · ")}</div>
+      ) : (
+        <div className="hint" style={{ marginTop: 6 }}>
+          No colours yet — use ＋ Add colour variants to populate it.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export interface DriveStatus {
   configured: boolean;
   connected: boolean;
@@ -848,7 +888,7 @@ interface ShotColorRow {
  * population is what retires the all-at-once batch form — geometry is
  * decided once, variants are added against it forever after.
  */
-function TemplateDefine({ onClose }: { onClose: () => void }) {
+function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [driveLink, setDriveLink] = useState("");
@@ -914,7 +954,7 @@ function TemplateDefine({ onClose }: { onClose: () => void }) {
     if (!res.ok) setError(res.error);
     else {
       router.refresh();
-      onClose();
+      onSaved(name.trim());
     }
     setBusy(false);
   }
@@ -1512,11 +1552,12 @@ export function MockupTemplatesSection({
   const [openForm, setOpenForm] = useState<null | "define" | "variants" | "single">(null);
   const toggle = (k: "define" | "variants" | "single") =>
     setOpenForm((cur) => (cur === k ? null : k));
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   return (
     <section className="stack-12">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-        <Kicker>MOCKUP VARIANTS · {templates.length}</Kicker>
+        <Kicker>MOCKUP TEMPLATES · {shots.length}</Kicker>
         <div className="row-gap-12">
           <button className="btn btn-secondary" onClick={() => toggle("define")} aria-expanded={openForm === "define"}>
             ＋ New template
@@ -1529,13 +1570,32 @@ export function MockupTemplatesSection({
           </button>
         </div>
       </div>
-      {openForm === "define" ? <TemplateDefine onClose={() => setOpenForm(null)} /> : null}
+      {openForm === "define" ? (
+        <TemplateDefine
+          onSaved={(saved) => {
+            setSavedNotice(`Template "${saved}" saved — add its colours with ＋ Add colour variants.`);
+            setOpenForm(null);
+          }}
+          onClose={() => setOpenForm(null)}
+        />
+      ) : null}
+      {savedNotice ? <div className="callout">{savedNotice}</div> : null}
       {driveNotice ? <span className="hint">{driveNotice}</span> : null}
       {driveError ? <div className="callout blocked">Google Drive: {driveError}</div> : null}
       {openForm === "variants" ? (
         <AddVariants shots={shots} palette={palette} drive={drive} onClose={() => setOpenForm(null)} />
       ) : null}
       {openForm === "single" ? <MockupTemplateIntake onClose={() => setOpenForm(null)} /> : null}
+      <div className="inbox-grid">
+        {shots.map((s) => (
+          <TemplateRow key={s.id} s={s} driveConnected={drive.connected} />
+        ))}
+        {shots.length === 0 ? (
+          <div className="hint">No templates yet — ＋ New template defines the crop and print region once.</div>
+        ) : null}
+      </div>
+
+      <Kicker>COLOUR VARIANTS · {templates.length}</Kicker>
       <div className="inbox-grid">
         {templates.map((t) => (
           <TemplateCard key={t.id} t={t} />

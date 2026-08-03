@@ -95,18 +95,47 @@ export async function refreshAll(): Promise<Record<string, number>> {
 
 /* ---------------- write-through ---------------- */
 
+/**
+ * Every write that names a property the Notion database doesn't carry yet
+ * fails the same way, and Notion's own wording ("X is not a property that
+ * exists") reads like a code bug rather than the one-click fix it is. This
+ * is the generic shape of "the schema gained a field after the last
+ * provision run" — the only cure is Provision Notion schema, so say so.
+ */
+function explainWriteFailure(dbKey: string, err: unknown): Error {
+  const message = (err as Error)?.message ?? String(err);
+  // Notion lists several in one message, separated by ". " — and the name
+  // pattern has to allow "." for names like "Print Region Quad (JSON)", so
+  // the second match onward drags the previous sentence's punctuation with
+  // it. Strip anything before the name's first real character.
+  const missing = Array.from(message.matchAll(/([\w ()/'’&%+.-]+?) is not a property that exists/g))
+    .map((m) => m[1].trim().replace(/^[^\w(]+/, "").trim())
+    .filter(Boolean);
+  if (missing.length === 0) return err as Error;
+  return new Error(
+    `The Notion "${dbKey}" database is missing ${missing.length === 1 ? "a property" : "properties"} ` +
+      `this app writes: ${missing.join(", ")}. Run "Provision Notion schema" on the Settings page, ` +
+      `then try again. (Nothing was saved.)`
+  );
+}
+
 export async function createRecord(
   dbKey: string,
   values: Record<string, SimpleValue>
 ): Promise<SimpleRecord> {
   const spec = fullSpec(dbKey);
   const dbId = requireDbId(dbKey);
-  const page: any = await throttled(() =>
-    notion().pages.create({
-      parent: { database_id: dbId },
-      properties: toNotionProperties(spec, values) as any,
-    })
-  );
+  let page: any;
+  try {
+    page = await throttled(() =>
+      notion().pages.create({
+        parent: { database_id: dbId },
+        properties: toNotionProperties(spec, values) as any,
+      })
+    );
+  } catch (err) {
+    throw explainWriteFailure(dbKey, err);
+  }
   const rec = fromNotionPage(spec, page);
   upsertRecord(rec);
   return rec;
@@ -118,12 +147,17 @@ export async function updateRecord(
   values: Record<string, SimpleValue>
 ): Promise<SimpleRecord> {
   const spec = fullSpec(dbKey);
-  const page: any = await throttled(() =>
-    notion().pages.update({
-      page_id: pageId,
-      properties: toNotionProperties(spec, values) as any,
-    })
-  );
+  let page: any;
+  try {
+    page = await throttled(() =>
+      notion().pages.update({
+        page_id: pageId,
+        properties: toNotionProperties(spec, values) as any,
+      })
+    );
+  } catch (err) {
+    throw explainWriteFailure(dbKey, err);
+  }
   const rec = fromNotionPage(spec, page);
   upsertRecord(rec);
   return rec;

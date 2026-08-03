@@ -231,3 +231,46 @@ export async function provisionSchema(): Promise<ProvisionResult> {
   setMeta("schema_provisioned_at", new Date().toISOString());
   return { databases: results, createdTitles, warnings };
 }
+
+/* ---------------- verification (read-only) ---------------- */
+
+export interface SchemaCheck {
+  ok: boolean;
+  databases: Array<{
+    key: string;
+    title: string;
+    registered: boolean;
+    reachable: boolean;
+    missingProperties: string[];
+  }>;
+}
+
+/**
+ * Answers "is the schema actually provisioned?" without writing anything.
+ *
+ * Provisioning patches in properties added to SCHEMA since the last run, so
+ * "I ran Provision" is not proof that any PARTICULAR field exists — the run
+ * only carries whatever SCHEMA the deployed build shipped. This compares the
+ * running build's SCHEMA against Notion live, per property.
+ */
+export async function checkSchema(): Promise<SchemaCheck> {
+  const databases: SchemaCheck["databases"] = [];
+  for (const db of SCHEMA) {
+    const id = getDbId(db.key);
+    if (!id) {
+      databases.push({ key: db.key, title: db.title, registered: false, reachable: false, missingProperties: [] });
+      continue;
+    }
+    let current: any;
+    try {
+      current = await throttled(() => notion().databases.retrieve({ database_id: id }));
+    } catch {
+      databases.push({ key: db.key, title: db.title, registered: true, reachable: false, missingProperties: [] });
+      continue;
+    }
+    const missingProperties = Object.keys(db.properties).filter((name) => !current.properties?.[name]);
+    databases.push({ key: db.key, title: db.title, registered: true, reachable: true, missingProperties });
+  }
+  const ok = databases.every((d) => d.registered && d.reachable && d.missingProperties.length === 0);
+  return { ok, databases };
+}

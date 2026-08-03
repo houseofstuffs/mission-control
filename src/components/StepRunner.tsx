@@ -15,6 +15,7 @@ import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 import { KeywordSeoPanel, SelectedTagsRail, TagSelectionProvider, useL2Dirty, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
+import { GenerateMockupsPanel, type MockupsData } from "./GenerateMockupsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
 import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
@@ -49,6 +50,7 @@ export function StepRunner({
   candidates,
   seo,
   slots,
+  mockups,
   artwork,
   masterAssets,
   textTreatment,
@@ -65,6 +67,7 @@ export function StepRunner({
   candidates?: CandidateData[];
   seo?: SeoData;
   slots?: SlotsData;
+  mockups?: MockupsData;
   artwork?: ArtworkData;
   masterAssets?: MasterAssetsData;
   textTreatment?: TextTreatmentData;
@@ -303,6 +306,9 @@ export function StepRunner({
         ) : null}
 
         {/* L5 is the slot plan — assemble the ordered image set */}
+        {record.workflowKey === "listing" && selected.id === "L4" && mockups ? (
+          <GenerateMockupsPanel data={mockups} />
+        ) : null}
         {record.workflowKey === "listing" && selected.id === "L5" && slots ? (
           <ImageSlotsPanel data={slots} />
         ) : null}

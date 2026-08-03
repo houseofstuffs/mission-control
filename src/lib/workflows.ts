@@ -177,10 +177,13 @@ export const LISTING_WORKFLOW: WorkflowDef = {
     },
     {
       id: "L4",
-      label: "images",
-      title: "Generate images",
-      needs: ["Printify product", "PSD master", "Mockup templates", "Brand record"],
-      produces: ["Product mockups", "Branded info graphics"],
+      // "images" collided with the design phase's own output; every image
+      // this step makes is a mockup, and that matches the template/variant
+      // vocabulary the Library and L5 already use.
+      label: "generate mockups",
+      title: "Generate mockups",
+      needs: ["Printify product", "PSD master", "Mockup templates", "Mockup colours"],
+      produces: ["Product mockups → image slots", "Branded info graphics (size chart, care, colourways)"],
       dependsOn: ["L1"],
       note: "Mockups are a compositing problem, not a generation problem — hosted PSD rendering in Phase 3.",
     },

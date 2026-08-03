@@ -5,6 +5,7 @@ import { runnerRecord, productLabel } from "@/server/viewmodels";
 import { StepRunner } from "@/components/StepRunner";
 import type { SeoData, KeywordRow } from "@/components/KeywordSeoPanel";
 import type { SlotsData, SlotRow } from "@/components/ImageSlotsPanel";
+import type { MockupsData, MockupTile } from "@/components/GenerateMockupsPanel";
 import { compatForListing } from "@/server/imageSlots";
 import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
@@ -25,6 +26,8 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const rec = cachedRecord(id);
   if (!rec || rec.dbKey !== "etsy_listings") notFound();
+  // L4 reuses L5's colour intersection, so compute the slots view once
+  const slots = slotsData(rec, compatForListing(rec));
 
   return (
     <div className="content-inner">
@@ -37,7 +40,8 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
       <StepRunner
         record={runnerRecord(rec)}
         seo={seoData(rec)}
-        slots={slotsData(rec, compatForListing(rec))}
+        slots={slots}
+        mockups={mockupsData(rec, slots)}
         colorways={colorwaysData(rec)}
         pricing={pricingData(rec)}
         printFile={printFileData(rec)}
@@ -162,6 +166,62 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
     templates,
     availableColors,
     hasProductLinks: slots.some((s) => s.productLinkRole),
+  };
+}
+
+/**
+ * L4's inputs. The template × colour matrix is the same intersection L5
+ * filters its variant picker by, so the two steps can never disagree about
+ * which colours are real. Every tile is a planned combination; url stays
+ * null until the Phase-3 compositor fills it in.
+ */
+function mockupsData(
+  rec: NonNullable<ReturnType<typeof cachedRecord>>,
+  slots: SlotsData
+): MockupsData {
+  const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
+  const product = productId ? cachedRecord(productId) : null;
+  const designId = ((rec.props["Designs"] as string[] | null) ?? [])[0];
+  const design = designId ? cachedRecord(designId) : null;
+
+  const norm = (c: string) => c.trim().toLowerCase();
+  const sells = new Set(slots.availableColors.map(norm));
+  // colour-neutral variants composite onto any colourway; colour-tagged
+  // ones only where that colour survives the availability intersection
+  const usable = slots.templates.filter(
+    (t) => !t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))
+  );
+
+  const tiles: MockupTile[] = [];
+  for (const t of usable) {
+    // a colour-tagged variant already IS one colour; a neutral one runs
+    // against every colour the listing sells
+    const colours = t.garmentColor.trim() ? [t.garmentColor.trim()] : slots.availableColors;
+    for (const colour of colours) {
+      tiles.push({ templateId: t.id, templateName: t.name, shotType: t.shotType, colour, url: null });
+    }
+  }
+
+  const graphic = (field: string, label: string) => {
+    const url = String(product?.props[field] ?? "").trim();
+    return url ? { label, url } : null;
+  };
+  const infoGraphics = [
+    graphic("Highlights & Sizing Graphic Link", "Size chart"),
+    graphic("Care & Policies Graphic Link", "Care info"),
+    graphic("Colorways Graphic Link", "Colourways"),
+  ].filter(Boolean) as MockupsData["infoGraphics"];
+
+  return {
+    listingId: rec.id,
+    ready: {
+      printifyProduct: String(rec.props["Printify Product ID"] ?? "").trim().length > 0,
+      psdMaster: String(design?.props["Master PNG Link"] ?? "").trim().length > 0,
+      templateCount: usable.length,
+      colours: slots.availableColors,
+    },
+    tiles,
+    infoGraphics,
   };
 }
 

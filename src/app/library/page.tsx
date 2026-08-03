@@ -11,11 +11,13 @@ import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 import { MockupTemplatesSection, type MockupTemplateCard, type MockupShotOption } from "@/components/MockupTemplates";
 import { parseQuad } from "@/config/mockups";
+import { driveConfigured } from "@/server/drive/client";
+import { connectionStatus as driveConnectionStatus } from "@/server/drive/connection";
 import type { SimpleRecord } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
 
-function shotOption(s: SimpleRecord): MockupShotOption {
+function shotOption(s: SimpleRecord, mockups: SimpleRecord[]): MockupShotOption {
   let cropRect = null;
   try {
     const parsed = JSON.parse(String(s.props["Crop Rect (JSON)"] ?? ""));
@@ -31,6 +33,12 @@ function shotOption(s: SimpleRecord): MockupShotOption {
     cropRect,
     printRegionQuad: parseQuad(String(s.props["Print Region Quad (JSON)"] ?? "")),
     driveFolderLink: String(s.props["Drive Folder Link"] ?? ""),
+    // colours already saved under this template — the Drive review list
+    // starts these unticked so a re-run can't duplicate them
+    existingColours: mockups
+      .filter((m) => ((m.props["Shot"] as string[] | null) ?? []).includes(s.id))
+      .map((m) => String(m.props["Garment Color"] ?? "").trim())
+      .filter(Boolean),
   };
 }
 
@@ -121,8 +129,9 @@ export default function LibraryPage() {
 
           <MockupTemplatesSection
             templates={mockups.map((m) => templateCard(m, shotsById))}
-            shots={mockupShots.map(shotOption)}
+            shots={mockupShots.map((s) => shotOption(s, mockups))}
             palette={palette}
+            drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
           />
         </div>
       )}

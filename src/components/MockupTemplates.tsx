@@ -14,11 +14,11 @@
  * the pipeline off the record — there is no method picker anywhere here.
  */
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
-import { detectColour } from "@/lib/colourFromFilename";
+import { detectColour, classifyFolder, type ClassifiedFile } from "@/lib/colourFromFilename";
 import {
   nativeDimensions,
   cropOutputSize,
@@ -796,8 +796,16 @@ export interface MockupShotOption {
   cropRect: CropRect | null;
   /** the printable zone drawn at definition — every variant starts from it */
   printRegionQuad: Quad | null;
-  /** where this template's colour photos live — the Drive auto-import reads it once OAuth exists */
+  /** where this template's colour photos live — the Drive auto-import lists it */
   driveFolderLink: string;
+  /** colours already saved as variants under this template — the review list unticks them */
+  existingColours: string[];
+}
+
+export interface DriveStatus {
+  configured: boolean;
+  connected: boolean;
+  connectedAt: string | null;
 }
 
 type Dims = { width: number; height: number };
@@ -1012,6 +1020,250 @@ function TemplateDefine({ onClose }: { onClose: () => void }) {
 }
 
 /**
+ * The Drive auto-import: list the template's folder, detect colours from
+ * filenames, review, import. Fetch goes Drive → server → browser on
+ * purpose — the crop must run against the ORIGINAL bytes in the browser,
+ * where the one proven adaptive pipeline lives.
+ *
+ * Google's Testing mode expires the connection weekly; every failure that
+ * means "reconnect" is surfaced as exactly that, never a dead retry.
+ */
+function DriveImport({
+  template,
+  palette,
+  drive,
+}: {
+  template: MockupShotOption;
+  palette: string[];
+  drive: DriveStatus;
+}) {
+  const router = useRouter();
+  const [files, setFiles] = useState<ClassifiedFile[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<"list" | "import" | null>(null);
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const [results, setResults] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
+
+  const have = new Set(template.existingColours.map((c) => c.toLowerCase()));
+  const activeRect = template.cropRect;
+  const colourOf = (f: ClassifiedFile): string | null =>
+    f.role.kind === "variant" ? f.role.colour : null;
+
+  async function list() {
+    setBusy("list");
+    setError(null);
+    setResults(null);
+    const res = await apiJson<{ files?: Array<{ id: string; name: string }>; needsReconnect?: boolean }>(
+      `/api/drive/folder?link=${encodeURIComponent(template.driveFolderLink)}`,
+      "GET",
+      undefined
+    );
+    if (!res.ok) {
+      setError(res.error);
+      if (res.data?.needsReconnect) setNeedsReconnect(true);
+    } else {
+      const classified = classifyFolder(res.data.files ?? [], palette);
+      setFiles(classified);
+      // everything with a fresh colour starts ticked; already-added
+      // colours start unticked so a re-run doesn't duplicate them
+      setPicked(
+        new Set(
+          classified
+            .filter((f) => {
+              const c = colourOf(f);
+              return c !== null && !have.has(c.toLowerCase());
+            })
+            .map((f) => f.id)
+        )
+      );
+    }
+    setBusy(null);
+  }
+
+  async function importPicked() {
+    if (!files || !activeRect) return;
+    setBusy("import");
+    setError(null);
+    const out: Array<{ name: string; detail: string; ok: boolean }> = [];
+    const targets = files.filter((f) => f.role.kind === "variant" && picked.has(f.id));
+    let i = 0;
+    for (const f of targets) {
+      i++;
+      const colour = colourOf(f)!;
+      setProgress(`Fetching ${i}/${targets.length} — ${colour}…`);
+      try {
+        const res = await fetch(`/api/drive/file/${f.id}`);
+        if (!res.ok) {
+          let msg = `download failed (${res.status})`;
+          try {
+            const j = (await res.json()) as { error?: string; needsReconnect?: boolean };
+            if (j?.needsReconnect) {
+              setNeedsReconnect(true);
+              out.push({ name: f.name, detail: "connection expired — reconnect and re-run", ok: false });
+              break; // every later fetch would fail the same way
+            }
+            if (j?.error) msg = j.error;
+          } catch {
+            /* body wasn't JSON — keep the status message */
+          }
+          throw new Error(msg);
+        }
+        const blob = await res.blob();
+        const file = new File([blob], f.name, { type: blob.type || "image/png" });
+        const dims = await nativeDimensions(file);
+        const target = cropOutputSize(dims.width, dims.height, activeRect, MOCKUP_CROP_MIN, MOCKUP_CROP_SIZE);
+        if (target === null) {
+          out.push({
+            name: f.name,
+            detail: `skipped — crop yields ${cropSquarePixels(dims.width, dims.height, activeRect)}px, under ${MOCKUP_CROP_MIN}`,
+            ok: false,
+          });
+          continue;
+        }
+        const cropped = await cropToStandardSize(file, activeRect, target);
+        const form = new FormData();
+        form.append("name", `${template.name} - ${colour} - ${target}`);
+        form.append("pipelineType", "Simple Placement");
+        form.append("blendMode", DEFAULT_BLEND);
+        form.append("fitMode", DEFAULT_FIT);
+        form.append("garmentColor", colour);
+        form.append("shotId", template.id);
+        form.append("quad", JSON.stringify(template.printRegionQuad ?? DEFAULT_QUAD));
+        form.append("baseImage", cropped);
+        setProgress(`Uploading ${i}/${targets.length} — ${colour}…`);
+        const up = await apiCall("/api/mockup-templates", { method: "POST", body: form });
+        if (!up.ok) throw new Error(up.error ?? "upload failed");
+        out.push({ name: f.name, detail: `${colour} · ${target}×${target}`, ok: true });
+      } catch (err) {
+        out.push({ name: f.name, detail: (err as Error).message, ok: false });
+      }
+    }
+    setProgress("");
+    setResults(out);
+    setBusy(null);
+    router.refresh();
+  }
+
+  const variants = files?.filter((f) => f.role.kind === "variant") ?? [];
+  const excluded = files?.filter((f) => f.role.kind !== "variant") ?? [];
+
+  return (
+    <div className="well stack-12" style={{ gap: 8 }}>
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <Kicker>GOOGLE DRIVE — AUTO-IMPORT</Kicker>
+        <span className="hint" style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {template.driveFolderLink}
+        </span>
+      </div>
+
+      {!drive.configured ? (
+        <span className="hint">Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable the auto-import.</span>
+      ) : needsReconnect || !drive.connected ? (
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <a className="btn btn-secondary" href="/api/drive/oauth/start">
+            Connect Google Drive
+          </a>
+          <span className="hint">
+            Read-only. Google&apos;s testing mode expires the connection roughly weekly — reconnecting
+            here is the expected fix, not a fault.
+          </span>
+        </div>
+      ) : (
+        <>
+          {!files ? (
+            <div className="row-gap-12" style={{ alignItems: "center" }}>
+              <button className="btn btn-secondary" onClick={list} disabled={busy !== null}>
+                <Spinner active={busy === "list"} />
+                List the folder
+              </button>
+              <span className="hint">Colours are detected from filenames — you review before anything imports.</span>
+            </div>
+          ) : (
+            <>
+              <div className="stack-12" style={{ gap: 4 }}>
+                {variants.map((f) => {
+                  const colour = colourOf(f)!;
+                  const already = have.has(colour.toLowerCase());
+                  return (
+                    <label key={f.id} className="row-gap-8" style={{ alignItems: "center", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={picked.has(f.id)}
+                        disabled={busy !== null}
+                        onChange={(e) =>
+                          setPicked((cur) => {
+                            const next = new Set(cur);
+                            if (e.target.checked) next.add(f.id);
+                            else next.delete(f.id);
+                            return next;
+                          })
+                        }
+                      />
+                      <span className="body-sm" style={{ flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {f.name}
+                      </span>
+                      <span className="chip count" style={{ fontSize: 10 }}>{colour}</span>
+                      {already ? (
+                        <span className="chip neutral" style={{ fontSize: 10 }} title="A variant in this colour already exists on this template">
+                          already added
+                        </span>
+                      ) : null}
+                    </label>
+                  );
+                })}
+                {excluded.map((f) => (
+                  <div key={f.id} className="row-gap-8" style={{ alignItems: "center", opacity: 0.75 }}>
+                    <span style={{ width: 13 }} />
+                    <span className="hint" style={{ flex: "1 1 200px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {f.name}
+                    </span>
+                    <span className="chip stale" style={{ fontSize: 10 }}>
+                      {f.role.kind === "info-graphic"
+                        ? `info graphic — use as the Product's ${f.role.role} link`
+                        : "no colour matched — excluded"}
+                    </span>
+                  </div>
+                ))}
+                {variants.length === 0 ? (
+                  <span className="hint">No colour variants recognised in this folder.</span>
+                ) : null}
+              </div>
+              {progress ? <span className="hint">{progress}</span> : null}
+              {results ? (
+                <div className="stack-12" style={{ gap: 2 }}>
+                  {results.map((r) => (
+                    <span key={r.name} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
+                      {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={importPicked}
+                  disabled={busy !== null || picked.size === 0 || !activeRect}
+                  title={!activeRect ? "This template has no saved geometry" : undefined}
+                >
+                  <Spinner active={busy === "import"} />
+                  Import {picked.size} colour{picked.size === 1 ? "" : "s"} from Drive
+                </button>
+                <button className="btn btn-tertiary" onClick={list} disabled={busy !== null}>
+                  Re-list
+                </button>
+              </div>
+            </>
+          )}
+          {error ? <div className="callout blocked">{error}</div> : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * Step 2: add colour variants to an EXISTING template. Geometry is
  * inherited — the crop and print region were decided once at definition —
  * so this form is photos and colour names, nothing else. Colour is read
@@ -1023,10 +1275,12 @@ function TemplateDefine({ onClose }: { onClose: () => void }) {
 function AddVariants({
   shots,
   palette,
+  drive,
   onClose,
 }: {
   shots: MockupShotOption[];
   palette: string[];
+  drive: DriveStatus;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -1141,13 +1395,19 @@ function AddVariants({
             ))}
           </select>
         </div>
-        {template?.driveFolderLink ? (
-          <span className="chip neutral" style={{ fontSize: 11 }} title={template.driveFolderLink}>
-            Drive folder linked — auto-import arrives with Google OAuth
+        {template && !template.driveFolderLink ? (
+          <span className="hint" style={{ alignSelf: "center" }}>
+            No Drive folder on this template — auto-import needs one, set at definition. Manual drop
+            below still works.
           </span>
         ) : null}
       </div>
 
+      {template?.driveFolderLink ? (
+        <DriveImport template={template} palette={palette} drive={drive} />
+      ) : null}
+
+      <Kicker>OR DROP FILES MANUALLY</Kicker>
       <div className="stack-12">
         {rows.map((row, i) => (
           <div key={row.key} className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
@@ -1217,11 +1477,34 @@ export function MockupTemplatesSection({
   templates,
   shots,
   palette,
+  drive,
 }: {
   templates: MockupTemplateCard[];
   shots: MockupShotOption[];
   palette: string[];
+  drive: DriveStatus;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [driveNotice, setDriveNotice] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+
+  // the OAuth callback lands back here with ?drive_connected= or
+  // ?drive_error= — show it once, then strip it so a reload doesn't repeat
+  useEffect(() => {
+    const connected = searchParams.get("drive_connected");
+    const err = searchParams.get("drive_error");
+    if (!connected && !err) return;
+    if (connected) setDriveNotice("Google Drive connected — templates with a folder link can auto-import now.");
+    if (err) setDriveError(err);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("drive_connected");
+    params.delete("drive_error");
+    router.replace(params.toString() ? `${pathname}?${params}` : pathname, { scroll: false });
+    // one-time on arrival only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Exactly one form at a time — two of these open side by side, sharing
   // the page, was the overlapping-forms mess the two-phase flow retires.
   // A closed form unmounts entirely, so half-typed state can never leak
@@ -1247,8 +1530,10 @@ export function MockupTemplatesSection({
         </div>
       </div>
       {openForm === "define" ? <TemplateDefine onClose={() => setOpenForm(null)} /> : null}
+      {driveNotice ? <span className="hint">{driveNotice}</span> : null}
+      {driveError ? <div className="callout blocked">Google Drive: {driveError}</div> : null}
       {openForm === "variants" ? (
-        <AddVariants shots={shots} palette={palette} onClose={() => setOpenForm(null)} />
+        <AddVariants shots={shots} palette={palette} drive={drive} onClose={() => setOpenForm(null)} />
       ) : null}
       {openForm === "single" ? <MockupTemplateIntake onClose={() => setOpenForm(null)} /> : null}
       <div className="inbox-grid">

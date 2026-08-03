@@ -106,6 +106,10 @@ function main() {
   // Today's Notion gate checks this too — the fixture simulates an
   // already-provisioned app, not first-run setup.
   setMeta("schema_provisioned_at", NOW);
+  // simulate a connected Google Drive so the auto-import UI renders in
+  // shots (the preview server never actually calls Google)
+  setMeta("google_refresh_token", "ui-preview-token");
+  setMeta("google_connected_at", NOW);
 
   const product = rec("products", "product-1", "Comfort Colors® Garment-Dyed Sweatshirt — SwiftPOD", {
     Name: "Comfort Colors® Garment-Dyed Sweatshirt — SwiftPOD",

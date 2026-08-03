@@ -19,7 +19,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Spinner } from "./ui";
+import { Kicker, Spinner } from "./ui";
 import { apiJson } from "@/lib/api";
 import { BUCKETS, TAG_COUNT, TAG_MAX_CHARS, type Bucket } from "@/config/keywords";
 
@@ -1017,6 +1017,48 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         )}
       </Section>
 
+      {/* One action, three sections. It writes Title, Attributes and the
+          hook together, so it sits above all three rather than inside the
+          one it happens to share a row with — it lived under the hook
+          labelled "Generate hook draft", where nothing about it said it
+          would rewrite the title, and nobody looking for it at the top of
+          the copy panel could find it. Swap moves with it: that restores
+          the same three fields and had the same problem. */}
+      <div className="card supporting" style={{ gap: 8 }}>
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <Kicker>DRAFT COPY</Kicker>
+          {seo.aiReady ? (
+            <>
+              {prevDraft ? (
+                <button className="btn btn-secondary" disabled={busy !== null} onClick={swapDrafts}>
+                  ⇄ Swap to previous draft
+                </button>
+              ) : null}
+              <button
+                className="btn btn-primary"
+                style={{ marginLeft: "auto" }}
+                disabled={busy !== null || generateBlocker !== null}
+                title={generateBlocker ?? undefined}
+                onClick={generate}
+              >
+                <Spinner active={busy === "generate"} />
+                Generate draft copy
+              </button>
+            </>
+          ) : (
+            <span className="hint" style={{ marginLeft: "auto" }}>
+              Set ANTHROPIC_API_KEY to generate drafts.
+            </span>
+          )}
+        </div>
+        <span className="hint">
+          Writes the title, attributes and description hook together from this design, your shop
+          voice and the SAVED keywords above. Drafts only — nothing saves without its own button.
+          {prevDraft ? " Regenerating keeps the last two versions." : ""}
+        </span>
+        {generateBlocker ? <span className="hint">Locked: {generateBlocker}</span> : null}
+      </div>
+
       {/* ③ title — full text always visible (a wrapping textarea, so a long
           title can never scroll its own start out of view) */}
       <Section
@@ -1136,11 +1178,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       >
         <span className="kicker">HOOK IN SHOP VOICE</span>
         {/* the note sits plainly under the subheading — no shaded box */}
-        <span className="hint">
-          Drafts only — nothing saves without its button.
-          {prevDraft ? " Regenerating keeps the last two versions." : ""}
-        </span>
-        {generateBlocker ? <span className="hint">Locked: {generateBlocker}</span> : null}
+        <span className="hint">Drafts only — nothing saves without its button.</span>
         <textarea
           id="l2-hook"
           className="input"
@@ -1162,25 +1200,6 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
             {busy === "hook" ? <span className="spinner" /> : null}
             Save hook
           </button>
-          {prevDraft ? (
-            <button className="btn btn-secondary" disabled={busy !== null} onClick={swapDrafts}>
-              ⇄ Swap to previous draft
-            </button>
-          ) : null}
-          {seo.aiReady ? (
-            <button
-              className="btn btn-primary"
-              style={{ marginLeft: "auto" }}
-              disabled={busy !== null || generateBlocker !== null}
-              title={generateBlocker ?? undefined}
-              onClick={generate}
-            >
-              <Spinner active={busy === "generate"} />
-              Generate hook draft
-            </button>
-          ) : (
-            <span className="hint" style={{ marginLeft: "auto" }}>Set ANTHROPIC_API_KEY to generate drafts.</span>
-          )}
         </div>
 
         {/* the boilerplate row — collapsed by default, badge says its state */}

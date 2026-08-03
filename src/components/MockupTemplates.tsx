@@ -930,7 +930,7 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
     try {
       // preview-sized and never upscaled — this file goes nowhere
       const target = Math.max(64, Math.min(1200, cropPx ?? 1200));
-      const file = await cropToStandardSize(sample, rect, target);
+      const { file } = await cropToStandardSize(sample, rect, target);
       setCroppedPreview((old) => {
         if (old) URL.revokeObjectURL(old);
         return URL.createObjectURL(file);
@@ -1162,9 +1162,9 @@ function DriveImport({
           });
           continue;
         }
-        const cropped = await cropToStandardSize(file, activeRect, target);
+        const { file: cropped, size } = await cropToStandardSize(file, activeRect, target);
         const form = new FormData();
-        form.append("name", `${template.name} - ${colour} - ${target}`);
+        form.append("name", `${template.name} - ${colour} - ${size}`);
         form.append("pipelineType", "Simple Placement");
         form.append("blendMode", DEFAULT_BLEND);
         form.append("fitMode", DEFAULT_FIT);
@@ -1175,7 +1175,7 @@ function DriveImport({
         setProgress(`Uploading ${i}/${targets.length} — ${colour}…`);
         const up = await apiCall("/api/mockup-templates", { method: "POST", body: form });
         if (!up.ok) throw new Error(up.error ?? "upload failed");
-        out.push({ name: f.name, detail: `${colour} · ${target}×${target}`, ok: true });
+        out.push({ name: f.name, detail: `${colour} · ${size}×${size}`, ok: true });
       } catch (err) {
         out.push({ name: f.name, detail: (err as Error).message, ok: false });
       }
@@ -1389,11 +1389,11 @@ function AddVariants({
       for (const row of activeRows) {
         if (!row.file) continue;
         const target = outputSizeOf(row) ?? MOCKUP_CROP_MIN;
-        const cropped = await cropToStandardSize(row.file, activeRect, target);
+        const { file: cropped, size } = await cropToStandardSize(row.file, activeRect, target);
         const form = new FormData();
         // {template} - {colour} - {px}: px is the ACTUAL adaptive output —
         // a tier label like "4K" on a 2513px file would be a lie
-        form.append("name", `${template.name} - ${row.color.trim()} - ${target}`);
+        form.append("name", `${template.name} - ${row.color.trim()} - ${size}`);
         form.append("pipelineType", "Simple Placement");
         form.append("blendMode", DEFAULT_BLEND);
         form.append("fitMode", DEFAULT_FIT);

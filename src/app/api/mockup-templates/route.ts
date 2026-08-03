@@ -50,7 +50,27 @@ async function compressLayer(file: File, maxEdge = 2000): Promise<File> {
  */
 export async function POST(req: Request) {
   try {
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch (err) {
+      // Next.js rejects a request body over ~10MB by failing the multipart
+      // parse, so the only symptom of "too big" is a message that says
+      // "malformed". Clients keep uploads under MAX_UPLOAD_BYTES; if one
+      // still lands here, name the real cause rather than repeat undici's.
+      const raw = (err as Error).message ?? "";
+      if (raw.includes("FormData")) {
+        return NextResponse.json(
+          {
+            error:
+              "The upload was too large for the server to accept (the limit is about 10MB per request). " +
+              "This is a size problem, not a corrupt file — re-crop a smaller region or use a smaller source photo.",
+          },
+          { status: 413 }
+        );
+      }
+      throw err;
+    }
     const str = (k: string) => {
       const v = form.get(k);
       return typeof v === "string" ? v.trim() : "";

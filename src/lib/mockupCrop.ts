@@ -70,26 +70,99 @@ function squareSource(rect: CropRect, width: number, height: number) {
 }
 
 /**
- * Crops `file` to `rect`'s square and resizes to exactly target×target.
- * Pass the target from cropOutputSize() so this never upscales.
+ * The upload budget for one cropped photo.
+ *
+ * Next.js route handlers reject a request body over ~10MB, and they reject
+ * it in the least helpful way available: req.formData() throws "Failed to
+ * parse body as FormData", which reads like malformed multipart rather than
+ * "too big". A 4000² crop of a real photo encodes to ~20MB as PNG, so every
+ * upload of a full-size crop failed, every time, with a message pointing
+ * nowhere near the cause. Budget is set below the wall to leave room for
+ * the other form fields and multipart framing.
  */
-export async function cropToStandardSize(file: File, rect: CropRect, target: number): Promise<File> {
-  const bitmap = await createImageBitmap(file);
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+/** The floor a crop may never be shrunk past to fit the budget. */
+const MOCKUP_CROP_MIN = 2000;
+
+/** Quality ladder — first rung under budget wins. */
+const WEBP_QUALITY_STEPS = [0.92, 0.85, 0.78, 0.7, 0.6];
+
+function toBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+/**
+ * Encodes this canvas under MAX_UPLOAD_BYTES, or returns null to say no
+ * quality setting got there.
+ *
+ * Lossy is the right default and costs nothing real: the receiving route
+ * re-encodes every layer to WebP with sharp regardless, so a lossless PNG
+ * upload only ever paid ~20MB of transfer to hand the server pixels it was
+ * about to throw away.
+ */
+async function encodeUnderBudget(canvas: HTMLCanvasElement): Promise<{ blob: Blob; ext: string } | null> {
+  for (const quality of WEBP_QUALITY_STEPS) {
+    const blob = await toBlob(canvas, "image/webp", quality);
+    // a browser that can't encode WebP silently hands back PNG — take the
+    // JPEG path rather than shipping an unbudgeted PNG
+    if (!blob || blob.type !== "image/webp") break;
+    if (blob.size <= MAX_UPLOAD_BYTES) return { blob, ext: "webp" };
+  }
+  for (const quality of WEBP_QUALITY_STEPS) {
+    const blob = await toBlob(canvas, "image/jpeg", quality);
+    if (blob && blob.size <= MAX_UPLOAD_BYTES) return { blob, ext: "jpg" };
+  }
+  return null;
+}
+
+function drawSquare(bitmap: ImageBitmap, rect: CropRect, size: number): HTMLCanvasElement {
   const { sx, sy, side } = squareSource(rect, bitmap.width, bitmap.height);
   const canvas = document.createElement("canvas");
-  canvas.width = target;
-  canvas.height = target;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext("2d");
-  if (!ctx) {
+  if (!ctx) throw new Error("Canvas 2D context unavailable.");
+  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, size, size);
+  return canvas;
+}
+
+/**
+ * Crops `file` to `rect`'s square and resizes to exactly target×target.
+ * Pass the target from cropOutputSize() so this never upscales.
+ *
+ * Resolution is given up only after quality is: an exceptionally detailed
+ * crop drops through the quality ladder first, and shrinks the square only
+ * if even the lowest quality won't fit the upload. Never below
+ * MOCKUP_CROP_MIN — under that a variant isn't worth saving, so failing
+ * loudly beats quietly storing one.
+ */
+export async function cropToStandardSize(
+  file: File,
+  rect: CropRect,
+  target: number
+): Promise<{ file: File; size: number }> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    for (let size = target; ; size = Math.round(size * 0.8)) {
+      const encoded = await encodeUnderBudget(drawSquare(bitmap, rect, size));
+      if (encoded) {
+        const name = file.name.replace(/\.[^.]+$/, "") + `-${size}.${encoded.ext}`;
+        // size is what was ACTUALLY produced, not what was asked for — the
+        // variant's name records it, and a name that lies about resolution
+        // is worse than no name at all
+        return { file: new File([encoded.blob], name, { type: encoded.blob.type }), size };
+      }
+      if (Math.round(size * 0.8) < MOCKUP_CROP_MIN) {
+        throw new Error(
+          `This photo won't compress under ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB ` +
+            `without dropping below ${MOCKUP_CROP_MIN}px. Re-crop a smaller region.`
+        );
+      }
+    }
+  } finally {
+    // close only AFTER every draw — a closed bitmap is detached, and
+    // drawing one throws InvalidStateError
     bitmap.close?.();
-    throw new Error("Canvas 2D context unavailable.");
   }
-  // close only AFTER the draw — a closed bitmap is detached, and drawing
-  // one throws InvalidStateError
-  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, target, target);
-  bitmap.close?.();
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) throw new Error("Couldn't encode the cropped image.");
-  const name = file.name.replace(/\.[^.]+$/, "") + `-${target}.png`;
-  return new File([blob], name, { type: "image/png" });
 }

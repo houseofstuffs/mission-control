@@ -24,6 +24,49 @@ export function flatten(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+/**
+ * The filename split into words, so a match can be required to start and
+ * end on a real boundary.
+ *
+ * Flattening the WHOLE name into one string and searching inside it was too
+ * loose in exactly the way brand names punish: every file in the shop's
+ * folder is named "GOLDIE MOCKS - Comfort Colors 1466 - GM052 Yam - ...",
+ * and "goldiemocks" contains "gold". Longest-match then preferred the
+ * supplier's brand over the actual colour on every short name — Yam (3)
+ * lost to Gold (4) outright, Grey (4) lost the tie on palette order. The
+ * other twelve colours only survived by being longer than "gold".
+ *
+ * Splitting on separators alone isn't enough either, because one of the two
+ * real formats glues the colour together as PascalCase ("BlueJean_C1466"),
+ * so case transitions and letter/digit transitions are boundaries too.
+ */
+function words(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // BlueJean -> Blue Jean
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2") // Yam3924  -> Yam 3924
+    .replace(/([0-9])([A-Za-z])/g, "$1 $2") // 1466MBLF -> 1466 MBLF
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Does some run of whole words join to exactly `needle`? "Blue Jean",
+ * "Blue_Jean" and "BlueJean" all reach "bluejean"; "goldie" never reaches
+ * "gold".
+ */
+function hasWordRun(words: string[], needle: string): boolean {
+  for (let i = 0; i < words.length; i++) {
+    let joined = "";
+    for (let j = i; j < words.length; j++) {
+      joined += words[j];
+      if (joined === needle) return true;
+      if (joined.length >= needle.length) break;
+    }
+  }
+  return false;
+}
+
 /** Filenames that are branded graphics rather than a garment colour. */
 const INFO_GRAPHIC_ROLES: Array<{ role: string; tokens: string[] }> = [
   { role: "Highlights & Sizing", tokens: ["sizechart", "sizeguide", "sizing", "measurements"] },
@@ -44,11 +87,11 @@ export type FileRole =
  * Jean file "Blue".
  */
 export function detectColour(filename: string, palette: string[]): string | null {
-  const haystack = flatten(filename);
+  const parts = words(filename);
   let best: { colour: string; length: number } | null = null;
   for (const colour of palette) {
     const needle = flatten(colour);
-    if (!needle || !haystack.includes(needle)) continue;
+    if (!needle || !hasWordRun(parts, needle)) continue;
     if (!best || needle.length > best.length) best = { colour, length: needle.length };
   }
   return best?.colour ?? null;
@@ -64,9 +107,10 @@ export function classifyFile(filename: string, palette: string[]): FileRole {
   const colour = detectColour(filename, palette);
   if (colour) return { kind: "variant", colour };
 
-  const haystack = flatten(filename);
+  // same boundary rule — "care" should match "Care Guide", not "Scarecrow"
+  const parts = words(filename);
   for (const { role, tokens } of INFO_GRAPHIC_ROLES) {
-    if (tokens.some((t) => haystack.includes(t))) return { kind: "info-graphic", role };
+    if (tokens.some((t) => hasWordRun(parts, t))) return { kind: "info-graphic", role };
   }
   return { kind: "unknown" };
 }

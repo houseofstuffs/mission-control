@@ -95,8 +95,17 @@ export const DEFAULT_QUAD: Quad = [
  * decision per shot, reused by every colour variant and every render
  * forever after (src/lib/mockupCrop.ts). 1:1 so it works as a listing
  * thumbnail directly, no letterboxing.
+ *
+ * The SIZE is adaptive between the floor and the cap, because a tight
+ * garment crop out of a big photo still yields far fewer pixels than the
+ * photo's own dimensions suggest: a 6830×5464 shot cropped to the garment
+ * gives ~2,500px, not 4,000. Demanding the cap outright blocked saves on
+ * perfectly usable sources. Upscaling is never the answer — a crop that
+ * can't reach the floor is genuinely too small and gets flagged.
  */
 export const MOCKUP_CROP_SIZE = 4000;
+/** Below this the crop isn't worth keeping — flagged, and the save is blocked. */
+export const MOCKUP_CROP_MIN = 2000;
 
 /** A fresh shot crop starts centred, sized to whatever fits — the guard corrects it if it's infeasible. */
 export const DEFAULT_CROP_RECT = { x: 0.15, y: 0.15, size: 0.7 };

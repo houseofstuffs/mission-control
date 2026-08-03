@@ -18,7 +18,7 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
-import { nativeDimensions, cropFeasible, cropToStandardSize, type CropRect } from "@/lib/mockupCrop";
+import { nativeDimensions, cropOutputSize, cropSquarePixels, cropToStandardSize, type CropRect } from "@/lib/mockupCrop";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
@@ -27,6 +27,7 @@ import {
   DEFAULT_FIT,
   DEFAULT_QUAD,
   MOCKUP_CROP_SIZE,
+  MOCKUP_CROP_MIN,
   DEFAULT_CROP_RECT,
   type Quad,
 } from "@/config/mockups";
@@ -841,9 +842,10 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
   }
 
   const activeRows = rows.filter((r) => r.file);
-  const infeasible = activeRows.filter(
-    (r) => r.dims && !cropFeasible(r.dims.width, r.dims.height, activeRect, MOCKUP_CROP_SIZE)
-  );
+  /** each row's own output side — adaptive, so one weak photo can't cap the rest */
+  const outputSizeOf = (r: ShotColorRow): number | null =>
+    r.dims ? cropOutputSize(r.dims.width, r.dims.height, activeRect, MOCKUP_CROP_MIN, MOCKUP_CROP_SIZE) : null;
+  const infeasible = activeRows.filter((r) => r.dims && outputSizeOf(r) === null);
   const shotName = existingShot?.name ?? newShotName.trim();
   const blocked = !shotName
     ? "Name the shot (or pick an existing one)."
@@ -852,7 +854,9 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
       : activeRows.some((r) => !r.color.trim())
         ? "Every photo needs its garment colour."
         : infeasible.length > 0
-          ? `${infeasible.length} photo${infeasible.length === 1 ? "" : "s"} can't produce a sharp ${MOCKUP_CROP_SIZE}×${MOCKUP_CROP_SIZE} crop at this framing — shrink the rectangle or drop them.`
+          ? // ENLARGE, not shrink: a bigger rectangle takes in more source
+            // pixels. The old wording sent you the wrong way.
+            `${infeasible.length} photo${infeasible.length === 1 ? "" : "s"} can't reach ${MOCKUP_CROP_MIN}×${MOCKUP_CROP_MIN} at this framing — enlarge the rectangle or drop them.`
           : null;
 
   async function apply() {
@@ -867,7 +871,11 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
       }
       for (const row of activeRows) {
         if (!row.file) continue;
-        const cropped = await cropToStandardSize(row.file, activeRect, MOCKUP_CROP_SIZE);
+        // per-photo: capped at MOCKUP_CROP_SIZE, never upscaled past what
+        // this crop actually holds. The blocked-check above already ruled
+        // out anything under the floor.
+        const target = outputSizeOf(row) ?? MOCKUP_CROP_MIN;
+        const cropped = await cropToStandardSize(row.file, activeRect, target);
         const form = new FormData();
         form.append("name", `${shotName} — ${row.color.trim()}`);
         form.append("pipelineType", "Simple Placement");
@@ -964,10 +972,19 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
               />
             </div>
             {row.dims ? (
-              <span className={`chip ${infeasible.includes(row) ? "blocked" : "done"}`} style={{ fontSize: 11 }}>
-                {row.dims.width}×{row.dims.height}
-                {infeasible.includes(row) ? " — too small at this crop" : " ✓"}
-              </span>
+              (() => {
+                // the source size alone doesn't predict the output — say what
+                // this crop actually yields, per photo
+                const out = outputSizeOf(row);
+                return (
+                  <span className={`chip ${out === null ? "blocked" : "done"}`} style={{ fontSize: 11 }}>
+                    {row.dims.width}×{row.dims.height}
+                    {out === null
+                      ? ` — crop yields ${cropSquarePixels(row.dims.width, row.dims.height, activeRect)}px, under ${MOCKUP_CROP_MIN}`
+                      : ` → ${out}×${out}`}
+                  </span>
+                );
+              })()
             ) : null}
             {rows.length > 1 ? (
               <button className="btn btn-tertiary" style={{ fontSize: 11, padding: "3px 7px" }} onClick={() => removeRow(row.key)}>

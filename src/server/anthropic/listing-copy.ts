@@ -12,6 +12,14 @@ import { anthropic, model } from "./client";
 import { SHOP_VOICE } from "@/config/shop-voice";
 import { TAG_MAX_CHARS, TAG_COUNT, TARGET_MIX } from "@/config/keywords";
 
+/**
+ * Which pieces one call drafts. The L2 chain generates in two steps —
+ * title+attributes depend only on keywords and design context, and the
+ * hook is written afterward against the title the operator actually
+ * settled on. "all" is the manual button's one-shot, unchanged.
+ */
+export type CopyStage = "all" | "title-attributes" | "hook";
+
 export interface ListingCopyInput {
   designName: string;
   /** the lettering instruction / printed copy, when the design has any */
@@ -27,6 +35,9 @@ export interface ListingCopyInput {
   /** existing values, so a regenerate can improve rather than ignore them */
   currentTitle: string;
   currentTags: string[];
+  /** the saved attributes — context for the hook stage, which runs after they're settled */
+  currentAttributes?: Array<{ name: string; value: string }>;
+  stage?: CopyStage;
 }
 
 export interface ListingCopyDraft {
@@ -37,9 +48,7 @@ export interface ListingCopyDraft {
   notes: string;
 }
 
-const DRAFT_SCHEMA = {
-  type: "object",
-  properties: {
+const FIELD = {
     title: {
       type: "string",
       description:
@@ -78,10 +87,24 @@ const DRAFT_SCHEMA = {
       description:
         "One or two sentences only if genuinely useful (e.g. a strong keyword left out of the title and why). Empty string otherwise.",
     },
-  },
-  required: ["title", "tags", "hook", "attributes", "notes"],
-  additionalProperties: false,
 } as const;
+
+/** The fields each stage drafts — the schema and the required list follow from this. */
+const STAGE_FIELDS: Record<CopyStage, Array<keyof typeof FIELD>> = {
+  all: ["title", "tags", "hook", "attributes", "notes"],
+  "title-attributes": ["title", "tags", "attributes", "notes"],
+  hook: ["hook", "notes"],
+};
+
+function schemaFor(stage: CopyStage) {
+  const keys = STAGE_FIELDS[stage];
+  return {
+    type: "object",
+    properties: Object.fromEntries(keys.map((k) => [k, FIELD[k]])),
+    required: [...keys],
+    additionalProperties: false,
+  };
+}
 
 const SYSTEM = `You draft Etsy listing copy for STUFFS, a solo-operator print-on-demand shop.
 
@@ -99,9 +122,28 @@ Every field is a draft the operator edits — write working copy, not options
 or explanations.`;
 
 export async function draftListingCopy(input: ListingCopyInput): Promise<ListingCopyDraft> {
+  const stage: CopyStage = input.stage ?? "all";
   const kwLines = input.keywords
     .map((k) => `- "${k.name}" [${k.bucket}${k.tagEligible ? "" : " · over 20 chars, title-only"}]`)
     .join("\n");
+  // The hook stage runs AFTER the title and attributes are settled, so it
+  // gets them as fixed context to write against rather than as things to
+  // improve — that ordering is the whole point of splitting the stages.
+  const settled =
+    stage === "hook"
+      ? [
+          input.currentTitle ? `FINAL TITLE (already saved — write to match it): ${input.currentTitle}` : "",
+          input.currentAttributes?.length
+            ? `FINAL ATTRIBUTES: ${input.currentAttributes.map((a) => `${a.name}: ${a.value}`).join(" · ")}`
+            : "",
+        ]
+      : [input.currentTitle ? `CURRENT TITLE (improve, don't ignore): ${input.currentTitle}` : ""];
+  const ask: Record<CopyStage, string> = {
+    all: "Draft the title, tag set, description hook, and attribute suggestions.",
+    "title-attributes":
+      "Draft the title, tag set and attribute suggestions. Do NOT write the description hook — it is drafted separately once the title is settled.",
+    hook: "Draft ONLY the description hook, opening the description under the title above.",
+  };
   const user = [
     `DESIGN: ${input.designName}`,
     input.printedCopy ? `PRINTED COPY / LETTERING: ${input.printedCopy}` : "PRINTED COPY: (artwork only, no lettering)",
@@ -113,10 +155,10 @@ export async function draftListingCopy(input: ListingCopyInput): Promise<Listing
     "",
     "SELECTED KEYWORDS (buckets computed from real search data):",
     kwLines || "(none toggled on yet — draft from the design context and say so in notes)",
-    input.currentTitle ? `\nCURRENT TITLE (improve, don't ignore): ${input.currentTitle}` : "",
+    ...settled,
     input.currentTags.length ? `CURRENT TAGS: ${input.currentTags.join(", ")}` : "",
     "",
-    "Draft the title, tag set, description hook, and attribute suggestions.",
+    ask[stage],
   ]
     .filter((l) => l !== "")
     .join("\n");
@@ -126,7 +168,7 @@ export async function draftListingCopy(input: ListingCopyInput): Promise<Listing
       model: model(),
       max_tokens: 4000,
       system: SYSTEM,
-      output_config: { format: { type: "json_schema", schema: DRAFT_SCHEMA } },
+      output_config: { format: { type: "json_schema", schema: schemaFor(stage) } },
       messages: [{ role: "user", content: [{ type: "text", text: user }] }],
     })
     .finalMessage();
@@ -136,7 +178,16 @@ export async function draftListingCopy(input: ListingCopyInput): Promise<Listing
   }
   const block = message.content.find((b) => b.type === "text");
   if (!block || block.type !== "text") throw new Error("No draft returned — try again.");
-  const draft = JSON.parse(block.text) as ListingCopyDraft;
+  const parsed = JSON.parse(block.text) as Partial<ListingCopyDraft>;
+  // A stage only fills its own fields; the rest come back empty so the
+  // caller can apply the result without having to know the stage's shape.
+  const draft: ListingCopyDraft = {
+    title: parsed.title ?? "",
+    tags: parsed.tags ?? [],
+    hook: parsed.hook ?? "",
+    attributes: parsed.attributes ?? [],
+    notes: parsed.notes ?? "",
+  };
 
   // Belt over the schema's braces: drop over-cap tags and duplicates so the
   // UI never has to reject what generation proposed.

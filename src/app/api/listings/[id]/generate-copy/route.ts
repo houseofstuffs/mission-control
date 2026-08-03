@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, cachedRecords } from "@/server/notion/store";
 import { anthropicConfigured } from "@/server/anthropic/client";
-import { draftListingCopy } from "@/server/anthropic/listing-copy";
+import { draftListingCopy, type CopyStage } from "@/server/anthropic/listing-copy";
 import { productLabel } from "@/server/viewmodels";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/** The attributes already on the record — the hook stage writes against them. */
+function savedAttributes(raw: unknown): Array<{ name: string; value: string }> {
+  try {
+    const parsed = JSON.parse(String(raw ?? "[]"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((a) => ({ name: String(a?.name ?? ""), value: String(a?.value ?? "") }))
+      .filter((a) => a.name && a.value);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * L2 draft generation — returns a draft, WRITES NOTHING. The panel renders
@@ -25,7 +38,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
     const { id } = await ctx.params;
-    await req.json().catch(() => ({}));
+    const body = await req.json().catch(() => ({}));
+    const stage: CopyStage = ["title-attributes", "hook"].includes(body?.stage)
+      ? body.stage
+      : "all";
     const listing = cachedRecord(id);
     if (!listing || listing.dbKey !== "etsy_listings") {
       return NextResponse.json({ error: "Listing not found in cache — refresh first" }, { status: 404 });
@@ -98,6 +114,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean),
+      currentAttributes: savedAttributes(listing.props["Attributes (JSON)"]),
+      stage,
     });
 
     return NextResponse.json({ draft });

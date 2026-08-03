@@ -22,6 +22,7 @@ import Link from "next/link";
 import { Spinner } from "./ui";
 import { apiJson } from "@/lib/api";
 import { BUCKETS, TAG_COUNT, TAG_MAX_CHARS, type Bucket } from "@/config/keywords";
+import type { CopyStage } from "@/server/anthropic/listing-copy";
 
 export interface KeywordRow {
   id: string;
@@ -114,6 +115,11 @@ const TagSelection = createContext<{
    *  unsaved" without knowing about each field individually. */
   otherDirty: boolean;
   setOtherDirty: (d: boolean) => void;
+  /** bumped when the rail commits the tag selection. The copy chain starts
+   *  from that ACTION, not from the record's state — a listing that simply
+   *  has tags and no title must not start drafting on every page load. */
+  tagsSavedTick: number;
+  markTagsSaved: () => void;
 } | null>(null);
 
 export function TagSelectionProvider({ initial, children }: { initial: string; children: ReactNode }) {
@@ -122,8 +128,20 @@ export function TagSelectionProvider({ initial, children }: { initial: string; c
   );
   const [dirty, setDirty] = useState(false);
   const [otherDirty, setOtherDirty] = useState(false);
+  const [tagsSavedTick, setTagsSavedTick] = useState(0);
   return (
-    <TagSelection.Provider value={{ tags, setTags, dirty, setDirty, otherDirty, setOtherDirty }}>
+    <TagSelection.Provider
+      value={{
+        tags,
+        setTags,
+        dirty,
+        setDirty,
+        otherDirty,
+        setOtherDirty,
+        tagsSavedTick,
+        markTagsSaved: () => setTagsSavedTick((n) => n + 1),
+      }}
+    >
       {children}
     </TagSelection.Provider>
   );
@@ -231,7 +249,7 @@ interface CopyDraft {
 export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
   const router = useRouter();
   // tier 2 is shared with the SelectedTagsRail on the right — one state
-  const { tags, setTags, dirty, setDirty, setOtherDirty } = useTagSelection();
+  const { tags, setTags, dirty, setDirty, setOtherDirty, tagsSavedTick } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -577,7 +595,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     setConflicts((cur) => cur.filter((x) => x.id !== c.id));
   }
 
-  async function generate() {
+  async function generate(stage: CopyStage = "all") {
     setBusy("generate");
     setError(null);
     // the server reads the SAVED tags off the record — the locked-in
@@ -585,7 +603,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
     const res = await apiJson<{ draft: CopyDraft }>(
       `/api/listings/${seo.listingId}/generate-copy`,
       "POST",
-      {}
+      { stage }
     );
     if (!res.ok) setError(res.error);
     else {
@@ -593,12 +611,22 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       // stash what's on screen BEFORE overwriting — regenerating for one
       // field must never silently cost an unsaved version of another
       setPrevDraft({ title, hook, attrs, suggested: suggestedTags });
-      setTitle(d.title);
-      setHook(d.hook);
-      if (d.attributes.length > 0) setAttrs(d.attributes);
-      setSuggestedTags(d.tags.filter((t) => !inTagList(t)));
+      // each stage writes only its own fields; the hook stage must not
+      // blank the title the operator just settled on
+      if (stage !== "hook") {
+        setTitle(d.title);
+        if (d.attributes.length > 0) setAttrs(d.attributes);
+        setSuggestedTags(d.tags.filter((t) => !inTagList(t)));
+      }
+      if (stage !== "title-attributes") setHook(d.hook);
       setDraftNotes(d.notes);
-      setNotice("Draft ready — everything below is editable, nothing is saved yet.");
+      setNotice(
+        stage === "title-attributes"
+          ? "Title and attributes drafted from your saved keywords — edit them, then save each. Saving both drafts the description hook next."
+          : stage === "hook"
+            ? "Description hook drafted against your saved title and attributes — edit it, then save."
+            : "Draft ready — everything below is editable, nothing is saved yet."
+      );
     }
     setBusy(null);
   }
@@ -629,6 +657,62 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
       : dirty
         ? "Save the Selected tags first — the draft builds on your locked-in decision."
         : null;
+
+  /**
+   * The copy chain. Saving tags drafts the title and attributes (both are
+   * functions of keywords + design + shop voice); saving BOTH of those
+   * drafts the hook, which is written against the title finally settled
+   * on. Each stage produces a DRAFT — the operator still saves it, and
+   * that save is what advances the chain, so nothing reaches Notion
+   * unreviewed.
+   *
+   * Armed by an action, never by state alone: `pendingStage` is only set
+   * from a save handler, so opening a listing that happens to have tags
+   * and no title never starts generating on its own.
+   */
+  const [pendingStage, setPendingStage] = useState<CopyStage | null>(null);
+  const firstTagSave = useRef(true);
+  useEffect(() => {
+    if (tagsSavedTick === 0) return; // the initial render, not a save
+    if (!firstTagSave.current) return;
+    firstTagSave.current = false;
+    // only the FIRST draft is automatic — an existing title or attribute
+    // set means this listing has been written, and a re-save of tags must
+    // not silently rewrite it. Checked against what's ON SCREEN as well as
+    // what's saved: unsaved typing is still the operator's work.
+    if (seo.title.trim() || seo.attributes.length > 0) return;
+    if (title.trim() || attrs.some((a) => a.name.trim() && a.value.trim())) return;
+    setPendingStage("title-attributes");
+  }, [tagsSavedTick, seo.title, seo.attributes.length, title, attrs]);
+
+  useEffect(() => {
+    if (!pendingStage) return;
+    if (!seo.aiReady || generateBlocker !== null || busy !== null) return;
+    if (pendingStage === "hook") {
+      // wait for BOTH halves to be on the record — a title saved before
+      // its attributes leaves the stage pending, not cancelled
+      if (!seo.title.trim() || seo.attributes.length === 0) return;
+      if (seo.hook.trim()) {
+        setPendingStage(null); // already written; the button still regenerates
+        return;
+      }
+    }
+    const stage = pendingStage;
+    setPendingStage(null);
+    void generate(stage);
+    // generate() reads its inputs at call time — listing it would re-fire
+    // the chain on every keystroke in the title box
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStage, seo.title, seo.attributes.length, seo.hook, seo.aiReady, generateBlocker, busy]);
+
+  /** Both copy halves saved → the hook becomes draftable. Called from each save. */
+  function advanceChainAfterCopySave() {
+    // `hook` covers the saved value AND unsaved typing — auto-drafting over
+    // either would be destroying work the operator can't get back without
+    // reaching for the swap button
+    if (hook.trim()) return;
+    setPendingStage("hook");
+  }
 
   const usedBadge = (
     <span className={`chip ${tags.length > TAG_COUNT ? "stale" : "done"}`}>
@@ -1055,7 +1139,10 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               // the PATCH trims before writing; mirror that back into local
               // state so a leading/trailing space can never leave "title"
               // permanently disagreeing with the saved value post-refresh
-              if (ok) setTitle(trimmed);
+              if (ok) {
+                setTitle(trimmed);
+                advanceChainAfterCopySave();
+              }
             }}
           >
             {busy === "title" ? <span className="spinner" /> : null}
@@ -1110,9 +1197,11 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           <button
             className="btn btn-save"
             disabled={busy !== null || !canSaveAttrs}
-            onClick={() => {
+            onClick={async () => {
               if (attrsClearing && !window.confirm("This clears the attributes saved on the listing. Clear them?")) return;
-              call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
+              const ok = await call("attrs", `/api/listings/${seo.listingId}`, "PATCH", { attributes: attrs });
+              // clearing is not progress — only a real attribute set advances
+              if (ok && !attrsClearing) advanceChainAfterCopySave();
             }}
           >
             {busy === "attrs" ? <span className="spinner" /> : null}
@@ -1173,7 +1262,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
               style={{ marginLeft: "auto" }}
               disabled={busy !== null || generateBlocker !== null}
               title={generateBlocker ?? undefined}
-              onClick={generate}
+              onClick={() => generate("all")}
             >
               <Spinner active={busy === "generate"} />
               Generate hook draft
@@ -1288,7 +1377,7 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
  */
 export function SelectedTagsRail({ seo }: { seo: SeoData }) {
   const router = useRouter();
-  const { tags, setTags, dirty, setDirty } = useTagSelection();
+  const { tags, setTags, dirty, setDirty, markTagsSaved } = useTagSelection();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cleanupProgress, setCleanupProgress] = useState<string | null>(null);
@@ -1327,6 +1416,7 @@ export function SelectedTagsRail({ seo }: { seo: SeoData }) {
     if (!res.ok) setError(res.error);
     else {
       setDirty(false);
+      markTagsSaved(); // the copy chain's first link — see the panel's chain effect
       router.refresh();
     }
     setBusy(null);

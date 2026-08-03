@@ -22,7 +22,7 @@ import { TextTreatment, type TextTreatmentData } from "./TextTreatment";
 import { TexturePick, type TextureData } from "./TexturePick";
 import { StandingConstraints } from "./StandingConstraints";
 import { ColorwaysPanel, type ColorwaysData } from "./ColorwaysPanel";
-import { PricingPanel, type PricingData } from "./PricingPanel";
+import { PricingPanel, ShippingProfileCard, type PricingData } from "./PricingPanel";
 import { PrintFilePanel, type PrintFileData } from "./PrintFilePanel";
 import { FanOutPanel, type FanOutData } from "./FanOutPanel";
 import { PrintCheck, type PrintCheckData } from "./PrintCheck";
@@ -302,7 +302,10 @@ export function StepRunner({
 
         {/* L3: the margin calculator — cost snapshot + price + itemized fees */}
         {record.workflowKey === "listing" && selected.id === "L3" && pricing ? (
-          <PricingPanel data={pricing} />
+          <>
+            <PricingPanel data={pricing} />
+            <ShippingProfileCard data={pricing} />
+          </>
         ) : null}
 
         {/* L5 is the slot plan — assemble the ordered image set */}

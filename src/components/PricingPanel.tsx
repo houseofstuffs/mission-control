@@ -56,6 +56,9 @@ export interface PricingData {
     shippingCharged: number | null;
     shippingProfileName: string | null;
   } | null;
+  /** L3's other half — the operator's attestation, and when it was given */
+  shippingConfirmed: boolean;
+  shippingConfirmedAt: string;
 }
 
 const money = (n: number) => `$${n.toFixed(2)}`;
@@ -519,6 +522,133 @@ function Row({
       >
         {negative ? `− ${money(Math.abs(value))}` : money(value)}
       </span>
+    </div>
+  );
+}
+
+/**
+ * L3's other half. The step is named "Verify pricing + shipping profile"
+ * and promises "Shipping profile confirmed", but there was no control for
+ * it and no gate to land on.
+ *
+ * WHERE THE PROFILE LIVES, since the two sides come from different places:
+ *   · What the BUYER pays is Etsy's. Shipping profiles are synced from
+ *     Etsy into Notion and a PRODUCT points at one; Etsy assigns them per
+ *     listing, so this app treats it as a default and never writes back.
+ *   · What YOU pay is Printify's, pulled from their catalog onto the same
+ *     Product.
+ * Neither is a per-listing value, and this app is draft-only — so
+ * confirming is an attestation that this listing will go out on that
+ * profile, not a write to Etsy. Changing it happens on the Product, which
+ * is the record that actually holds it.
+ */
+export function ShippingProfileCard({ data }: { data: PricingData }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const charged = data.product?.shippingCharged ?? null;
+  const cost = data.product?.estimatedShippingCost ?? null;
+  const net = charged != null && cost != null ? charged - cost : null;
+  const profile = data.product?.shippingProfileName ?? null;
+
+  async function toggle(next: boolean) {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson(`/api/listings/${data.listingId}`, "PATCH", {
+      shippingProfileConfirmed: next,
+    });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(false);
+  }
+
+  const figure = (label: string, value: number | null, positive = false) => (
+    <div className="well" style={{ flex: "1 1 130px", padding: "9px 12px" }}>
+      <Kicker>{label}</Kicker>
+      <div
+        style={{
+          fontSize: 17,
+          fontWeight: 700,
+          marginTop: 2,
+          // a positive net on shipping is the good outcome — say so in colour
+          color: positive && value != null && value > 0 ? "var(--status-done, #2E9E88)" : undefined,
+        }}
+      >
+        {value == null
+          ? "—"
+          : value < 0
+            ? // money() would render "$-1.04"; the sign belongs outside
+              `-${money(Math.abs(value))}`
+            : `${positive && value > 0 ? "+" : ""}${money(value)}`}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="card supporting">
+      <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <Kicker>SHIPPING PROFILE</Kicker>
+        <span style={{ marginLeft: "auto" }}>
+          <span className={`chip ${data.shippingConfirmed ? "done" : "stale"}`}>
+            {data.shippingConfirmed ? "✓ confirmed" : "⚠ not confirmed"}
+          </span>
+        </span>
+      </div>
+      {error ? <div className="callout blocked">{error}</div> : null}
+
+      <div className="well row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ flex: "1 1 200px" }}>
+          <div className="body-sm" style={{ fontWeight: 600 }}>
+            {profile ?? "No Etsy shipping profile on this product"}
+          </div>
+          <span className="hint">
+            {profile
+              ? "From the Product — synced from Etsy, shared by every listing on this garment"
+              : "Pick one on the Product card; Etsy owns what buyers are charged"}
+          </span>
+        </span>
+        <Link className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} href="/products">
+          {profile ? "Change on Product" : "Set on Product"}
+        </Link>
+      </div>
+
+      <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
+        {figure("BUYER PAYS", charged)}
+        {figure("YOUR COST", cost)}
+        {figure("NET ON SHIPPING", net, true)}
+      </div>
+      <span className="hint">
+        The saved figures behind the margin above — buyer charge from the Etsy profile, cost from
+        Printify. The scenario dials are exploration only and change nothing here.
+      </span>
+
+      <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        {data.shippingConfirmed ? (
+          <>
+            <button className="btn btn-secondary" disabled={busy} onClick={() => toggle(false)}>
+              {busy ? <span className="spinner" /> : null}
+              Withdraw confirmation
+            </button>
+            {data.shippingConfirmedAt ? (
+              <span className="hint">confirmed {data.shippingConfirmedAt}</span>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <button
+              className="btn btn-save"
+              disabled={busy || charged == null}
+              title={charged == null ? "No profile figures to confirm yet" : undefined}
+              onClick={() => toggle(true)}
+            >
+              {busy ? <span className="spinner" /> : null}
+              Confirm shipping profile
+            </button>
+            <span className="hint">Flips the publish gate. Nothing is written to Etsy — draft-only.</span>
+          </>
+        )}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // L3's shipping half — an attestation, stamped when it's given and
+    // cleared (date included) when it's withdrawn
+    if (body.shippingProfileConfirmed !== undefined) {
+      const on = Boolean(body.shippingProfileConfirmed);
+      values["Shipping Profile Confirmed"] = on;
+      values["Shipping Confirmed At"] = on ? new Date().toISOString().slice(0, 10) : null;
+    }
     // L3 — the price decision, and the cost snapshot it's judged against
     if (body.price !== undefined) {
       const price = Number(body.price);

@@ -577,6 +577,12 @@ export const SCHEMA: DbSpec[] = [
       "Cost Basis": { type: "select", options: ["Printify Standard", "Printify Premium"] },
       "Gate State (JSON)": { type: "rich_text" },
       "Trademark Screened": { type: "checkbox" },
+      // L3's other half. Etsy owns what a buyer is charged for shipping and
+      // this app is draft-only, so it never writes the profile to Etsy —
+      // confirming is the operator attesting the listing will carry the
+      // Product's profile, which is what the publish gate reads.
+      "Shipping Profile Confirmed": { type: "checkbox" },
+      "Shipping Confirmed At": { type: "date" },
       "Published At": { type: "date" },
       "Expiry Date": { type: "date" },
       Shop: { type: "select", options: ["STUFFS"] },

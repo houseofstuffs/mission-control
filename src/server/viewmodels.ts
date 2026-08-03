@@ -458,6 +458,14 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
         ok: num(rec.props["Price"]) != null,
       }
     );
+    // L3 promises "shipping profile confirmed" in its PRODUCES; without a
+    // gate the promise had nowhere to land.
+    gates.push({
+      label: rec.props["Shipping Profile Confirmed"]
+        ? "Shipping profile confirmed"
+        : "Shipping profile not confirmed.",
+      ok: Boolean(rec.props["Shipping Profile Confirmed"]),
+    });
     // Hard block, not advice: this decides which garment colours ship.
     const compat = compatForListing(rec);
     gates.push({

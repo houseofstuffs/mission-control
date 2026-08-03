@@ -262,6 +262,8 @@ function pricingData(rec: NonNullable<ReturnType<typeof cachedRecord>>): Pricing
     cost: typeof rec.props["Cost At Creation"] === "number" ? rec.props["Cost At Creation"] : null,
     costBasis: String(rec.props["Cost Basis"] ?? ""),
     costSnapshotAt: String(rec.props["Cost Snapshot At"] ?? ""),
+    shippingConfirmed: Boolean(rec.props["Shipping Profile Confirmed"]),
+    shippingConfirmedAt: String(rec.props["Shipping Confirmed At"] ?? ""),
     product: productRec
       ? {
           name: productLabel(productRec),

@@ -18,7 +18,14 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
-import { nativeDimensions, cropOutputSize, cropSquarePixels, cropToStandardSize, type CropRect } from "@/lib/mockupCrop";
+import {
+  nativeDimensions,
+  cropOutputSize,
+  cropSquarePixels,
+  cropToStandardSize,
+  rectNormalizedSize,
+  type CropRect,
+} from "@/lib/mockupCrop";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
@@ -762,19 +769,29 @@ export interface MockupShotOption {
   cropRect: CropRect | null;
 }
 
-function rectToQuad(r: CropRect): Quad {
-  return rectQuad(r.x, r.y, r.size, r.size);
+type Dims = { width: number; height: number };
+
+/**
+ * The quad is normalized to the image box, so a true pixel square needs
+ * DIFFERENT normalized width and height on a non-square photo. Getting
+ * this right is what makes the dragged box, the preview and the written
+ * file agree — a normalized square renders visibly wide on a landscape
+ * shot while claiming to be square.
+ */
+function rectToQuad(r: CropRect, dims: Dims): Quad {
+  const { w, h } = rectNormalizedSize(dims.width, dims.height, r);
+  return rectQuad(r.x, r.y, w, h);
 }
 
-function quadToRect(q: Quad): CropRect {
+function quadToRect(q: Quad, dims: Dims): CropRect {
   const xs = q.map((p) => p.x);
   const ys = q.map((p) => p.y);
   const x = Math.min(...xs);
   const y = Math.min(...ys);
-  // squareOnly guarantees width === height, but average defensively in case
-  // a stale non-square quad ever gets passed in
-  const size = (Math.max(...xs) - x + (Math.max(...ys) - y)) / 2;
-  return { x, y, size };
+  // both axes describe the same square in pixels; average them so a
+  // rounding drift during a drag can't bias one direction
+  const side = ((Math.max(...xs) - x) * dims.width + (Math.max(...ys) - y) * dims.height) / 2;
+  return { x, y, size: side / Math.min(dims.width, dims.height) };
 }
 
 interface ShotColorRow {
@@ -807,6 +824,8 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
   const [error, setError] = useState<string | null>(null);
   const nextKey = useRef(2);
 
+  /** the photo the crop is drawn against — its aspect decides the overlay's shape */
+  const previewDims = rows.find((r) => r.file)?.dims ?? null;
   const existingShot = shots.find((s) => s.id === shotChoice) ?? null;
   const savedRect = existingShot?.cropRect ?? null;
   const activeRect = savedRect ?? rect;
@@ -998,10 +1017,15 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
         </button>
       </div>
 
-      {drawingNew && preview ? (
+      {drawingNew && preview && previewDims ? (
         <div className="field">
           <label className="kicker">CROP — SQUARE, APPLIES TO EVERY COLOUR ABOVE</label>
-          <QuadEditor src={preview} quad={rectToQuad(rect)} onChange={(q) => setRect(quadToRect(q))} squareOnly />
+          <QuadEditor
+            src={preview}
+            quad={rectToQuad(rect, previewDims)}
+            onChange={(q) => setRect(quadToRect(q, previewDims))}
+            squareOnly
+          />
         </div>
       ) : drawingNew ? (
         <span className="hint">Add a photo above to draw the crop against it.</span>

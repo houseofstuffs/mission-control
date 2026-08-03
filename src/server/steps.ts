@@ -16,6 +16,7 @@ import {
   type WorkflowDef,
 } from "@/lib/workflows";
 import { cachedRecord, createRecord, updateRecord } from "@/server/notion/store";
+import { publishGates } from "@/server/publishGates";
 import { compatForListing } from "@/server/imageSlots";
 import { TAG_COUNT } from "@/config/keywords";
 import type { SimpleRecord, SimpleValue } from "@/server/notion/props";
@@ -151,6 +152,13 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
         ((product.props["Representative Variant"] as string[] | null) ?? []).length === 0
       ) {
         return "Needs representative size — pick it on the product card.";
+      }
+      // The general rule the specific messages above are instances of: L6
+      // is a checkpoint, and a checkpoint marked done while red is a lie.
+      // Same list the gate panel renders — one source, no drift.
+      const failing = publishGates(rec).filter((g) => !g.ok);
+      if (failing.length > 0) {
+        return `${failing.length} publish gate${failing.length === 1 ? "" : "s"} failing — all must pass. First: ${failing[0].label}`;
       }
     }
     return null;

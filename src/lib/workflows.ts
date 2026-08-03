@@ -199,15 +199,23 @@ export const LISTING_WORKFLOW: WorkflowDef = {
       id: "L6",
       label: "publish gates",
       title: "Publish gates",
-      needs: ["Everything below — all must pass"],
+      // the runner overrides this with a live count when it has the gates —
+      // this static line is the fallback for anywhere that renders the
+      // definition without record context
+      needs: ["Every gate in the panel must pass — red gates are buttons, click one to jump to its fix"],
+      // Retitled at render time to "Confirms & locks for publish": L6 is a
+      // checkpoint, it creates nothing, and "produces" implied it built
+      // content.
       produces: [
         "Title, tags, attributes, description present",
         "Required image slots filled in order",
-        "Size chart image present if description cites it",
+        "Size chart image present (always required)",
+        "Care + colorways covered by graphic card",
         "Trademark screening confirmed complete",
         "Cost snapshot recorded",
       ],
       dependsOn: ["L2", "L3", "L5"],
+      note: "Checkpoint — nothing is created here.",
     },
     {
       id: "L7",

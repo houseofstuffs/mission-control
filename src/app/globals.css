@@ -556,6 +556,35 @@ a:hover { color: var(--candy); }
 /* informational, not failing — a style choice worth knowing about. Blueberry
    bar: noteworthy, but not THE RULE's attention red. */
 .gate-item.info { border-left-color: var(--blueberry); }
+/* a failing gate that knows its owner step is a button — same body as a
+   gate row, plus hover feedback and the jump affordance */
+.gate-item.gate-jump {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-left: 4px solid var(--candy);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.gate-item.gate-jump:hover { background: var(--hover-yellow-pale); }
+.gate-fix {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--candy);
+  white-space: nowrap;
+}
+/* which step owns a passing gate — quiet, right-aligned */
+.gate-owner {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-tertiary, #9aa79f);
+  white-space: nowrap;
+  align-self: center;
+}
 
 /* ---------- table (Listings) ---------- */
 

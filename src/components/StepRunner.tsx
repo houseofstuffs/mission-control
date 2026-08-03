@@ -33,7 +33,7 @@ export interface RunnerRecord {
   workflowKey: "creative" | "listing";
   current: string;
   steps: Record<string, { status: StepStatus; note?: string; at?: string }>;
-  gates?: Array<{ label: string; ok: boolean }>;
+  gates?: Array<{ label: string; ok: boolean; fixStep?: string }>;
   /** step id → why "done" is blocked; enforced server-side too */
   blockedDone?: Record<string, string>;
 }
@@ -126,6 +126,12 @@ export function StepRunner({
   const doneCount = wf.steps.filter((s) => record.steps[s.id]?.status === "done").length;
   const doneBlocker = record.blockedDone?.[selected.id] ?? null;
 
+  // L6's card speaks in live gate counts — the step IS the panel, so its
+  // NEEDS line and status bar read from the same list the panel renders
+  const gateList = record.gates ?? [];
+  const failingGates = gateList.filter((g) => !g.ok);
+  const isGateStep = record.workflowKey === "listing" && selected.id === "L6";
+
   return (
     // tag selection is shared between the L2 panel (adds) and the rail
     // (shows/removes/saves) — the provider is the one state they both read
@@ -195,14 +201,34 @@ export function StepRunner({
           >
             <div className="well">
               <Kicker>NEEDS</Kicker>
-              <ul style={{ margin: "8px 0 0 18px" }}>
-                {selected.needs.map((n) => (
-                  <li key={n} className="body-sm">{n}</li>
-                ))}
-              </ul>
+              {isGateStep && gateList.length > 0 ? (
+                // live, not boilerplate: the count and the fix path
+                <div className="body-sm" style={{ marginTop: 8 }}>
+                  All <strong>{gateList.length} gates</strong> in the panel must pass.
+                  {failingGates.length > 0 ? (
+                    <>
+                      {" "}
+                      <strong>
+                        {failingGates.length === 1 ? "One is" : `${failingGates.length} are`} failing
+                      </strong>{" "}
+                      — click a red gate to jump to the step that fixes it.
+                    </>
+                  ) : (
+                    <> All passing.</>
+                  )}
+                </div>
+              ) : (
+                <ul style={{ margin: "8px 0 0 18px" }}>
+                  {selected.needs.map((n) => (
+                    <li key={n} className="body-sm">{n}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="well">
-              <Kicker>PRODUCES</Kicker>
+              {/* L6 is a checkpoint — it creates nothing, and "PRODUCES"
+                  implied it built content */}
+              <Kicker>{isGateStep ? "CONFIRMS & LOCKS FOR PUBLISH" : "PRODUCES"}</Kicker>
               <ul style={{ margin: "8px 0 0 18px" }}>
                 {selected.produces.map((p) => (
                   <li key={p} className="body-sm">{p}</li>
@@ -211,12 +237,32 @@ export function StepRunner({
             </div>
           </div>
 
+          {isGateStep && gateList.length > 0 ? (
+            <div className={`callout ${failingGates.length > 0 ? "blocked" : ""}`}>
+              {failingGates.length > 0 ? (
+                <>
+                  ⛔ <strong>{failingGates.length} gate{failingGates.length === 1 ? "" : "s"} failing</strong>{" "}
+                  — Mark step done unlocks when all {gateList.length} are green.
+                </>
+              ) : (
+                <>
+                  ✓ <strong>All {gateList.length} gates passing</strong> — this listing is
+                  publish-ready. Mark step done to hand off to Push draft.
+                </>
+              )}
+            </div>
+          ) : null}
+
           {error ? <div className="field-error">{error}</div> : null}
 
           <div className="row-gap-12">
             <MarkDoneButton
               isL2={record.workflowKey === "listing" && selected.id === "L2"}
               disabled={busy !== null || selectedStatus === "done"}
+              // L6 is the one step whose whole meaning is "all green": the
+              // status bar above already says why it's locked, so a dead
+              // button explains itself — other steps keep explain-on-click
+              hardLocked={isGateStep && failingGates.length > 0}
               doneBlocker={doneBlocker}
               busy={busy === "done"}
               onBlocked={setError}
@@ -379,14 +425,40 @@ export function StepRunner({
             <div className="panel-title">
               {record.workflowKey === "listing" ? "Publish gates" : "Gate check"}
             </div>
-            {(record.gates ?? []).length === 0 ? (
+            {record.workflowKey === "listing" && gateList.length > 0 ? (
+              <div className="hint" style={{ margin: "0 2px 8px" }}>
+                {gateList.length - failingGates.length} of {gateList.length} passing
+                {failingGates.some((g) => g.fixStep)
+                  ? " · red gates are buttons — click to fix"
+                  : ""}
+              </div>
+            ) : null}
+            {gateList.length === 0 ? (
               <div className="gate-item ok">Nothing failing right now.</div>
             ) : (
-              record.gates!.map((g) => (
-                <div key={g.label} className={`gate-item${g.ok ? " ok" : ""}`}>
-                  {g.ok ? "✓ " : ""}{g.label}
-                </div>
-              ))
+              gateList.map((g) =>
+                !g.ok && g.fixStep ? (
+                  // the failing gate IS the navigation: it knows which step
+                  // owns the fix, so clicking it goes there
+                  <button
+                    key={g.label}
+                    type="button"
+                    className="gate-item gate-jump"
+                    onClick={() => setSelectedId(g.fixStep!)}
+                    title={`Jump to ${g.fixStep} to fix this`}
+                  >
+                    <span style={{ flex: 1, textAlign: "left" }}>✕ {g.label}</span>
+                    <span className="gate-fix">
+                      Fix → {g.fixStep}
+                    </span>
+                  </button>
+                ) : (
+                  <div key={g.label} className={`gate-item${g.ok ? " ok" : ""}`} style={{ display: "flex", gap: 6 }}>
+                    <span style={{ flex: 1 }}>{g.ok ? "✓ " : ""}{g.label}</span>
+                    {g.ok && g.fixStep ? <span className="gate-owner">{g.fixStep}</span> : null}
+                  </div>
+                )
+              )
             )}
           </div>
           {/* L2's Selected-tags working set rides under the gates — the
@@ -472,6 +544,7 @@ function step_pos(selIdx: number, currentIdx: number): string {
 function MarkDoneButton({
   isL2,
   disabled,
+  hardLocked = false,
   doneBlocker,
   busy,
   onBlocked,
@@ -479,6 +552,8 @@ function MarkDoneButton({
 }: {
   isL2: boolean;
   disabled: boolean;
+  /** disable outright instead of explain-on-click — for steps whose card already says why */
+  hardLocked?: boolean;
   doneBlocker: string | null;
   busy: boolean;
   onBlocked: (msg: string) => void;
@@ -492,10 +567,10 @@ function MarkDoneButton({
   return (
     <button
       className="btn btn-primary"
-      disabled={disabled || Boolean(unsavedBlocker)}
+      disabled={disabled || hardLocked || Boolean(unsavedBlocker)}
       title={unsavedBlocker ?? doneBlocker ?? undefined}
-      // unsaved changes hard-block (button is disabled, above); a server
-      // requirement still explains itself on attempt, per the rule above
+      // unsaved changes and hardLocked hard-block (button is disabled,
+      // above); a server requirement still explains itself on attempt
       onClick={() => (doneBlocker ? onBlocked(doneBlocker) : onDone())}
     >
       {busy ? <span className="spinner" /> : null}

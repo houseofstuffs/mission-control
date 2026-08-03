@@ -4,8 +4,7 @@
  */
 import { cachedRecords } from "@/server/notion/store";
 import { parseStepState, unmetRequirement } from "@/server/steps";
-import { compatForListing } from "@/server/imageSlots";
-import { needsRecompose, derivativeFor } from "@/server/recompose";
+import { publishGates } from "@/server/publishGates";
 import { estimateFor, variantCostsFor } from "@/server/productCost";
 import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { asCategory } from "@/config/product-categories";
@@ -435,117 +434,11 @@ export function runnerRecord(rec: SimpleRecord): RunnerRecord {
   const steps: RunnerRecord["steps"] = {};
   for (const [id, entry] of Object.entries(state.steps)) steps[id] = entry;
 
-  const gates: Array<{ label: string; ok: boolean }> = [];
+  const gates: Array<{ label: string; ok: boolean; fixStep?: string }> = [];
   if (rec.dbKey === "etsy_listings") {
-    // L6 publish gates (spec §6.1) — computed live from record fields
-    const title = str(rec.props["Title"]);
-    const tags = str(rec.props["Tags"]).split(",").map((t) => t.trim()).filter(Boolean);
-    const attrs = str(rec.props["Attributes (JSON)"]);
-    const hook = str(rec.props["Description Hook"]);
-    const body = str(rec.props["Body Copy"]);
-    gates.push(
-      { label: "Title present (<15 words)", ok: title.length > 0 && title.split(/\s+/).length < 15 },
-      { label: `13 tags (${tags.length}/13)`, ok: tags.length === 13 },
-      { label: "Attributes recorded", ok: attrs.trim().length > 2 },
-      { label: "Description hook + body", ok: hook.length > 0 && body.length > 0 },
-      { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]) },
-      { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null },
-      {
-        label:
-          num(rec.props["Price"]) != null
-            ? `Price set ($${num(rec.props["Price"])!.toFixed(2)})`
-            : "No price set.",
-        ok: num(rec.props["Price"]) != null,
-      }
-    );
-    // L3 promises "shipping profile confirmed" in its PRODUCES; without a
-    // gate the promise had nowhere to land.
-    gates.push({
-      label: rec.props["Shipping Profile Confirmed"]
-        ? "Shipping profile confirmed"
-        : "Shipping profile not confirmed.",
-      ok: Boolean(rec.props["Shipping Profile Confirmed"]),
-    });
-    // Hard block, not advice: this decides which garment colours ship.
-    const compat = compatForListing(rec);
-    gates.push({
-      label: compat === "Unset" ? "Garment compatibility not set." : `Garment compatibility: ${compat}`,
-      ok: compat !== "Unset",
-    });
-    // wall_art without its anchor size has no honest cost — hard block
-    const gateProductId = rel(rec.props["Product"])[0];
-    const gateProduct = gateProductId ? cachedRecords("products").find((p) => p.id === gateProductId) : null;
-    if (gateProduct && str(gateProduct.props["Category"]) === "wall_art") {
-      const hasRep = rel(gateProduct.props["Representative Variant"]).length > 0;
-      gates.push({
-        label: hasRep ? "Representative size chosen" : "Needs representative size (product card).",
-        ok: hasRep,
-      });
-    }
-    // Image-slot hard gates. Belief-bucket coverage stays advisory — only
-    // the thumbnail, size/care, and the multi-variant pair block.
-    const slots = cachedRecords("image_slots")
-      .filter((s) => rel(s.props["Listing"]).includes(rec.id))
-      .sort((a, b) => (num(a.props["Position"]) ?? 0) - (num(b.props["Position"]) ?? 0));
-    if (slots.length > 0) {
-      const filled = (s: SimpleRecord) => ["Made", "Placed"].includes(str(s.props["Status"]));
-      const thumb = slots.find((s) => num(s.props["Position"]) === 1);
-      gates.push({
-        label: thumb && filled(thumb) ? "Thumbnail set (slot 1)" : "No thumbnail set.",
-        ok: Boolean(thumb && filled(thumb)),
-      });
-      const specificsOk = slots.some((s) => str(s.props["Bucket"]) === "Sell Specifics" && filled(s));
-      gates.push({
-        label: specificsOk ? "Size/care image filled" : "No size/care image.",
-        ok: specificsOk,
-      });
-      if (rec.props["Is Multi Variant"]) {
-        const gridOk = slots.some((s) => str(s.props["Shot Type"]) === "Grid Composite" && filled(s));
-        gates.push({
-          label: gridOk ? "Range/grid image filled" : "Multi-variant listing has no range/grid image.",
-          ok: gridOk,
-        });
-        const persOk = slots.some(
-          (s) =>
-            str(s.props["Shot Type"]) === "Graphic Card" &&
-            filled(s) &&
-            /personali[sz]/i.test(`${s.title} ${str(s.props["Notes"])}`)
-        );
-        gates.push({
-          label: persOk ? "Personalisation instructions image filled" : "No personalisation instructions image.",
-          ok: persOk,
-        });
-      }
-    }
-
-    // Recomposed print file: when this garment's shape deviates from the
-    // master, publishing without a Made (non-stale) derivative would ship
-    // a stretched or cropped print.
-    const gateDesignId = rel(rec.props["Designs"])[0];
-    const gateDesign = gateDesignId ? cachedRecords("designs").find((d) => d.id === gateDesignId) : null;
-    if (gateProduct && gateDesign && needsRecompose(gateDesign, gateProduct)) {
-      const der = derivativeFor(cachedRecords("design_derivatives"), gateDesign.id, gateProduct.id);
-      const made = der != null && str(der.props["Status"]) === "Made";
-      gates.push({
-        label: made
-          ? "Recomposed print file saved"
-          : der != null
-            ? "Recomposed print file is stale — master changed."
-            : "Needs a recomposed print file for this garment (L1).",
-        ok: made,
-      });
-    }
-
-    // SEO hard gate: no visibility keyword attached = blocked. The bucket
-    // mix ratios are advisory; this is the only hard keyword rule.
-    const attachedKws = cachedRecords("keywords").filter((k) =>
-      rel(k.props["Etsy Listings"]).includes(rec.id)
-    );
-    const hasVisibility = attachedKws.some((k) => str(k.props["Bucket"]) === "Visibility");
-    gates.push({
-      label: hasVisibility ? "Visibility keyword attached" : "No visibility keyword attached.",
-      ok: hasVisibility,
-    });
+    // L6 publish gates (spec §6.1) — computed in publishGates.ts, the ONE
+    // place the panel and the step engine both read, so they can't drift
+    gates.push(...publishGates(rec));
   } else {
     // creative gate check — what's failing that blocks C10/C11
     const niches = cachedRecords("niches");

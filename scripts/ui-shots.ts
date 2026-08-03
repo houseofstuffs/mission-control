@@ -60,7 +60,8 @@ const SHOTS: Shot[] = [
   { name: "products", path: "/products", full: true },
   { name: "listings", path: "/listings" },
   { name: "library", path: "/library", full: true },
-  { name: "library-shot-form", path: "/library", clicks: ["＋ New template (colour batch)"], full: true },
+  { name: "library-define", path: "/library", clicks: ["＋ New template"], full: true },
+  { name: "library-variants", path: "/library", clicks: ["＋ Add colour variants"], full: true },
 ];
 
 async function main() {

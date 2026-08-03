@@ -245,6 +245,15 @@ export const SCHEMA: DbSpec[] = [
       // {x, y, size} normalized 0–1, always square — set once, applied to
       // every colour already in the batch and every one added later.
       "Crop Rect (JSON)": { type: "rich_text" },
+      // The garment's printable zone, drawn once at template definition on
+      // the CROPPED sample — every variant created under this template
+      // starts from it, so "Re-place corners" per colour stops being a
+      // mandatory chore and becomes a correction.
+      "Print Region Quad (JSON)": { type: "rich_text" },
+      // Where this template's colour photos live. Remembered so the Drive
+      // auto-import (pending Google OAuth) can list the folder and detect
+      // colours from filenames without any manual dropping.
+      "Drive Folder Link": { type: "url" },
       "Crop Set At": { type: "date" },
       // Set by hand after actually looking at a real multi-colour batch —
       // this app can't detect framing drift between photos on its own.

@@ -342,8 +342,21 @@ function main() {
     }),
   ];
 
+  // a defined template (step 1 done): crop + print region + Drive folder —
+  // the state the Add-colour-variants form inherits from
+  const mockupShot = rec("mockup_shots", "shot-1", "CC1466 Flat Lay", {
+    Name: "CC1466 Flat Lay",
+    "Crop Rect (JSON)": JSON.stringify({ x: 0.18, y: 0.12, size: 0.72 }),
+    "Crop Set At": "2026-08-01",
+    "Print Region Quad (JSON)": JSON.stringify([
+      { x: 0.3, y: 0.28 }, { x: 0.7, y: 0.28 }, { x: 0.7, y: 0.62 }, { x: 0.3, y: 0.62 },
+    ]),
+    "Drive Folder Link": "https://drive.google.com/drive/folders/1q7zQqb7NgyhNQyHd0IDGr2rHRjlHstVW",
+  });
+
   const template = rec("mockup_templates", "tpl-1", "CC1466 Flat Lay Folded", {
     Name: "CC1466 Flat Lay Folded",
+    Shot: ["shot-1"],
     "Pipeline Type": "Simple Placement",
     "Blend Mode": "Normal",
     Fit: "Fill width from top",
@@ -364,6 +377,7 @@ function main() {
     keywords: keywords(),
     image_slots: slots,
     mockup_templates: [template],
+    mockup_shots: [mockupShot],
     shipping_profiles: shippingProfiles,
   };
   for (const db of SCHEMA) replaceDbRecords(db.key, byDb[db.key] ?? []);

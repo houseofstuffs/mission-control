@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, updateRecord } from "@/server/notion/store";
+import { parseQuad } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
       values["Crop Rect (JSON)"] = JSON.stringify({ x: r.x, y: r.y, size: r.size });
       values["Crop Set At"] = new Date().toISOString().slice(0, 10);
+    }
+    if (body.printRegionQuad !== undefined) {
+      const quad = parseQuad(body.printRegionQuad);
+      if (!quad) {
+        return NextResponse.json({ error: "Invalid print region — four corners, 0–1 each." }, { status: 400 });
+      }
+      values["Print Region Quad (JSON)"] = JSON.stringify(quad);
+    }
+    if (body.driveFolderLink !== undefined) {
+      values["Drive Folder Link"] = String(body.driveFolderLink).trim() || null;
     }
     if (body.framingFlagged !== undefined) values["Framing Flagged"] = Boolean(body.framingFlagged);
     if (body.framingNotes !== undefined) values["Framing Notes"] = String(body.framingNotes);

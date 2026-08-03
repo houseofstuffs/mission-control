@@ -10,6 +10,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { EmptyState, Kicker } from "@/components/ui";
 import { assetUrl } from "@/lib/assets";
 import { MockupTemplatesSection, type MockupTemplateCard, type MockupShotOption } from "@/components/MockupTemplates";
+import { parseQuad } from "@/config/mockups";
 import type { SimpleRecord } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,13 @@ function shotOption(s: SimpleRecord): MockupShotOption {
   } catch {
     /* no crop set yet */
   }
-  return { id: s.id, name: s.title || "Untitled shot", cropRect };
+  return {
+    id: s.id,
+    name: s.title || "Untitled template",
+    cropRect,
+    printRegionQuad: parseQuad(String(s.props["Print Region Quad (JSON)"] ?? "")),
+    driveFolderLink: String(s.props["Drive Folder Link"] ?? ""),
+  };
 }
 
 function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): MockupTemplateCard {
@@ -62,6 +69,15 @@ export default function LibraryPage() {
   const mockupShots = cachedRecords("mockup_shots");
   const shotsById = new Map(mockupShots.map((s) => [s.id, s]));
   const designs = cachedRecords("designs");
+  // the closed set filenames are matched against — every colour any
+  // product variant actually comes in
+  const palette = Array.from(
+    new Set(
+      cachedRecords("product_variants")
+        .map((v) => String(v.props["Color"] ?? "").trim())
+        .filter(Boolean)
+    )
+  ).sort();
   const sync = syncState()["textures"];
 
   const empty = textures.length === 0 && mockups.length === 0;
@@ -106,6 +122,7 @@ export default function LibraryPage() {
           <MockupTemplatesSection
             templates={mockups.map((m) => templateCard(m, shotsById))}
             shots={mockupShots.map(shotOption)}
+            palette={palette}
           />
         </div>
       )}

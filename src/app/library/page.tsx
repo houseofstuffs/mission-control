@@ -37,7 +37,7 @@ function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): Mo
   const shotName = shotId ? shotsById.get(shotId)?.title ?? null : null;
   return {
     id: m.id,
-    name: m.title || "Untitled template",
+    name: m.title || "Untitled variant",
     thumbUrl: fileUrl("Base Image")
       ? `/api/mockup-templates/${m.id}/thumb?v=${encodeURIComponent(m.lastEdited)}`
       : null,
@@ -79,7 +79,7 @@ export default function LibraryPage() {
       {empty ? (
         <EmptyState
           title="Your library builds itself"
-          copy="Textures and mockup templates arrive with the browser clipper. Favorites derive from usage, not a hand-maintained list. Styles live on their own page now."
+          copy="Textures and mockup variants arrive with the browser clipper. Favorites derive from usage, not a hand-maintained list. Styles live on their own page now."
           hint="The browser extension arrives in Phase 3."
           patternUrl={assetUrl("pattern")}
           figureUrl={assetUrl("figure")}

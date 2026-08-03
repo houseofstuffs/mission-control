@@ -385,11 +385,11 @@ export function MockupTemplateIntake() {
   // Mirrors the server's §4 rules so the button explains itself, but the
   // server re-checks everything — a stale page can't sneak past.
   const blocked = !name.trim()
-    ? "Name the template."
+    ? "Name the variant."
     : !pipeline
       ? "Pick a pipeline type — it decides the rest of the form."
       : !base
-        ? "Every template needs a base image."
+        ? "Every variant needs a base image."
         : full && !displacement
           ? "Full Displacement needs a displacement map."
           : simple && !quadTouched
@@ -431,7 +431,7 @@ export function MockupTemplateIntake() {
   if (!open) {
     return (
       <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-        ＋ New mockup template
+        ＋ New variant
       </button>
     );
   }
@@ -440,7 +440,7 @@ export function MockupTemplateIntake() {
     <div className="card supporting stack-12">
       <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
         <div className="field" style={{ flex: "2 1 220px" }}>
-          <label className="kicker" htmlFor="mt-name">TEMPLATE NAME</label>
+          <label className="kicker" htmlFor="mt-name">VARIANT NAME</label>
           <input id="mt-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </div>
         <div className="field" style={{ flex: "2 1 220px" }}>
@@ -450,7 +450,7 @@ export function MockupTemplateIntake() {
         <div className="field" style={{ flex: "1 1 200px" }}>
           <label className="kicker" htmlFor="mt-pipe">PIPELINE — CHOOSE FIRST</label>
           <select id="mt-pipe" className="select" value={pipeline} onChange={(e) => setPipeline(e.target.value)}>
-            <option value="">What kind of template is this?</option>
+            <option value="">What kind of variant is this?</option>
             {PIPELINE_TYPES.map((p) => (
               <option key={p}>{p}</option>
             ))}
@@ -631,7 +631,7 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
       <div className="title">{t.name}</div>
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         <span className="chip count">{t.pipelineType || "no pipeline"}</span>
-        {t.shotName ? <span className="chip neutral" title="Base Image is a standardized crop from this shot">{t.shotName}</span> : null}
+        {t.shotName ? <span className="chip neutral" title="Base Image is a standardized crop from this template">{t.shotName}</span> : null}
         {t.garmentColor ? <span className="chip neutral">{t.garmentColor}</span> : null}
         {t.surface ? <span className="chip neutral">{t.surface}</span> : null}
         {t.pipelineType === "Full Displacement" ? (
@@ -867,7 +867,7 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
   const infeasible = activeRows.filter((r) => r.dims && outputSizeOf(r) === null);
   const shotName = existingShot?.name ?? newShotName.trim();
   const blocked = !shotName
-    ? "Name the shot (or pick an existing one)."
+    ? "Name the template (or pick an existing one)."
     : activeRows.length === 0
       ? "Add at least one colour photo."
       : activeRows.some((r) => !r.color.trim())
@@ -885,7 +885,7 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
       let shotId = existingShot?.id ?? null;
       if (!shotId) {
         const res = await apiJson<{ record?: { id: string } }>("/api/mockup-shots", "POST", { name: shotName });
-        if (!res.ok || !res.data.record) throw new Error(res.error ?? "Couldn't create the shot.");
+        if (!res.ok || !res.data.record) throw new Error(res.error ?? "Couldn't create the template.");
         shotId = res.data.record.id;
       }
       for (const row of activeRows) {
@@ -909,7 +909,7 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
       }
       if (drawingNew) {
         const res = await apiJson(`/api/mockup-shots/${shotId}`, "PATCH", { cropRect: activeRect });
-        if (!res.ok) throw new Error(res.error ?? "Couldn't save the shot's crop.");
+        if (!res.ok) throw new Error(res.error ?? "Couldn't save the template's crop.");
       }
       setOpen(false);
       setShotChoice("");
@@ -929,7 +929,7 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
   if (!open) {
     return (
       <button className="btn btn-secondary" onClick={() => setOpen(true)}>
-        ＋ New mockup shot (colour batch)
+        ＋ New template (colour batch)
       </button>
     );
   }
@@ -938,14 +938,14 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
     <div className="card supporting stack-12">
       <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
         <div className="field" style={{ flex: "1 1 220px" }}>
-          <label className="kicker" htmlFor="ms-shot">SHOT</label>
+          <label className="kicker" htmlFor="ms-shot">TEMPLATE</label>
           <select
             id="ms-shot"
             className="select"
             value={shotChoice}
             onChange={(e) => setShotChoice(e.target.value)}
           >
-            <option value="">＋ New shot…</option>
+            <option value="">＋ New template…</option>
             {shots.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}{s.cropRect ? " · crop set" : ""}
@@ -955,7 +955,7 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
         </div>
         {!existingShot ? (
           <div className="field" style={{ flex: "2 1 220px" }}>
-            <label className="kicker" htmlFor="ms-name">SHOT NAME</label>
+            <label className="kicker" htmlFor="ms-name">TEMPLATE NAME</label>
             <input
               id="ms-name"
               className="input"
@@ -967,8 +967,8 @@ function MockupShotIntake({ shots }: { shots: MockupShotOption[] }) {
         ) : (
           <span className="hint" style={{ alignSelf: "center" }}>
             {savedRect
-              ? "This shot already has a crop — new colours reuse it automatically."
-              : "This shot has no crop yet — draw one below."}
+              ? "This template already has a crop — new colours reuse it automatically."
+              : "This template has no crop yet — draw one below."}
           </span>
         )}
       </div>
@@ -1056,7 +1056,7 @@ export function MockupTemplatesSection({
   return (
     <section className="stack-12">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-        <Kicker>MOCKUP TEMPLATES · {templates.length}</Kicker>
+        <Kicker>MOCKUP VARIANTS · {templates.length}</Kicker>
         <div className="row-gap-12">
           <MockupTemplateIntake />
           <MockupShotIntake shots={shots} />
@@ -1067,7 +1067,7 @@ export function MockupTemplatesSection({
           <TemplateCard key={t.id} t={t} />
         ))}
         {templates.length === 0 ? (
-          <div className="hint">No mockup templates yet — capture one with ＋ New mockup template.</div>
+          <div className="hint">No mockup variants yet — capture one with ＋ New variant.</div>
         ) : null}
       </div>
     </section>

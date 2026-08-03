@@ -140,7 +140,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
       {hiddenCount > 0 ? (
         <div className="hint">
-          {hiddenCount} template{hiddenCount === 1 ? "" : "s"} not offered — other garment colours
+          {hiddenCount} variant{hiddenCount === 1 ? "" : "s"} not offered — other garment colours
           than this listing&apos;s colorways (set at L1).
         </div>
       ) : null}
@@ -239,7 +239,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                   disabled={busy !== null}
                   onChange={(e) => patch(s.id, { mockupTemplateId: e.target.value || null })}
                 >
-                  <option value="">Template…</option>
+                  <option value="">Variant…</option>
                   {offered.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}

@@ -59,7 +59,7 @@ const SHOTS: Shot[] = [
   { name: "products", path: "/products", full: true },
   { name: "listings", path: "/listings" },
   { name: "library", path: "/library", full: true },
-  { name: "library-shot-form", path: "/library", clicks: ["＋ New mockup shot (colour batch)"], full: true },
+  { name: "library-shot-form", path: "/library", clicks: ["＋ New template (colour batch)"], full: true },
 ];
 
 async function main() {

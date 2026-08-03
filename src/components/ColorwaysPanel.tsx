@@ -198,10 +198,16 @@ export function ColorwaysPanel({ data }: { data: ColorwaysData }) {
         </span>
       </div>
 
-      {/* a shop can sell more colours than it bothers to shoot mockups for
-          — this is which of the SAVED colorways actually get an L5 slot */}
+      {/* A shop can sell more colours than it bothers to shoot mockups for.
+          This does NOT change how many slots L5 seeds — that count is fixed
+          by the seed template and garment compatibility. What it does is
+          narrow which mockup TEMPLATES each L5 slot offers: a template
+          tagged with a Garment Color outside this set stops being listed. */}
       <Kicker>MOCKUP COLORS</Kicker>
-      <div className="hint">Which of the saved colorways to actually generate mockups for — defaults to all of them.</div>
+      <div className="hint">
+        Which of the saved colorways to shoot mockups for — defaults to all of them. Narrows the
+        template choices on each L5 slot; it doesn&apos;t add or remove slots.
+      </div>
       <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
         {data.selected.map((color) => {
           const on = mockupPicked.has(color);

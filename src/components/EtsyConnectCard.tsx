@@ -16,6 +16,20 @@ export interface EtsyStatus {
   connected: boolean;
   shopName: string | null;
   connectedAt: string | null;
+  /** what this connection's consent actually granted; null = pre-scope-recording (old read-only ask) */
+  scopes: string | null;
+  canWriteListings: boolean;
+}
+
+/** the stored scope string, in plain words */
+function scopeWords(scopes: string): string {
+  const has = new Set(scopes.split(/\s+/));
+  const parts: string[] = [];
+  if (has.has("shops_r")) parts.push("shop & shipping profiles (read)");
+  if (has.has("listings_r") || has.has("listings_w")) {
+    parts.push(has.has("listings_w") ? "listings (read + write — L7 push ready)" : "listings (read)");
+  }
+  return parts.join(" · ") || scopes;
 }
 
 export function EtsyConnectCard({ status }: { status: EtsyStatus }) {
@@ -95,12 +109,27 @@ export function EtsyConnectCard({ status }: { status: EtsyStatus }) {
           )}
         </span>
       </div>
-      {status.connected && status.connectedAt ? (
-        <span className="hint">connected {status.connectedAt.slice(0, 10)} — read-only, pulls Shipping Profiles into Notion</span>
+      {status.connected ? (
+        // report what the STORED connection can do, never what the code
+        // wishes it could — a hardcoded "read-only" caption sat here while
+        // the scopes question was live, and captions that guess are worse
+        // than none
+        status.scopes ? (
+          <span className="hint">
+            connected {status.connectedAt ? status.connectedAt.slice(0, 10) : ""} — {scopeWords(status.scopes)}
+          </span>
+        ) : (
+          <span className="hint" style={{ color: "var(--status-stale, #9a6e12)" }}>
+            connected {status.connectedAt ? status.connectedAt.slice(0, 10) : ""} — an older read-only
+            grant (before listing access existed). Disconnect and reconnect to add listing read/write;
+            Etsy will show the expanded consent screen, which is how you know the widened request
+            reached it.
+          </span>
+        )
       ) : (
         <span className="hint">
-          One-time consent screen, then this pulls your Etsy Shipping Profiles into Notion so the L3
-          calculator can show what buyers actually pay for shipping.
+          One-time consent screen. Grants shop &amp; shipping-profile reads (L3) and listing
+          read/write (L7&apos;s push — drafts only, publish stays in Shop Manager).
         </span>
       )}
       {notice ? <span className="hint">{notice}</span> : null}

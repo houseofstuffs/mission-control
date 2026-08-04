@@ -68,6 +68,12 @@ export function newState(): string {
  */
 const SCOPES = "shops_r listings_r listings_w";
 
+/** What a connect made TODAY asks for — stored at connect time so the UI
+ *  reports what a connection actually holds, not what the code now wants. */
+export function requestedScopes(): string {
+  return SCOPES;
+}
+
 export function authorizeUrl(redirectUri: string, state: string, codeChallenge: string): string {
   const params = new URLSearchParams({
     response_type: "code",

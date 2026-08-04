@@ -7,6 +7,7 @@
  */
 import { getMeta, setMeta, deleteMeta } from "@/server/cache/db";
 import {
+  requestedScopes,
   authorizeUrl,
   codeChallengeFor,
   exchangeCode,
@@ -32,6 +33,10 @@ const META = {
   shopId: "etsy_shop_id",
   shopName: "etsy_shop_name",
   connectedAt: "etsy_connected_at",
+  // the scope string the consent screen actually granted — connections
+  // made before this existed have no value here, which itself means
+  // "old read-only grant, reconnect to widen"
+  scopes: "etsy_scopes",
 } as const;
 
 /** Step 1: build the URL to send the browser to, stashing the PKCE pair for the callback. */
@@ -69,6 +74,8 @@ export async function completeConnect(code: string, state: string): Promise<Conn
   setMeta(META.shopId, String(shop.shop_id));
   setMeta(META.shopName, shop.shop_name);
   setMeta(META.connectedAt, new Date().toISOString());
+  // what THIS consent actually granted — the UI reports from here
+  setMeta(META.scopes, requestedScopes());
   deleteMeta(META.state);
   deleteMeta(META.verifier);
   deleteMeta(META.redirectUri);
@@ -89,13 +96,21 @@ export interface EtsyConnectionStatus {
   connected: boolean;
   shopName: string | null;
   connectedAt: string | null;
+  /** the scope string this connection's consent granted; null = a
+   *  connection made before scopes were recorded (the old read-only ask) */
+  scopes: string | null;
+  /** whether THIS connection can run L7's push (listings_w granted) */
+  canWriteListings: boolean;
 }
 
 export function connectionStatus(): EtsyConnectionStatus {
+  const scopes = getMeta(META.scopes);
   return {
     connected: Boolean(getMeta(META.refreshToken)),
     shopName: getMeta(META.shopName),
     connectedAt: getMeta(META.connectedAt),
+    scopes,
+    canWriteListings: Boolean(scopes && scopes.split(/\s+/).includes("listings_w")),
   };
 }
 
@@ -108,6 +123,7 @@ export function disconnect(): void {
     META.shopId,
     META.shopName,
     META.connectedAt,
+    META.scopes,
   ]) {
     deleteMeta(key);
   }

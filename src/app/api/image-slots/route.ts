@@ -46,6 +46,8 @@ export async function POST(req: Request) {
       Listing: [listing.id],
       Position: Math.min(position, MAX_IMAGES),
       Bucket: body.bucket ? String(body.bucket) : "Sell Design",
+      ...(body.productLinkRole ? { "Product Link Role": String(body.productLinkRole) } : {}),
+      ...(body.shotType ? { "Shot Type": String(body.shotType) } : {}),
       "Shot Type": body.shotType ? String(body.shotType) : null,
       Status: "Planned",
     });

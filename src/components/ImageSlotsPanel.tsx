@@ -541,6 +541,22 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                       if (e.target.value !== s.assetRef) patch(s.id, { assetRef: e.target.value });
                                     }}
                                   />
+                                  {/* the gate reads role-carrying slots and ONLY those — a
+                                      hand-added size chart without the role stayed invisible
+                                      to "Graphic card: size chart" forever. Settable here. */}
+                                  <select
+                                    className="select input-compact"
+                                    style={{ width: 190 }}
+                                    value={s.productLinkRole ?? ""}
+                                    disabled={busy !== null}
+                                    title="Marks this slot as one of the three graphic cards — the publish gate counts role-carrying slots"
+                                    onChange={(e) => patch(s.id, { productLinkRole: e.target.value })}
+                                  >
+                                    <option value="">not a graphic card</option>
+                                    <option value="Highlights & Sizing">graphic: size chart</option>
+                                    <option value="Care & Policies">graphic: care info</option>
+                                    <option value="Colorways">graphic: colorways</option>
+                                  </select>
                                 </div>
                               ) : null}
                             </div>
@@ -594,6 +610,55 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                 </div>
               ))}
           </div>
+
+          {/* absence renders as presence: a graphic-card role no slot
+              carries gets an amber re-add row, not silence — the size
+              chart is publish-gated, and a vanished card must say so HERE */}
+          {(
+            [
+              ["Highlights & Sizing", "size chart", "📏"],
+              ["Care & Policies", "care info", "🧺"],
+              ["Colorways", "colorways", "🎨"],
+            ] as const
+          )
+            .filter(([role]) => !data.slots.some((s) => s.productLinkRole === role))
+            .map(([role, label, icon]) => (
+              <div key={role} className="l5-slot graphic" style={{ borderLeftColor: "#B4741F" }}>
+                <span className="ord">—</span>
+                <div className="mid">
+                  <div className="nm">
+                    <span className="l5-ico" aria-hidden>{icon}</span>
+                    {label}
+                    <span className="l5-autobadge">AUTO</span>
+                  </div>
+                  <div className="meta">
+                    <span className="l5-fromprod warn">
+                      ⚠ No slot carries this graphic card
+                      {role === "Highlights & Sizing" ? " — the size-chart publish gate needs one" : ""}
+                    </span>
+                  </div>
+                </div>
+                <div className="l5-right">
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: 12, padding: "4px 12px" }}
+                    disabled={busy !== null || data.slots.length >= MAX_IMAGES}
+                    onClick={() =>
+                      call("re-add", "/api/image-slots", "POST", {
+                        listingId: data.listingId,
+                        label,
+                        bucket: "Sell Specifics",
+                        shotType: "Graphic Card",
+                        productLinkRole: role,
+                      })
+                    }
+                  >
+                    {busy === "re-add" ? <span className="spinner" /> : null}
+                    Re-add slot
+                  </button>
+                </div>
+              </div>
+            ))}
 
           {data.slots.length < MAX_IMAGES ? (
             <div className="row-gap-12">

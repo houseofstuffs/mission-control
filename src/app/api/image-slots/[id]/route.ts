@@ -22,6 +22,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const values: Record<string, SimpleValue> = {};
     if (body.label != null) values["Name"] = String(body.label);
     if (body.bucket != null) values["Bucket"] = String(body.bucket);
+    // which Product graphic this slot carries — settable in-app so a
+    // hand-added or hand-filled slot can satisfy the graphic-card gate
+    // (the gate reads role-carrying slots, and only those)
+    if (body.productLinkRole !== undefined) {
+      const role = String(body.productLinkRole ?? "").trim();
+      const valid = ["", "Highlights & Sizing", "Care & Policies", "Colorways"];
+      if (!valid.includes(role)) {
+        return NextResponse.json({ error: "Unknown graphic-card role." }, { status: 400 });
+      }
+      values["Product Link Role"] = role || null;
+    }
     if (body.shotType !== undefined) values["Shot Type"] = body.shotType ? String(body.shotType) : null;
     if (body.status != null) values["Status"] = String(body.status);
     if (body.assetRef !== undefined) values["Asset Ref"] = body.assetRef ? String(body.assetRef) : null;

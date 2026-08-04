@@ -237,12 +237,17 @@ function mockupsData(
     hasGeometry: String(s.props["Crop Rect (JSON)"] ?? "").trim().length > 0,
   }));
 
+  // distinct TEMPLATES behind the usable variants — a shot-less hand
+  // intake counts as its own template of one
+  const templatesInPlay = new Set(usable.map((t) => t.shotId ?? t.id)).size;
+
   return {
     listingId: rec.id,
     ready: {
       printifyProduct: String(rec.props["Printify Product ID"] ?? "").trim().length > 0,
       psdMaster: String(design?.props["Master PNG Link"] ?? "").trim().length > 0,
-      templateCount: usable.length,
+      templatesInPlay,
+      variantCount: usable.length,
       colours: slots.availableColors,
     },
     allTemplates,

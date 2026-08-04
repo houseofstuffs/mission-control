@@ -32,8 +32,12 @@ export interface MockupsData {
   ready: {
     printifyProduct: boolean;
     psdMaster: boolean;
-    /** variants offered for this listing's colours — the L5 filter, reused */
-    templateCount: number;
+    /** distinct TEMPLATES contributing to the plan — house terminology:
+     *  template = the shot, variant = template×colour. Counting variants
+     *  under a "templates" label printed "6 templates" with 2 assigned. */
+    templatesInPlay: number;
+    /** colour variants usable for this listing (the L5 filter, reused) */
+    variantCount: number;
     colours: string[];
   };
   tiles: MockupTile[];
@@ -54,7 +58,7 @@ const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 const READY_LABEL: Array<[keyof MockupsData["ready"], string]> = [
   ["printifyProduct", "Printify product"],
   ["psdMaster", "PSD master"],
-  ["templateCount", "Mockup templates"],
+  ["variantCount", "Colour variants"],
   ["colours", "Mockup colours"],
 ];
 
@@ -168,16 +172,13 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const approved = generated.filter((t) => verdictOf(t) === "approved");
   const attention = data.tiles.filter((t) => t.url === null || verdictOf(t) === "flagged");
 
-  /** true when every template is colour-neutral, so templates x colours really is the count */
-  const evenMatrix = data.tiles.length === data.ready.templateCount * data.ready.colours.length;
-
   const blockers = [
     !data.ready.printifyProduct ? "no Printify product" : null,
     !data.ready.psdMaster ? "no PSD master" : null,
     data.allTemplates.length > 0 && data.shortlist.length === 0
       ? "no templates assigned to this listing (assign above)"
       : null,
-    data.ready.templateCount === 0 ? "no mockup templates for these colours" : null,
+    data.ready.variantCount === 0 ? "no colour variants for these colours" : null,
     data.ready.colours.length === 0 ? "no mockup colours" : null,
   ].filter(Boolean) as string[];
 
@@ -211,8 +212,8 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               const v = data.ready[field];
               const ok = typeof v === "number" ? v > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
               const detail =
-                field === "templateCount"
-                  ? ` · ${data.ready.templateCount}`
+                field === "variantCount"
+                  ? ` · ${data.ready.variantCount}`
                   : field === "colours"
                     ? ` · ${data.ready.colours.length}`
                     : "";
@@ -236,39 +237,38 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           <span className="body-sm">
             {blockers.length > 0 ? (
               <>Can&apos;t generate yet — {blockers.join(", ")}.</>
-            ) : evenMatrix ? (
+            ) : (
+              // templates ACROSS colours, arrow to the total — never a
+              // multiplication. "6 templates × 3 colours" once printed the
+              // VARIANT count under the template label; house terminology
+              // is template = the shot, variant = template×colour.
               <>
-                <strong>{data.ready.templateCount}</strong> {plural(data.ready.templateCount, "template")} ×{" "}
-                <strong>{data.ready.colours.length}</strong> {plural(data.ready.colours.length, "colour")} ={" "}
+                <strong>{data.ready.templatesInPlay}</strong>{" "}
+                {plural(data.ready.templatesInPlay, "template")} across{" "}
+                <strong>{data.ready.colours.length}</strong>{" "}
+                {plural(data.ready.colours.length, "colour")} →{" "}
                 <strong>
                   {data.tiles.length} {plural(data.tiles.length, "mockup")}
                 </strong>
-                {builtGraphics > 0 ? <> + {builtGraphics} info graphics</> : null}
-              </>
-            ) : (
-              // a colour-locked template composites onto its own colour
-              // only, so the tile count isn't templates × colours — showing
-              // the multiplication anyway would print a false sum
-              <>
-                <strong>
-                  {data.tiles.length} {plural(data.tiles.length, "mockup")}
-                </strong>{" "}
-                from {data.ready.templateCount} {plural(data.ready.templateCount, "template")} across{" "}
-                {data.ready.colours.length} {plural(data.ready.colours.length, "colour")} — some
-                templates are locked to one colour
-                {builtGraphics > 0 ? <> · + {builtGraphics} info graphics</> : null}
+                {builtGraphics > 0 ? <> + {builtGraphics} info {builtGraphics === 1 ? "graphic" : "graphics"}</> : null}
               </>
             )}
           </span>
-          {/* The compositor is Phase 3. A button that looked live and did
-              nothing would be worse than one that says why it can't. */}
-          <button className="btn btn-primary" disabled title="Hosted PSD compositing arrives in Phase 3">
-            ⟳ Generate mockups
-          </button>
+          {/* The compositor is Phase 3. The WHY must be readable on an
+              all-green panel, not hidden in a hover tooltip — a disabled
+              button with every chip passing read as broken in live use. */}
+          <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            {blockers.length === 0 ? (
+              <span className="chip neutral" style={{ fontSize: 10 }}>waits on the Phase 3 compositor</span>
+            ) : null}
+            <button className="btn btn-primary" disabled title="Hosted PSD compositing arrives in Phase 3">
+              ⟳ Generate mockups
+            </button>
+          </span>
         </div>
         <span className="hint">
-          Compositing runs in Phase 3 — until then this plans the run and shows exactly which
-          template × colour pairs it will produce.
+          Compositing arrives in Phase 3 — the plan is live: every pending card below is a real
+          template × colour pair the run will produce, and nothing here is unmet.
         </span>
       </div>
 

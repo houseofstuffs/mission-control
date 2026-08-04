@@ -258,6 +258,10 @@ export const SCHEMA: DbSpec[] = [
       // auto-import (pending Google OAuth) can list the folder and detect
       // colours from filenames without any manual dropping.
       "Drive Folder Link": { type: "url" },
+      // Which garment this shoot was OF — L4's picker filters to the
+      // listing's product so it stays short as the library grows. Unset
+      // means "shown for every listing", never silently hidden.
+      Product: { type: "relation", relation: "products" },
       "Crop Set At": { type: "date" },
       // Set by hand after actually looking at a real multi-colour batch —
       // this app can't detect framing drift between photos on its own.

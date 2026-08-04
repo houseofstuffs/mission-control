@@ -41,8 +41,24 @@ export interface MockupsData {
     colours: string[];
   };
   tiles: MockupTile[];
-  /** every template that exists, for the assignment picker */
-  allTemplates: Array<{ id: string; name: string; variantCount: number; hasGeometry: boolean }>;
+  /** compatible templates, with what each contributes to THIS listing */
+  allTemplates: Array<{
+    id: string;
+    name: string;
+    shotType: string;
+    thumbUrl: string | null;
+    printRegionQuad: Array<{ x: number; y: number }> | null;
+    /** the listing colours this template can produce, display-cased */
+    coverage: string[];
+    /** mockups it yields for this listing (one variant per colour) */
+    yield: number;
+    /** exists in exactly one colour — the amber lock */
+    colourLocked: boolean;
+    hasGeometry: boolean;
+  }>;
+  /** templates for OTHER products, hidden from the picker */
+  hidden: { count: number; example: string | null };
+  productName: string | null;
   /** template ids assigned to THIS listing — drives the plan and L5's offers */
   shortlist: string[];
   /** the Product's reusable graphics — built once per blueprint, not per
@@ -58,103 +74,79 @@ const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 const READY_LABEL: Array<[keyof MockupsData["ready"], string]> = [
   ["printifyProduct", "Printify product"],
   ["psdMaster", "PSD master"],
-  ["variantCount", "Colour variants"],
   ["colours", "Mockup colours"],
 ];
 
-/**
- * The per-listing template assignment. Ticking is local until Save — the
- * plan below re-derives server-side on refresh, so saving is the moment
- * the assignment starts meaning anything.
- */
-function TemplateAssignment({
-  listingId,
-  all,
-  saved,
-}: {
-  listingId: string;
-  all: MockupsData["allTemplates"];
-  saved: string[];
-}) {
-  const router = useRouter();
-  const [picked, setPicked] = useState<Set<string>>(new Set(saved));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const dirty =
-    JSON.stringify([...picked].sort()) !== JSON.stringify(saved.slice().sort());
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    const res = await apiJson(`/api/listings/${listingId}`, "PATCH", {
-      templateShortlist: [...picked],
-    });
-    if (!res.ok) setError(res.error);
-    else router.refresh();
-    setBusy(false);
-  }
-
+/** the sketch's thumbnail: sample image with the print-region quad's
+ *  bounding box drawn as a dashed overlay */
+function TemplateThumb({ t }: { t: MockupsData["allTemplates"][number] }) {
+  const q = t.printRegionQuad;
+  const box = q
+    ? {
+        left: `${Math.min(...q.map((p) => p.x)) * 100}%`,
+        top: `${Math.min(...q.map((p) => p.y)) * 100}%`,
+        width: `${(Math.max(...q.map((p) => p.x)) - Math.min(...q.map((p) => p.x))) * 100}%`,
+        height: `${(Math.max(...q.map((p) => p.y)) - Math.min(...q.map((p) => p.y))) * 100}%`,
+      }
+    : null;
   return (
-    <div className="card supporting">
-      <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-        <Kicker>TEMPLATES FOR THIS LISTING · {picked.size} ASSIGNED</Kicker>
-        {dirty ? <span className="chip stale" style={{ fontSize: 10 }}>UNSAVED</span> : null}
-      </div>
-      <span className="hint">
-        The assignment drives the plan below, and L5 only offers variants from these templates (in
-        this listing&apos;s colours). Unassigned templates stay in the Library, untouched.
-      </span>
-      {all.length === 0 ? (
-        <span className="hint">No templates exist yet — define one on the Library page first.</span>
-      ) : (
-        <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-          {all.map((t) => {
-            const on = picked.has(t.id);
-            return (
-              <button
-                key={t.id}
-                type="button"
-                className={`chip ${on ? "done" : "neutral"}`}
-                style={{ cursor: "pointer", fontSize: 12, padding: "6px 12px" }}
-                title={
-                  !t.hasGeometry
-                    ? "No crop geometry saved — finish it on the Library page before this can generate"
-                    : `${t.variantCount} colour ${t.variantCount === 1 ? "variant" : "variants"} saved`
-                }
-                onClick={() =>
-                  setPicked((cur) => {
-                    const next = new Set(cur);
-                    if (next.has(t.id)) next.delete(t.id);
-                    else next.add(t.id);
-                    return next;
-                  })
-                }
-              >
-                {on ? "✓ " : "＋ "}
-                {t.name} · {t.variantCount}
-                {!t.hasGeometry ? " · no geometry" : ""}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {error ? <div className="callout blocked">{error}</div> : null}
-      {dirty ? (
-        <div className="row-gap-12">
-          <button className="btn btn-save" onClick={save} disabled={busy}>
-            <Spinner active={busy} />
-            Save template assignment
-          </button>
-          <button className="btn btn-tertiary" disabled={busy} onClick={() => setPicked(new Set(saved))}>
-            Revert
-          </button>
-        </div>
+    <span
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        background: "var(--surface-sunk, #f4efe2)",
+        position: "relative",
+        flex: "none",
+        overflow: "hidden",
+        display: "inline-block",
+      }}
+    >
+      {t.thumbUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={t.thumbUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
       ) : null}
-    </div>
+      {box ? (
+        <span
+          style={{
+            position: "absolute",
+            ...box,
+            border: "1.4px dashed rgba(255,255,255,0.75)",
+            borderRadius: 3,
+            mixBlendMode: "difference",
+          }}
+        />
+      ) : null}
+    </span>
   );
 }
 
 export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
+  const router = useRouter();
+  // Selection lives HERE so the plan card recomputes live as templates are
+  // ticked (the sketch's behaviour) — the saved shortlist stays the server
+  // truth, and a dirty selection previews with an UNSAVED marker.
+  const [picked, setPicked] = useState<Set<string>>(new Set(data.shortlist));
+  const [assignBusy, setAssignBusy] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const dirty = JSON.stringify([...picked].sort()) !== JSON.stringify(data.shortlist.slice().sort());
+
+  async function saveAssignment() {
+    setAssignBusy(true);
+    setAssignError(null);
+    const res = await apiJson(`/api/listings/${data.listingId}`, "PATCH", {
+      templateShortlist: [...picked],
+    });
+    if (!res.ok) setAssignError(res.error);
+    else router.refresh();
+    setAssignBusy(false);
+  }
+
+  // the LIVE plan: sum of picked templates' yields. Matches the server's
+  // tile derivation once saved (one variant per colour post-dedupe).
+  const pickedTemplates = data.allTemplates.filter((t) => picked.has(t.id));
+  const liveMockups = pickedTemplates.reduce((n, t) => n + t.yield, 0);
+
   // only built graphics count toward the plan — a missing one is a pill
   // below, not a phantom in the sum
   const builtGraphics = data.infoGraphics.filter((g) => g.url).length;
@@ -196,27 +188,15 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   return (
     <div className="stack-12">
-      <TemplateAssignment listingId={data.listingId} all={data.allTemplates} saved={data.shortlist} />
+      {/* ready card FIRST (sketch order) — its template chip and plan line
+          recompute LIVE from the picked set; dirty shows unsaved */}
       <div className="card supporting">
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
           <Kicker>READY TO GENERATE</Kicker>
           <span className="row-gap-8" style={{ flexWrap: "wrap" }}>
-            <span
-              className={`chip ${data.shortlist.length > 0 ? "done" : "stale"}`}
-              style={{ fontSize: 11 }}
-              title="Assigned in the card above — the plan and L5's variant offers follow it"
-            >
-              {data.shortlist.length > 0 ? "✓ " : ""}Templates assigned · {data.shortlist.length}
-            </span>
             {READY_LABEL.map(([field, label]) => {
               const v = data.ready[field];
               const ok = typeof v === "number" ? v > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
-              const detail =
-                field === "variantCount"
-                  ? ` · ${data.ready.variantCount}`
-                  : field === "colours"
-                    ? ` · ${data.ready.colours.length}`
-                    : "";
               return (
                 <span
                   key={label}
@@ -226,31 +206,32 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 >
                   {ok ? "✓ " : ""}
                   {label}
-                  {detail}
+                  {field === "colours" ? ` · ${data.ready.colours.length}` : ""}
                 </span>
               );
             })}
+            <span className={`chip ${picked.size > 0 ? "done" : "stale"}`} style={{ fontSize: 11 }}>
+              {picked.size > 0 ? "✓ " : "⚠ "}Mockup templates · {picked.size}
+              {dirty ? " · unsaved" : ""}
+            </span>
           </span>
         </div>
 
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center", marginTop: 4 }}>
           <span className="body-sm">
-            {blockers.length > 0 ? (
+            {picked.size === 0 ? (
+              <>Pick at least one template below to generate.</>
+            ) : blockers.length > 0 && !dirty ? (
               <>Can&apos;t generate yet — {blockers.join(", ")}.</>
             ) : (
-              // templates ACROSS colours, arrow to the total — never a
-              // multiplication. "6 templates × 3 colours" once printed the
-              // VARIANT count under the template label; house terminology
-              // is template = the shot, variant = template×colour.
+              // live sum of the picked templates' yields — never a
+              // multiplication (colour-locked templates count their one)
               <>
-                <strong>{data.ready.templatesInPlay}</strong>{" "}
-                {plural(data.ready.templatesInPlay, "template")} across{" "}
-                <strong>{data.ready.colours.length}</strong>{" "}
-                {plural(data.ready.colours.length, "colour")} →{" "}
-                <strong>
-                  {data.tiles.length} {plural(data.tiles.length, "mockup")}
-                </strong>
+                <strong>{picked.size} {plural(picked.size, "template")}</strong> across your{" "}
+                <strong>{data.ready.colours.length}</strong> {plural(data.ready.colours.length, "colour")} →{" "}
+                <strong>{liveMockups} {plural(liveMockups, "mockup")}</strong> to generate
                 {builtGraphics > 0 ? <> + {builtGraphics} info {builtGraphics === 1 ? "graphic" : "graphics"}</> : null}
+                {dirty ? <span className="hint"> · unsaved — save below to apply</span> : null}
               </>
             )}
           </span>
@@ -268,8 +249,123 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         </div>
         <span className="hint">
           Compositing arrives in Phase 3 — the plan is live: every pending card below is a real
-          template × colour pair the run will produce, and nothing here is unmet.
+          template × colour pair the run will produce.
         </span>
+      </div>
+
+      {/* the picker — rows with thumbnail, coverage and per-listing yield */}
+      <div className="card supporting">
+        <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "baseline" }}>
+          <Kicker>TEMPLATES FOR THIS LISTING</Kicker>
+          <span className="body-sm" style={{ fontWeight: 700, color: "var(--status-done, #3e7a4e)" }}>
+            {picked.size} of {data.allTemplates.length} selected
+          </span>
+        </div>
+        <span className="hint">
+          Pick the templates this listing uses. Only these feed the <strong>L5 slot pickers</strong>{" "}
+          and set what gets generated.
+          {data.productName ? <> Showing templates compatible with <strong>{data.productName}</strong>.</> : null}
+        </span>
+
+        {data.allTemplates.map((t) => {
+          const on = picked.has(t.id);
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() =>
+                setPicked((cur) => {
+                  const next = new Set(cur);
+                  if (next.has(t.id)) next.delete(t.id);
+                  else next.add(t.id);
+                  return next;
+                })
+              }
+              className="row-gap-12"
+              style={{
+                alignItems: "center",
+                width: "100%",
+                textAlign: "left",
+                fontFamily: "inherit",
+                cursor: "pointer",
+                border: `1.5px solid ${on ? "var(--status-done, #bee0d5)" : "var(--border-soft, #e7e0ce)"}`,
+                borderRadius: 11,
+                padding: "10px 14px",
+                background: on ? "var(--surface-panel-accent, #e4f0e9)" : "#fff",
+              }}
+            >
+              <span
+                aria-hidden
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 6,
+                  border: `2px solid ${on ? "var(--status-done, #2e9e88)" : "#cbbe9b"}`,
+                  background: on ? "var(--status-done, #2e9e88)" : "#fff",
+                  color: "#fff",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 13,
+                  flex: "none",
+                }}
+              >
+                {on ? "✓" : ""}
+              </span>
+              <TemplateThumb t={t} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", fontWeight: 600, fontSize: 14 }}>
+                  {t.name}
+                  {t.shotType ? <span className="chip neutral" style={{ fontSize: 10 }}>{t.shotType.toUpperCase()}</span> : null}
+                  {!t.hasGeometry ? <span className="chip stale" style={{ fontSize: 10 }}>no geometry</span> : null}
+                </span>
+                <span className="hint" style={{ display: "block", marginTop: 2 }}>
+                  {t.coverage.length === 0 ? (
+                    "no variants in this listing's colours yet"
+                  ) : t.colourLocked ? (
+                    <span style={{ color: "var(--status-stale, #b8792a)", fontWeight: 700 }}>
+                      {t.coverage[0]} only · colour-locked
+                    </span>
+                  ) : (
+                    <>{t.coverage.length} {plural(t.coverage.length, "colour")} · {t.coverage.join(", ")}</>
+                  )}
+                </span>
+              </span>
+              <span style={{ textAlign: "right", flex: "none", fontSize: 12, fontWeight: 700, color: "var(--status-done, #2e9e88)" }}>
+                {t.yield} {plural(t.yield, "mockup")}
+                <span className="hint" style={{ display: "block", fontWeight: 500, fontSize: 10 }}>for this listing</span>
+              </span>
+            </button>
+          );
+        })}
+        {data.allTemplates.length === 0 ? (
+          <span className="hint">No templates for this product yet — create one in the Library.</span>
+        ) : null}
+
+        {assignError ? <div className="callout blocked">{assignError}</div> : null}
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          {dirty ? (
+            <>
+              <button className="btn btn-save" onClick={saveAssignment} disabled={assignBusy}>
+                <Spinner active={assignBusy} />
+                Save template assignment
+              </button>
+              <button className="btn btn-tertiary" disabled={assignBusy} onClick={() => setPicked(new Set(data.shortlist))}>
+                Revert
+              </button>
+            </>
+          ) : null}
+          <a className="btn btn-tertiary" href="/library" style={{ marginLeft: dirty ? "auto" : 0 }}>
+            ＋ Create a new template in the Library →
+          </a>
+        </div>
+        {data.hidden.count > 0 ? (
+          <span className="hint" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 8 }}>
+            Hidden: {data.hidden.count} {plural(data.hidden.count, "template")} for other products
+            {data.hidden.example ? <> (e.g. {data.hidden.example})</> : null} — not compatible with
+            this listing&apos;s {data.productName ?? "product"}.
+          </span>
+        ) : null}
       </div>
 
       {data.tiles.length > 0 ? (

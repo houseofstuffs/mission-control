@@ -10,6 +10,7 @@ import { compatForListing } from "@/server/imageSlots";
 import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
+import { parseQuad } from "@/config/mockups";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
 import type { PushData } from "@/components/PushDraftPanel";
@@ -230,18 +231,50 @@ function mockupsData(
     graphic("Colorways Graphic Link", "Colourways"),
   ];
 
-  // every template that exists, for the assignment UI — with what each
-  // would contribute so the pick is informed, not a name-guessing game
-  const variantsByShot = new Map<string, number>();
+  // every template, with what it would CONTRIBUTE to this listing — the
+  // pick is coverage and yield, not a name-guessing game. Incompatible
+  // templates (a Product set, and not this listing's) are hidden with a
+  // count; templates with no Product set show everywhere by design.
+  const listingColours = slots.availableColors.map(norm);
+  const variantColoursByShot = new Map<string, Set<string>>();
   for (const t of slots.templates) {
-    if (t.shotId) variantsByShot.set(t.shotId, (variantsByShot.get(t.shotId) ?? 0) + 1);
+    if (!t.shotId || !t.garmentColor.trim()) continue;
+    const set = variantColoursByShot.get(t.shotId) ?? new Set<string>();
+    set.add(norm(t.garmentColor));
+    variantColoursByShot.set(t.shotId, set);
   }
-  const allTemplates = cachedRecords("mockup_shots").map((s) => ({
-    id: s.id,
-    name: s.title || "Untitled template",
-    variantCount: variantsByShot.get(s.id) ?? 0,
-    hasGeometry: String(s.props["Crop Rect (JSON)"] ?? "").trim().length > 0,
-  }));
+  // display-cased colour names, keyed by normalized form
+  const colourDisplay = new Map(slots.availableColors.map((c) => [norm(c), c]));
+  const shotTypeByShot = new Map<string, string>();
+  for (const t of slots.templates) {
+    if (t.shotId && t.shotType && !shotTypeByShot.has(t.shotId)) shotTypeByShot.set(t.shotId, t.shotType);
+  }
+
+  const allShots = cachedRecords("mockup_shots");
+  const compatible = (s: (typeof allShots)[number]) => {
+    const pid = ((s.props["Product"] as string[] | null) ?? [])[0];
+    return !pid || pid === productId;
+  };
+  const hiddenShots = allShots.filter((s) => !compatible(s));
+  const allTemplates = allShots.filter(compatible).map((s) => {
+    const all = variantColoursByShot.get(s.id) ?? new Set<string>();
+    const covered = [...all].filter((c) => listingColours.includes(c));
+    const hasSample = Array.isArray(s.props["Sample Image"]) && (s.props["Sample Image"] as unknown[]).length > 0;
+    return {
+      id: s.id,
+      name: s.title || "Untitled template",
+      shotType: shotTypeByShot.get(s.id) ?? "",
+      thumbUrl: hasSample ? `/api/mockup-shots/${s.id}/thumb?v=${encodeURIComponent(s.lastEdited)}` : null,
+      printRegionQuad: parseQuad(String(s.props["Print Region Quad (JSON)"] ?? "")),
+      /** listing colours this template can actually produce, display-cased */
+      coverage: covered.map((c) => colourDisplay.get(c) ?? c),
+      /** one variant per colour after the duplicate guard, so yield = coverage */
+      yield: covered.length,
+      /** the template only exists in ONE colour at all — the sketch's amber lock */
+      colourLocked: all.size === 1,
+      hasGeometry: String(s.props["Crop Rect (JSON)"] ?? "").trim().length > 0,
+    };
+  });
 
   // distinct TEMPLATES behind the usable variants — a shot-less hand
   // intake counts as its own template of one
@@ -257,6 +290,11 @@ function mockupsData(
       colours: slots.availableColors,
     },
     allTemplates,
+    hidden: {
+      count: hiddenShots.length,
+      example: hiddenShots[0]?.title ?? null,
+    },
+    productName: product ? productLabel(product) : null,
     shortlist: slots.shortlist,
     tiles,
     infoGraphics,

@@ -40,6 +40,19 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       values["Name"] = newName;
     }
 
+    if (body.productId !== undefined) {
+      const pid = String(body.productId).trim();
+      if (pid) {
+        const product = cachedRecord(pid);
+        if (!product || product.dbKey !== "products") {
+          return NextResponse.json({ error: "Unknown product — refresh and retry." }, { status: 400 });
+        }
+        values["Product"] = [pid];
+      } else {
+        values["Product"] = []; // cleared = shown for every listing again
+      }
+    }
+
     if (body.cropRect !== undefined) {
       const r = body.cropRect as { x?: unknown; y?: unknown; size?: unknown } | null;
       if (

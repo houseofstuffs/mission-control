@@ -422,6 +422,7 @@ function main() {
       { x: 0.3, y: 0.28 }, { x: 0.7, y: 0.28 }, { x: 0.7, y: 0.62 }, { x: 0.3, y: 0.62 },
     ]),
     "Drive Folder Link": "https://drive.google.com/drive/folders/1q7zQqb7NgyhNQyHd0IDGr2rHRjlHstVW",
+    Product: ["product-1"],
   });
 
   const template = rec("mockup_templates", "tpl-1", "CC1466 Flat Lay Folded", {
@@ -442,6 +443,16 @@ function main() {
     Name: "CC1466 Model 1",
     "Crop Rect (JSON)": JSON.stringify({ x: 0.1, y: 0.1, size: 0.8 }),
     "Crop Set At": "2026-08-01",
+    Product: ["product-1"],
+  });
+
+  // a template for the OTHER product — must be HIDDEN in listing-1's L4
+  // picker, counted in the "Hidden: N templates for other products" line
+  const mockupShot3 = rec("mockup_shots", "shot-3", "G18500 Hoodie Flat Lay", {
+    Name: "G18500 Hoodie Flat Lay",
+    "Crop Rect (JSON)": JSON.stringify({ x: 0.1, y: 0.1, size: 0.8 }),
+    "Crop Set At": "2026-08-01",
+    Product: ["product-2"],
   });
   const template2 = rec("mockup_templates", "tpl-2", "CC1466 Model 1 - Pepper - 4000", {
     Name: "CC1466 Model 1 - Pepper - 4000",
@@ -470,7 +481,7 @@ function main() {
     keywords: kws,
     image_slots: [...slots, ...siblingSlots],
     mockup_templates: [template, template2],
-    mockup_shots: [mockupShot, mockupShot2],
+    mockup_shots: [mockupShot, mockupShot2, mockupShot3],
     shipping_profiles: shippingProfiles,
   };
   for (const db of SCHEMA) replaceDbRecords(db.key, byDb[db.key] ?? []);

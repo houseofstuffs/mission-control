@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createRecord } from "@/server/notion/store";
+import { cachedRecord, createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { parseQuad } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
@@ -50,6 +50,15 @@ export async function POST(req: Request) {
       values["Print Region Quad (JSON)"] = JSON.stringify(quad);
     }
     if (str("driveFolderLink")) values["Drive Folder Link"] = str("driveFolderLink");
+    // which garment this shoot is OF — L4's picker filters on it; unset
+    // means the template shows for every listing
+    if (str("productId")) {
+      const product = cachedRecord(str("productId"));
+      if (!product || product.dbKey !== "products") {
+        return NextResponse.json({ error: "Unknown product — refresh and retry." }, { status: 400 });
+      }
+      values["Product"] = [product.id];
+    }
 
     const sample = form.get("sampleImage");
     if (sample && typeof sample !== "string" && sample.size > 0) {

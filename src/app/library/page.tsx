@@ -5,6 +5,7 @@
  * AI-captured and hand-edited, a different lifecycle entirely.
  */
 import { cachedRecords } from "@/server/notion/store";
+import { productLabel } from "@/server/viewmodels";
 import { syncState } from "@/server/cache/db";
 import { RefreshButton } from "@/components/RefreshButton";
 import { EmptyState, Kicker } from "@/components/ui";
@@ -50,6 +51,7 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[], slots: SimpleRecor
     thumbUrl: hasSample ? `/api/mockup-shots/${s.id}/thumb?v=${encodeURIComponent(s.lastEdited)}` : null,
     variantCount: variants.length,
     listingCount: listingIds.size,
+    productId: (((s.props["Product"] as string[] | null) ?? [])[0]) ?? "",
     importJob: (() => {
       const job = jobStatus(s.id);
       return job
@@ -157,6 +159,7 @@ export default function LibraryPage() {
           shots={mockupShots.map((s) => shotOption(s, mockups, imageSlots))}
           palette={palette}
           drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
+          products={cachedRecords("products").map((p) => ({ id: p.id, label: productLabel(p) }))}
           // exact-name twins — the duplicate-import incident's residue.
           // Non-zero surfaces the one-click cleanup.
           duplicateVariants={mockups.length - new Set(mockups.map((m) => (m.title || "").trim())).size}

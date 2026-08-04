@@ -811,6 +811,14 @@ export interface MockupShotOption {
   /** the background Drive import's last known state — the card shows it so
    *  a run survives being navigated away from VISIBLY, not just technically */
   importJob: { status: "running" | "complete" | "interrupted"; done: number; total: number; imported: number } | null;
+  /** which garment this shoot is OF — L4 filters on it; empty = every listing */
+  productId: string;
+}
+
+/** the product choices the template pickers offer */
+export interface ProductOption {
+  id: string;
+  label: string;
 }
 
 /**
@@ -828,15 +836,18 @@ function TemplateRow({
   s,
   driveConnected,
   variants,
+  products,
 }: {
   s: MockupShotOption;
   driveConnected: boolean;
   variants: MockupTemplateCard[];
+  products: ProductOption[];
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"view" | "edit" | "confirm-delete">("view");
   const [name, setName] = useState(s.name);
   const [link, setLink] = useState(s.driveFolderLink);
+  const [productId, setProductId] = useState(s.productId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // variants collapsed by default — the card is for recognition, the
@@ -849,6 +860,7 @@ function TemplateRow({
     const res = await apiJson(`/api/mockup-shots/${s.id}`, "PATCH", {
       name: name.trim(),
       driveFolderLink: link.trim(),
+      productId,
     });
     if (!res.ok) setError(res.error);
     else {
@@ -935,6 +947,21 @@ function TemplateRow({
               value={link}
               onChange={(e) => setLink(e.target.value)}
             />
+          </div>
+          <div className="field">
+            <label className="kicker" htmlFor={`tr-prod-${s.id}`} style={{ fontSize: 10 }}>PRODUCT · WHICH GARMENT THIS SHOOT IS OF</label>
+            <select
+              id={`tr-prod-${s.id}`}
+              className="select"
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+            >
+              <option value="">any product (shown for every listing)</option>
+              {products.map((pr) => (
+                <option key={pr.id} value={pr.id}>{pr.label}</option>
+              ))}
+            </select>
+            <span className="hint">L4&apos;s template picker filters on this, so it stays short as the library grows.</span>
           </div>
           {name.trim() !== s.name && s.variantCount > 0 ? (
             <span className="hint">
@@ -1112,10 +1139,19 @@ interface ShotColorRow {
  * population is what retires the all-at-once batch form — geometry is
  * decided once, variants are added against it forever after.
  */
-function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void; onClose: () => void }) {
+function TemplateDefine({
+  onSaved,
+  onClose,
+  products,
+}: {
+  onSaved: (name: string) => void;
+  onClose: () => void;
+  products: ProductOption[];
+}) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [driveLink, setDriveLink] = useState("");
+  const [productId, setProductId] = useState(products.length === 1 ? products[0].id : "");
   const [sample, setSample] = useState<File | null>(null);
   const [dims, setDims] = useState<Dims | null>(null);
   const [samplePreview, setSamplePreview] = useState<string | null>(null);
@@ -1182,6 +1218,7 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
     form.append("cropRect", JSON.stringify(rect));
     form.append("printRegionQuad", JSON.stringify(regionQuad));
     if (driveLink.trim()) form.append("driveFolderLink", driveLink.trim());
+    if (productId) form.append("productId", productId);
     if (croppedFile) form.append("sampleImage", croppedFile);
     const res = await apiCall("/api/mockup-shots", { method: "POST", body: form });
     if (!res.ok) setError(res.error);
@@ -1224,6 +1261,15 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
             value={driveLink}
             onChange={(e) => setDriveLink(e.target.value)}
           />
+        </div>
+        <div className="field" style={{ flex: "1 1 200px" }}>
+          <label className="kicker" htmlFor="td-product">PRODUCT · OPTIONAL</label>
+          <select id="td-product" className="select" value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <option value="">any product</option>
+            {products.map((pr) => (
+              <option key={pr.id} value={pr.id}>{pr.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -1796,12 +1842,14 @@ export function MockupTemplatesSection({
   shots,
   palette,
   drive,
+  products,
   duplicateVariants = 0,
 }: {
   templates: MockupTemplateCard[];
   shots: MockupShotOption[];
   palette: string[];
   drive: DriveStatus;
+  products: ProductOption[];
   /** exact-name variant twins — non-zero renders the one-click cleanup */
   duplicateVariants?: number;
 }) {
@@ -1898,6 +1946,7 @@ export function MockupTemplatesSection({
       </div>
       {openForm === "define" ? (
         <TemplateDefine
+          products={products}
           onSaved={(saved) => {
             setSavedNotice(`Template "${saved}" saved — add its colours with ＋ Add colour variants.`);
             setOpenForm(null);
@@ -1961,6 +2010,7 @@ export function MockupTemplatesSection({
             s={s}
             driveConnected={drive.connected}
             variants={templates.filter((t) => t.shotId === s.id)}
+            products={products}
           />
         ))}
         {shots.length === 0 ? (

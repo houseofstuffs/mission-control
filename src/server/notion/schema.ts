@@ -572,6 +572,11 @@ export const SCHEMA: DbSpec[] = [
       // listing — switches the image-slot seed and adds two publish gates.
       "Is Multi Variant": { type: "checkbox" },
       Product: { type: "relation", relation: "products" },
+      // Which mockup templates THIS listing uses (L4's assignment). Drives
+      // the generate plan and narrows L5's variant offers to
+      // shortlist ∩ slot colour. Template-level (mockup_shots), not
+      // per-colour — colours multiply automatically from Mockup Colors.
+      "Template Shortlist": { type: "relation", relation: "mockup_shots" },
       "Shop Section": { type: "relation", relation: "shop_sections" },
       "Origin Type": {
         type: "select",

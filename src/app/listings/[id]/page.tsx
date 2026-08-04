@@ -157,6 +157,7 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
     name: t.title,
     shotType: String(t.props["Shot Type"] ?? ""),
     garmentColor: String(t.props["Garment Color"] ?? ""),
+    shotId: ((t.props["Shot"] as string[] | null) ?? [])[0] ?? null,
   }));
   return {
     listingId: rec.id,
@@ -165,6 +166,8 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
     slots,
     templates,
     availableColors,
+    // L4's assignment — offers narrow to shortlist ∩ colour when set
+    shortlist: (rec.props["Template Shortlist"] as string[] | null) ?? [],
     hasProductLinks: slots.some((s) => s.productLinkRole),
   };
 }
@@ -186,10 +189,16 @@ function mockupsData(
 
   const norm = (c: string) => c.trim().toLowerCase();
   const sells = new Set(slots.availableColors.map(norm));
+  const shortlist = new Set(slots.shortlist);
   // colour-neutral variants composite onto any colourway; colour-tagged
-  // ones only where that colour survives the availability intersection
+  // ones only where that colour survives the availability intersection.
+  // With a shortlist assigned, only its templates' variants plan tiles —
+  // that's the assignment MEANING something. Shot-less variants (hand
+  // intakes) always pass; they were made deliberately, one at a time.
   const usable = slots.templates.filter(
-    (t) => !t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))
+    (t) =>
+      (!t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))) &&
+      (shortlist.size === 0 || t.shotId === null || shortlist.has(t.shotId))
   );
 
   const tiles: MockupTile[] = [];
@@ -215,6 +224,19 @@ function mockupsData(
     graphic("Colorways Graphic Link", "Colourways"),
   ];
 
+  // every template that exists, for the assignment UI — with what each
+  // would contribute so the pick is informed, not a name-guessing game
+  const variantsByShot = new Map<string, number>();
+  for (const t of slots.templates) {
+    if (t.shotId) variantsByShot.set(t.shotId, (variantsByShot.get(t.shotId) ?? 0) + 1);
+  }
+  const allTemplates = cachedRecords("mockup_shots").map((s) => ({
+    id: s.id,
+    name: s.title || "Untitled template",
+    variantCount: variantsByShot.get(s.id) ?? 0,
+    hasGeometry: String(s.props["Crop Rect (JSON)"] ?? "").trim().length > 0,
+  }));
+
   return {
     listingId: rec.id,
     ready: {
@@ -223,6 +245,8 @@ function mockupsData(
       templateCount: usable.length,
       colours: slots.availableColors,
     },
+    allTemplates,
+    shortlist: slots.shortlist,
     tiles,
     infoGraphics,
   };

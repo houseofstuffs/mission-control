@@ -185,6 +185,9 @@ function main() {
     "Etsy State": "Not pushed",
     Designs: ["design-1"],
     Product: ["product-1"],
+    // L4's assignment: shot-1 in, shot-2 deliberately out — the excluded
+    // template's variant must read "not offered" at L5
+    "Template Shortlist": ["shot-1"],
     "Colorways (JSON)": JSON.stringify(["Black", "Espresso", "Pepper"]),
     // saved copy, so the shots exercise the states that hid bugs before:
     // a long title (start-truncation), a filled boilerplate (cut-off
@@ -392,6 +395,25 @@ function main() {
     ]),
   });
 
+  // a second template the listing does NOT assign — its variant must show
+  // as "not offered" at L5 and sit unticked in L4's assignment card
+  const mockupShot2 = rec("mockup_shots", "shot-2", "CC1466 Model 1", {
+    Name: "CC1466 Model 1",
+    "Crop Rect (JSON)": JSON.stringify({ x: 0.1, y: 0.1, size: 0.8 }),
+    "Crop Set At": "2026-08-01",
+  });
+  const template2 = rec("mockup_templates", "tpl-2", "CC1466 Model 1 - Pepper - 4000", {
+    Name: "CC1466 Model 1 - Pepper - 4000",
+    Shot: ["shot-2"],
+    "Pipeline Type": "Simple Placement",
+    "Blend Mode": "Normal",
+    Fit: "Fill width from top",
+    "Garment Color": "Pepper",
+    "Print Area Quad (JSON)": JSON.stringify([
+      [0.3, 0.3], [0.7, 0.3], [0.7, 0.7], [0.3, 0.7],
+    ]),
+  });
+
   // every database gets an explicit (possibly empty) set, so sync_state
   // exists for all of them and "never synced" banners don't fire
   const byDb: Record<string, SimpleRecord[]> = {
@@ -402,8 +424,8 @@ function main() {
     etsy_listings: [listing, siblingListing, emptySibling],
     keywords: keywords(),
     image_slots: slots,
-    mockup_templates: [template],
-    mockup_shots: [mockupShot],
+    mockup_templates: [template, template2],
+    mockup_shots: [mockupShot, mockupShot2],
     shipping_profiles: shippingProfiles,
   };
   for (const db of SCHEMA) replaceDbRecords(db.key, byDb[db.key] ?? []);

@@ -100,6 +100,24 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
+    // L4's template assignment — which mockup templates this listing uses.
+    // Changing it after L5 placed variants from the old set makes those
+    // placements suspect, so it staleness-marks like a colourway change.
+    let shortlistChanged = false;
+    if (body.templateShortlist !== undefined) {
+      const list = Array.isArray(body.templateShortlist)
+        ? body.templateShortlist.map((x: unknown) => String(x)).filter(Boolean)
+        : [];
+      const shots = new Set(cachedRecords("mockup_shots").map((s) => s.id));
+      const unknown = list.filter((x: string) => !shots.has(x));
+      if (unknown.length > 0) {
+        return NextResponse.json({ error: "Unknown template in shortlist — refresh and retry." }, { status: 400 });
+      }
+      values["Template Shortlist"] = list;
+      const prior = ((listing.props["Template Shortlist"] as string[] | null) ?? []).slice().sort();
+      shortlistChanged = JSON.stringify(prior) !== JSON.stringify(list.slice().sort());
+    }
+
     // the subset of colourways this listing actually generates mockups for
     let mockupColorsChanged = false;
     if (body.mockupColors !== undefined) {
@@ -125,6 +143,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     // the images a lie until re-checked. Stale, never silent.
     if (colorwaysChanged || mockupColorsChanged) {
       await markStepsStale(id, ["L4", "L5"], "Colorways changed — re-check images and slots.");
+    }
+    if (shortlistChanged) {
+      await markStepsStale(id, ["L5"], "Template shortlist changed — re-check slot placements.");
     }
     // Saving tags syncs keyword ATTACHMENTS to the committed selection —
     // the visibility publish gate reads the relation, and attachment means

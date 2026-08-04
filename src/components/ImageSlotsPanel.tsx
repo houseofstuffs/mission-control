@@ -40,9 +40,11 @@ export interface SlotsData {
   /** tightest garment compatibility across this listing's designs */
   compatibility: string;
   slots: SlotRow[];
-  templates: Array<{ id: string; name: string; shotType: string; garmentColor: string }>;
+  templates: Array<{ id: string; name: string; shotType: string; garmentColor: string; shotId: string | null }>;
   /** already the full intersection — sold (or mockup-colors subset) ∩ an Available Product Variant. Template offers filter against this, not raw colorways. */
   availableColors: string[];
+  /** L4's template assignment — non-empty narrows offers to shortlist ∩ colour */
+  shortlist: string[];
   /** true when any slot is tied to a Product graphic — shows the Refresh from Product button */
   hasProductLinks: boolean;
 }
@@ -231,11 +233,16 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   // Offer colour-neutral templates always; colour-tagged ones only when the
   // colour survives the full intersection (sold/mockup-colors ∩ an
   // Available Product Variant) — computed server-side. No colours recorded
-  // yet = no filtering, with a nudge to set them at L1.
+  // yet = no filtering, with a nudge to set them at L1. On top of colour:
+  // L4's template assignment — when a shortlist exists, only its templates'
+  // variants are offered (shot-less hand intakes always pass).
   const norm = (c: string) => c.trim().toLowerCase();
   const sells = new Set(data.availableColors.map(norm));
+  const shortlist = new Set(data.shortlist);
   const offered = data.templates.filter(
-    (t) => !t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))
+    (t) =>
+      (!t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))) &&
+      (shortlist.size === 0 || t.shotId === null || shortlist.has(t.shotId))
   );
   const hiddenCount = data.templates.length - offered.length;
 
@@ -301,8 +308,10 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
       {hiddenCount > 0 ? (
         <div className="hint">
-          {hiddenCount} variant{hiddenCount === 1 ? "" : "s"} not offered — other garment colours
-          than this listing&apos;s colorways (set at L1).
+          {hiddenCount} variant{hiddenCount === 1 ? "" : "s"} not offered —{" "}
+          {data.shortlist.length > 0
+            ? "outside this listing's template assignment (L4) or its colorways (L1)."
+            : "other garment colours than this listing's colorways (set at L1)."}
         </div>
       ) : null}
 

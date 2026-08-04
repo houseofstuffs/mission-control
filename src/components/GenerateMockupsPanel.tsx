@@ -14,7 +14,9 @@
  * than clicking through a dozen good ones to bless each.
  */
 import { useMemo, useState } from "react";
-import { Kicker } from "./ui";
+import { useRouter } from "next/navigation";
+import { Kicker, Spinner } from "./ui";
+import { apiJson } from "@/lib/api";
 
 export interface MockupTile {
   templateId: string;
@@ -35,6 +37,10 @@ export interface MockupsData {
     colours: string[];
   };
   tiles: MockupTile[];
+  /** every template that exists, for the assignment picker */
+  allTemplates: Array<{ id: string; name: string; variantCount: number; hasGeometry: boolean }>;
+  /** template ids assigned to THIS listing — drives the plan and L5's offers */
+  shortlist: string[];
   /** the Product's reusable graphics — built once per blueprint, not per
    *  listing. url null = expected by the slot plan but not built yet; that
    *  absence renders as a "needed" pill, never silence. */
@@ -51,6 +57,98 @@ const READY_LABEL: Array<[keyof MockupsData["ready"], string]> = [
   ["templateCount", "Mockup templates"],
   ["colours", "Mockup colours"],
 ];
+
+/**
+ * The per-listing template assignment. Ticking is local until Save — the
+ * plan below re-derives server-side on refresh, so saving is the moment
+ * the assignment starts meaning anything.
+ */
+function TemplateAssignment({
+  listingId,
+  all,
+  saved,
+}: {
+  listingId: string;
+  all: MockupsData["allTemplates"];
+  saved: string[];
+}) {
+  const router = useRouter();
+  const [picked, setPicked] = useState<Set<string>>(new Set(saved));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const dirty =
+    JSON.stringify([...picked].sort()) !== JSON.stringify(saved.slice().sort());
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson(`/api/listings/${listingId}`, "PATCH", {
+      templateShortlist: [...picked],
+    });
+    if (!res.ok) setError(res.error);
+    else router.refresh();
+    setBusy(false);
+  }
+
+  return (
+    <div className="card supporting">
+      <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+        <Kicker>TEMPLATES FOR THIS LISTING · {picked.size} ASSIGNED</Kicker>
+        {dirty ? <span className="chip stale" style={{ fontSize: 10 }}>UNSAVED</span> : null}
+      </div>
+      <span className="hint">
+        The assignment drives the plan below, and L5 only offers variants from these templates (in
+        this listing&apos;s colours). Unassigned templates stay in the Library, untouched.
+      </span>
+      {all.length === 0 ? (
+        <span className="hint">No templates exist yet — define one on the Library page first.</span>
+      ) : (
+        <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+          {all.map((t) => {
+            const on = picked.has(t.id);
+            return (
+              <button
+                key={t.id}
+                type="button"
+                className={`chip ${on ? "done" : "neutral"}`}
+                style={{ cursor: "pointer", fontSize: 12, padding: "6px 12px" }}
+                title={
+                  !t.hasGeometry
+                    ? "No crop geometry saved — finish it on the Library page before this can generate"
+                    : `${t.variantCount} colour ${t.variantCount === 1 ? "variant" : "variants"} saved`
+                }
+                onClick={() =>
+                  setPicked((cur) => {
+                    const next = new Set(cur);
+                    if (next.has(t.id)) next.delete(t.id);
+                    else next.add(t.id);
+                    return next;
+                  })
+                }
+              >
+                {on ? "✓ " : "＋ "}
+                {t.name} · {t.variantCount}
+                {!t.hasGeometry ? " · no geometry" : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {error ? <div className="callout blocked">{error}</div> : null}
+      {dirty ? (
+        <div className="row-gap-12">
+          <button className="btn btn-save" onClick={save} disabled={busy}>
+            <Spinner active={busy} />
+            Save template assignment
+          </button>
+          <button className="btn btn-tertiary" disabled={busy} onClick={() => setPicked(new Set(saved))}>
+            Revert
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   // only built graphics count toward the plan — a missing one is a pill
@@ -76,6 +174,9 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const blockers = [
     !data.ready.printifyProduct ? "no Printify product" : null,
     !data.ready.psdMaster ? "no PSD master" : null,
+    data.allTemplates.length > 0 && data.shortlist.length === 0
+      ? "no templates assigned to this listing (assign above)"
+      : null,
     data.ready.templateCount === 0 ? "no mockup templates for these colours" : null,
     data.ready.colours.length === 0 ? "no mockup colours" : null,
   ].filter(Boolean) as string[];
@@ -94,10 +195,18 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   return (
     <div className="stack-12">
+      <TemplateAssignment listingId={data.listingId} all={data.allTemplates} saved={data.shortlist} />
       <div className="card supporting">
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
           <Kicker>READY TO GENERATE</Kicker>
           <span className="row-gap-8" style={{ flexWrap: "wrap" }}>
+            <span
+              className={`chip ${data.shortlist.length > 0 ? "done" : "stale"}`}
+              style={{ fontSize: 11 }}
+              title="Assigned in the card above — the plan and L5's variant offers follow it"
+            >
+              {data.shortlist.length > 0 ? "✓ " : ""}Templates assigned · {data.shortlist.length}
+            </span>
             {READY_LABEL.map(([field, label]) => {
               const v = data.ready[field];
               const ok = typeof v === "number" ? v > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);

@@ -1775,6 +1775,29 @@ export function MockupTemplatesSection({
     setOpenForm((cur) => (cur === k ? null : k));
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
+  // One-time bridge for templates saved before thumbnails existed: rebuild
+  // the sample from the Drive folder + stored crop. Disappears on its own
+  // once every card has an image.
+  const missingThumbs = shots.filter((s) => !s.thumbUrl).length;
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillReport, setBackfillReport] = useState<Array<{ name: string; ok: boolean; detail: string }> | null>(null);
+  async function backfillThumbs() {
+    setBackfilling(true);
+    setDriveError(null);
+    const res = await apiJson<{ results?: Array<{ name: string; ok: boolean; detail: string }>; needsReconnect?: boolean }>(
+      "/api/mockup-shots/backfill-thumbs",
+      "POST",
+      {},
+      300_000 // several downloads + uploads — well past the default feel of "hung"
+    );
+    if (!res.ok) setDriveError(res.error);
+    else {
+      setBackfillReport(res.data.results ?? []);
+      router.refresh();
+    }
+    setBackfilling(false);
+  }
+
   return (
     <section className="stack-12">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
@@ -1803,6 +1826,27 @@ export function MockupTemplatesSection({
       {savedNotice ? <div className="callout">{savedNotice}</div> : null}
       {driveNotice ? <span className="hint">{driveNotice}</span> : null}
       {driveError ? <div className="callout blocked">Google Drive: {driveError}</div> : null}
+      {missingThumbs > 0 && drive.configured && drive.connected ? (
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-tertiary" onClick={backfillThumbs} disabled={backfilling}>
+            <Spinner active={backfilling} />
+            Backfill {missingThumbs} missing {missingThumbs === 1 ? "thumbnail" : "thumbnails"} from Drive
+          </button>
+          <span className="hint">
+            Uses each template&apos;s folder link + stored crop. Templates without either keep the placeholder.
+          </span>
+        </div>
+      ) : null}
+      {backfillReport ? (
+        <div className="stack-12" style={{ gap: 2 }}>
+          {backfillReport.length === 0 ? <span className="hint">Nothing to backfill.</span> : null}
+          {backfillReport.map((r) => (
+            <span key={r.name + r.detail} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
+              {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {openForm === "variants" ? (
         <AddVariants shots={shots} palette={palette} drive={drive} onClose={() => setOpenForm(null)} />
       ) : null}

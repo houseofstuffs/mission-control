@@ -21,6 +21,10 @@ export interface PublishGate {
   ok: boolean;
   /** listing step that owns the fix — failing gates with one become jump buttons */
   fixStep?: string;
+  /** a self-attestation the gate row can take directly — the "fix" is a
+   *  claim, not work in another step, so jumping anywhere would be a
+   *  dead end. Names the PATCH field the confirm button flips. */
+  attest?: "trademarkScreened";
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -40,7 +44,17 @@ export function publishGates(rec: SimpleRecord): PublishGate[] {
     { label: `13 tags (${tags.length}/13)`, ok: tags.length === 13, fixStep: "L2" },
     { label: "Attributes recorded", ok: attrs.trim().length > 2, fixStep: "L2" },
     { label: "Description hook + body", ok: hook.length > 0 && body.length > 0, fixStep: "L2" },
-    { label: "Trademark screening confirmed", ok: Boolean(rec.props["Trademark Screened"]), fixStep: "L2" },
+    {
+      // screening runs outside the app; the gate records the attestation.
+      // No fixStep on purpose — jumping to L2 landed on nothing actionable.
+      label: rec.props["Trademark Screened"]
+        ? `Trademark screening confirmed${
+            str(rec.props["Trademark Screened At"]) ? ` · ${str(rec.props["Trademark Screened At"])}` : ""
+          }`
+        : "Trademark screening not confirmed.",
+      ok: Boolean(rec.props["Trademark Screened"]),
+      attest: "trademarkScreened",
+    },
     { label: "Cost snapshot recorded", ok: num(rec.props["Cost At Creation"]) != null, fixStep: "L3" },
     {
       label:

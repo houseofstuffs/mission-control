@@ -33,7 +33,7 @@ export interface RunnerRecord {
   workflowKey: "creative" | "listing";
   current: string;
   steps: Record<string, { status: StepStatus; note?: string; at?: string }>;
-  gates?: Array<{ label: string; ok: boolean; fixStep?: string }>;
+  gates?: Array<{ label: string; ok: boolean; fixStep?: string; attest?: string }>;
   /** step id → why "done" is blocked; enforced server-side too */
   blockedDone?: Record<string, string>;
 }
@@ -119,6 +119,16 @@ export function StepRunner({
     setError(null);
     const err = await stepAction({ pageId: record.id, ...body });
     if (err) setError(err);
+    else router.refresh();
+    setBusy(null);
+  }
+
+  /** gate-row self-attestations — a PATCH on the listing, not a step action */
+  async function attest(field: string) {
+    setBusy(`attest-${field}`);
+    setError(null);
+    const res = await apiJson(`/api/listings/${record.id}`, "PATCH", { [field]: true });
+    if (!res.ok) setError(res.error);
     else router.refresh();
     setBusy(null);
   }
@@ -437,7 +447,25 @@ export function StepRunner({
               <div className="gate-item ok">Nothing failing right now.</div>
             ) : (
               gateList.map((g) =>
-                !g.ok && g.fixStep ? (
+                !g.ok && g.attest ? (
+                  // a self-attestation: the fix IS a claim, so the gate row
+                  // takes it directly instead of jumping somewhere with
+                  // nothing to act on
+                  <div key={g.label} className="gate-item" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ flex: "1 1 140px" }}>✕ {g.label}</span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: 11, padding: "3px 10px", whiteSpace: "nowrap" }}
+                      disabled={busy !== null}
+                      title="Records the attestation with today's date — screening itself happens outside the app"
+                      onClick={() => attest(g.attest!)}
+                    >
+                      {busy === `attest-${g.attest}` ? <span className="spinner" /> : null}
+                      Confirm — screened outside
+                    </button>
+                  </div>
+                ) : !g.ok && g.fixStep ? (
                   // the failing gate IS the navigation: it knows which step
                   // owns the fix, so clicking it goes there
                   <button

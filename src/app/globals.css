@@ -520,7 +520,11 @@ a:hover { color: var(--candy); }
 
 /* ---------- step runner grid ---------- */
 
-.runner-grid { display: grid; grid-template-columns: 1fr 320px; gap: 22px; align-items: start; }
+/* minmax(0, …), not bare 1fr: a bare 1fr track's min-width is auto, so any
+   nowrap line inside (e.g. a one-line hook reference) silently becomes the
+   column's MINIMUM and shoves the gate rail off the page. L2 shipped that
+   exact regression; the track cap retires the whole bug class. */
+.runner-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 22px; align-items: start; }
 
 .gate-panel {
   background: var(--surface-panel-accent);

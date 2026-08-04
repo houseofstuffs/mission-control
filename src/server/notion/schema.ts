@@ -595,6 +595,9 @@ export const SCHEMA: DbSpec[] = [
       "Cost Basis": { type: "select", options: ["Printify Standard", "Printify Premium"] },
       "Gate State (JSON)": { type: "rich_text" },
       "Trademark Screened": { type: "checkbox" },
+      // when the attestation was given — screening happens outside the app
+      // (eRank, USPTO by hand), so the app records the CLAIM and its date
+      "Trademark Screened At": { type: "date" },
       // L3's other half. Etsy owns what a buyer is charged for shipping and
       // this app is draft-only, so it never writes the profile to Etsy —
       // confirming is the operator attesting the listing will carry the

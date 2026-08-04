@@ -59,6 +59,8 @@ export interface MockupTemplateCard {
   sourceLink: string;
   /** set only for colour variants created via the shot-crop batch flow */
   shotName: string | null;
+  /** the owning template's id — how variants group under their template card */
+  shotId: string | null;
 }
 
 /* ---------- corner placement ---------- */
@@ -806,6 +808,9 @@ export interface MockupShotOption {
   /** live counts for the delete guard — what removing this template orphans */
   variantCount: number;
   listingCount: number;
+  /** the background Drive import's last known state — the card shows it so
+   *  a run survives being navigated away from VISIBLY, not just technically */
+  importJob: { status: "running" | "complete" | "interrupted"; done: number; total: number; imported: number } | null;
 }
 
 /**
@@ -819,13 +824,24 @@ export interface MockupShotOption {
  * detour. Everything references the template by id, so a rename is safe —
  * the server re-derives the "{template} - …" strings on variant names.
  */
-function TemplateRow({ s, driveConnected }: { s: MockupShotOption; driveConnected: boolean }) {
+function TemplateRow({
+  s,
+  driveConnected,
+  variants,
+}: {
+  s: MockupShotOption;
+  driveConnected: boolean;
+  variants: MockupTemplateCard[];
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<"view" | "edit" | "confirm-delete">("view");
   const [name, setName] = useState(s.name);
   const [link, setLink] = useState(s.driveFolderLink);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // variants collapsed by default — the card is for recognition, the
+  // expansion is for work on one template's colours
+  const [showVariants, setShowVariants] = useState(false);
 
   async function saveEdits() {
     setBusy(true);
@@ -973,6 +989,23 @@ function TemplateRow({ s, driveConnected }: { s: MockupShotOption; driveConnecte
             <span className="chip count">
               {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
             </span>
+            {s.importJob ? (
+              s.importJob.status === "running" ? (
+                <span className="chip count" title="The Drive import runs on the server — open ＋ Add colour variants for details">
+                  importing {s.importJob.done}/{s.importJob.total}…
+                </span>
+              ) : s.importJob.status === "interrupted" ? (
+                <span className="chip stale" title="Re-list the folder in ＋ Add colour variants — already-imported colours are skipped">
+                  import interrupted at {s.importJob.done}/{s.importJob.total}
+                </span>
+              ) : s.importJob.imported === s.importJob.total ? (
+                <span className="chip done">imported {s.importJob.imported}/{s.importJob.total} ✓</span>
+              ) : (
+                <span className="chip stale" title="Some files failed — open ＋ Add colour variants for the per-file reasons">
+                  imported {s.importJob.imported}/{s.importJob.total} — some failed
+                </span>
+              )
+            ) : null}
             {folderId ? (
               driveConnected ? (
                 <span className="chip done">Drive folder linked</span>
@@ -1007,6 +1040,25 @@ function TemplateRow({ s, driveConnected }: { s: MockupShotOption; driveConnecte
               No colours yet — use ＋ Add colour variants to populate it.
             </div>
           )}
+          {variants.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 10px", alignSelf: "flex-start" }}
+              aria-expanded={showVariants}
+              onClick={() => setShowVariants((v) => !v)}
+            >
+              {showVariants ? "▾ Hide" : "▸ Show"} {variants.length}{" "}
+              {variants.length === 1 ? "variant" : "variants"}
+            </button>
+          ) : null}
+          {showVariants ? (
+            <div className="stack-12" style={{ gap: 10 }}>
+              {variants.map((t) => (
+                <TemplateCard key={t.id} t={t} />
+              ))}
+            </div>
+          ) : null}
         </>
       )}
       {error ? <div className="callout blocked">{error}</div> : null}
@@ -1242,11 +1294,22 @@ function TemplateDefine({ onSaved, onClose }: { onSaved: (name: string) => void;
   );
 }
 
+/** Mirror of the server job record — what the poll returns. */
+interface ImportJobView {
+  status: "running" | "complete" | "interrupted";
+  total: number;
+  done: number;
+  imported: number;
+  results: Array<{ name: string; detail: string; ok: boolean }>;
+}
+
 /**
  * The Drive auto-import: list the template's folder, detect colours from
- * filenames, review, import. Fetch goes Drive → server → browser on
- * purpose — the crop must run against the ORIGINAL bytes in the browser,
- * where the one proven adaptive pipeline lives.
+ * filenames, review, then hand the batch to a SERVER-SIDE job — fetch,
+ * crop (sharp, same adaptive rules) and save all happen off the page, so
+ * navigating away or closing the tab can't kill a run half-done. This
+ * panel only starts the job and polls its progress; reopening it later
+ * picks the same job back up.
  *
  * Google's Testing mode expires the connection weekly; every failure that
  * means "reconnect" is surfaced as exactly that, never a dead retry.
@@ -1264,11 +1327,38 @@ function DriveImport({
   const [files, setFiles] = useState<ClassifiedFile[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<"list" | "import" | null>(null);
-  const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(false);
-  const [results, setResults] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
+  const [job, setJob] = useState<ImportJobView | null>(null);
   const [subfolders, setSubfolders] = useState<Array<{ id: string; name: string }>>([]);
+
+  // a job may already be running (or finished while this panel was closed)
+  // — pick it up instead of pretending nothing happened
+  useEffect(() => {
+    let cancelled = false;
+    apiCall<{ job?: ImportJobView | null }>(`/api/drive/import?shotId=${template.id}`).then((res) => {
+      if (!cancelled && res.ok && res.data.job) setJob(res.data.job);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template.id]);
+
+  // poll while running; on the flip to complete/interrupted, refresh so
+  // existing-colour chips and the template card catch up
+  useEffect(() => {
+    if (job?.status !== "running") return;
+    const timer = setInterval(async () => {
+      const res = await apiCall<{ job?: ImportJobView | null }>(`/api/drive/import?shotId=${template.id}`);
+      if (res.ok && res.data.job) {
+        setJob(res.data.job);
+        if (res.data.job.status !== "running") router.refresh();
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.status, template.id]);
   // hand corrections to the detected colour, by file id. Detection reads a
   // closed palette out of arbitrary supplier filenames, so it will be wrong
   // sometimes; the fix belongs on the row, not in an untick-and-redo cycle.
@@ -1287,7 +1377,6 @@ function DriveImport({
   async function list() {
     setBusy("list");
     setError(null);
-    setResults(null);
     const res = await apiJson<{
       files?: Array<{ id: string; name: string }>;
       subfolders?: Array<{ id: string; name: string }>;
@@ -1321,65 +1410,17 @@ function DriveImport({
     if (!files || !activeRect) return;
     setBusy("import");
     setError(null);
-    const out: Array<{ name: string; detail: string; ok: boolean }> = [];
     // effective colour, so a row corrected by hand imports like any other
-    const targets = files.filter((f) => colourOf(f) !== null && picked.has(f.id));
-    let i = 0;
-    for (const f of targets) {
-      i++;
-      const colour = colourOf(f)!;
-      setProgress(`Fetching ${i}/${targets.length} — ${colour}…`);
-      try {
-        const res = await fetch(`/api/drive/file/${f.id}`);
-        if (!res.ok) {
-          let msg = `download failed (${res.status})`;
-          try {
-            const j = (await res.json()) as { error?: string; needsReconnect?: boolean };
-            if (j?.needsReconnect) {
-              setNeedsReconnect(true);
-              out.push({ name: f.name, detail: "connection expired — reconnect and re-run", ok: false });
-              break; // every later fetch would fail the same way
-            }
-            if (j?.error) msg = j.error;
-          } catch {
-            /* body wasn't JSON — keep the status message */
-          }
-          throw new Error(msg);
-        }
-        const blob = await res.blob();
-        const file = new File([blob], f.name, { type: blob.type || "image/png" });
-        const dims = await nativeDimensions(file);
-        const target = cropOutputSize(dims.width, dims.height, activeRect, MOCKUP_CROP_MIN, MOCKUP_CROP_SIZE);
-        if (target === null) {
-          out.push({
-            name: f.name,
-            detail: `skipped — crop yields ${cropSquarePixels(dims.width, dims.height, activeRect)}px, under ${MOCKUP_CROP_MIN}`,
-            ok: false,
-          });
-          continue;
-        }
-        const { file: cropped, size } = await cropToStandardSize(file, activeRect, target);
-        const form = new FormData();
-        form.append("name", `${template.name} - ${colour} - ${size}`);
-        form.append("pipelineType", "Simple Placement");
-        form.append("blendMode", DEFAULT_BLEND);
-        form.append("fitMode", DEFAULT_FIT);
-        form.append("garmentColor", colour);
-        form.append("shotId", template.id);
-        form.append("quad", JSON.stringify(template.printRegionQuad ?? DEFAULT_QUAD));
-        form.append("baseImage", cropped);
-        setProgress(`Uploading ${i}/${targets.length} — ${colour}…`);
-        const up = await apiCall("/api/mockup-templates", { method: "POST", body: form });
-        if (!up.ok) throw new Error(up.error ?? "upload failed");
-        out.push({ name: f.name, detail: `${colour} · ${size}×${size}`, ok: true });
-      } catch (err) {
-        out.push({ name: f.name, detail: (err as Error).message, ok: false });
-      }
-    }
-    setProgress("");
-    setResults(out);
+    const targets = files
+      .filter((f) => colourOf(f) !== null && picked.has(f.id))
+      .map((f) => ({ id: f.id, name: f.name, colour: colourOf(f)! }));
+    const res = await apiJson<{ job?: ImportJobView }>("/api/drive/import", "POST", {
+      shotId: template.id,
+      files: targets,
+    });
+    if (!res.ok) setError(res.error);
+    else if (res.data.job) setJob(res.data.job); // polling takes it from here
     setBusy(null);
-    router.refresh();
   }
 
   const importable = files?.filter((f) => colourOf(f) !== null) ?? [];
@@ -1491,32 +1532,48 @@ function DriveImport({
                   </span>
                 ) : null}
               </div>
-              {progress ? <span className="hint">{progress}</span> : null}
-              {results ? (
-                <div className="stack-12" style={{ gap: 2 }}>
-                  {results.map((r) => (
-                    <span key={r.name} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
-                      {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
               <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
                 <button
                   className="btn btn-primary"
                   onClick={importPicked}
-                  disabled={busy !== null || picked.size === 0 || !activeRect}
+                  disabled={busy !== null || job?.status === "running" || picked.size === 0 || !activeRect}
                   title={!activeRect ? "This template has no saved geometry" : undefined}
                 >
                   <Spinner active={busy === "import"} />
                   Import {picked.size} colour{picked.size === 1 ? "" : "s"} from Drive
                 </button>
-                <button className="btn btn-tertiary" onClick={list} disabled={busy !== null}>
+                <button className="btn btn-tertiary" onClick={list} disabled={busy !== null || job?.status === "running"}>
                   Re-list
                 </button>
               </div>
             </>
           )}
+          {job ? (
+            <div className="stack-12" style={{ gap: 4 }}>
+              {job.status === "running" ? (
+                <span className="body-sm">
+                  <Spinner active /> Importing on the server — {job.done}/{job.total} done. Safe to
+                  navigate away or close the tab; progress lands on this template either way.
+                </span>
+              ) : job.status === "interrupted" ? (
+                <div className="callout blocked">
+                  Import interrupted at {job.done}/{job.total} ({job.imported} saved). Re-list the
+                  folder — already-imported colours start unticked, so re-running only picks up the gaps.
+                </div>
+              ) : (
+                <span className="body-sm">
+                  ✓ Import complete — {job.imported} of {job.total} saved.
+                </span>
+              )}
+              <div className="stack-12" style={{ gap: 2 }}>
+                {job.results.map((r) => (
+                  <span key={r.name + r.detail} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
+                    {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {error ? <div className="callout blocked">{error}</div> : null}
         </>
       )}
@@ -1776,18 +1833,20 @@ export function MockupTemplatesSection({
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   // One-time bridge for templates saved before thumbnails existed: rebuild
-  // the sample from the Drive folder + stored crop. Disappears on its own
-  // once every card has an image.
+  // the sample from the Drive folder + stored crop (Pepper-first picking).
+  // With thumbnails missing it backfills the gaps; with none missing it
+  // offers a re-pick over everything — the correction path for the first
+  // run's wrong picks. Goes dormant by disinterest, not by vanishing.
   const missingThumbs = shots.filter((s) => !s.thumbUrl).length;
   const [backfilling, setBackfilling] = useState(false);
   const [backfillReport, setBackfillReport] = useState<Array<{ name: string; ok: boolean; detail: string }> | null>(null);
-  async function backfillThumbs() {
+  async function backfillThumbs(overwrite: boolean) {
     setBackfilling(true);
     setDriveError(null);
     const res = await apiJson<{ results?: Array<{ name: string; ok: boolean; detail: string }>; needsReconnect?: boolean }>(
       "/api/mockup-shots/backfill-thumbs",
       "POST",
-      {},
+      { overwrite },
       300_000 // several downloads + uploads — well past the default feel of "hung"
     );
     if (!res.ok) setDriveError(res.error);
@@ -1826,14 +1885,22 @@ export function MockupTemplatesSection({
       {savedNotice ? <div className="callout">{savedNotice}</div> : null}
       {driveNotice ? <span className="hint">{driveNotice}</span> : null}
       {driveError ? <div className="callout blocked">Google Drive: {driveError}</div> : null}
-      {missingThumbs > 0 && drive.configured && drive.connected ? (
+      {shots.length > 0 && drive.configured && drive.connected ? (
         <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn btn-tertiary" onClick={backfillThumbs} disabled={backfilling}>
-            <Spinner active={backfilling} />
-            Backfill {missingThumbs} missing {missingThumbs === 1 ? "thumbnail" : "thumbnails"} from Drive
-          </button>
+          {missingThumbs > 0 ? (
+            <button className="btn btn-tertiary" onClick={() => backfillThumbs(false)} disabled={backfilling}>
+              <Spinner active={backfilling} />
+              Backfill {missingThumbs} missing {missingThumbs === 1 ? "thumbnail" : "thumbnails"} from Drive
+            </button>
+          ) : (
+            <button className="btn btn-tertiary" onClick={() => backfillThumbs(true)} disabled={backfilling}>
+              <Spinner active={backfilling} />
+              Re-pick all template thumbnails from Drive
+            </button>
+          )}
           <span className="hint">
-            Uses each template&apos;s folder link + stored crop. Templates without either keep the placeholder.
+            Prefers the Pepper shot (then any garment colour); info graphics are never picked.
+            Templates without a folder link or crop keep what they have.
           </span>
         </div>
       ) : null}
@@ -1853,22 +1920,33 @@ export function MockupTemplatesSection({
       {openForm === "single" ? <MockupTemplateIntake onClose={() => setOpenForm(null)} /> : null}
       <div className="inbox-grid">
         {shots.map((s) => (
-          <TemplateRow key={s.id} s={s} driveConnected={drive.connected} />
+          <TemplateRow
+            key={s.id}
+            s={s}
+            driveConnected={drive.connected}
+            variants={templates.filter((t) => t.shotId === s.id)}
+          />
         ))}
         {shots.length === 0 ? (
           <div className="hint">No templates yet — ＋ New template defines the crop and print region once.</div>
         ) : null}
       </div>
 
-      <Kicker>COLOUR VARIANTS · {templates.length}</Kicker>
-      <div className="inbox-grid">
-        {templates.map((t) => (
-          <TemplateCard key={t.id} t={t} />
-        ))}
-        {templates.length === 0 ? (
-          <div className="hint">No mockup variants yet — define a template, then add its colours.</div>
-        ) : null}
-      </div>
+      {/* variants live under their template now — this section exists only
+          for strays with no template (single-variant advanced intakes) */}
+      {(() => {
+        const ungrouped = templates.filter((t) => !t.shotId);
+        return ungrouped.length > 0 ? (
+          <>
+            <Kicker>UNGROUPED VARIANTS · {ungrouped.length}</Kicker>
+            <div className="inbox-grid">
+              {ungrouped.map((t) => (
+                <TemplateCard key={t.id} t={t} />
+              ))}
+            </div>
+          </>
+        ) : null;
+      })()}
     </section>
   );
 }

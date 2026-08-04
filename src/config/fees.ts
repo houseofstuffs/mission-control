@@ -56,6 +56,14 @@ export const offsiteAds = {
 /** the presets the panel offers; the field still takes any number */
 export const AD_PRESETS = [0, 12, 15] as const;
 
+/**
+ * The shop's real sale tiers: 10–15% run seasonally, 20% is the maximum
+ * EVER. The L3 dial defaults to 20 as a max-discount stress test — the
+ * first margin verdict shown is the worst case, and the chips flip to the
+ * normal tiers without typing.
+ */
+export const SALE_TIERS = [0, 10, 15, 20] as const;
+
 /** advisory only: net margin below this share of the order renders "thin" */
 export const MARGIN_THIN_PCT = 0.2;
 

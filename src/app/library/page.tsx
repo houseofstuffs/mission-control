@@ -12,6 +12,7 @@ import { assetUrl } from "@/lib/assets";
 import { MockupTemplatesSection, type MockupTemplateCard, type MockupShotOption } from "@/components/MockupTemplates";
 import { parseQuad } from "@/config/mockups";
 import { driveConfigured } from "@/server/drive/client";
+import { jobStatus } from "@/server/drive/importJob";
 import { connectionStatus as driveConnectionStatus } from "@/server/drive/connection";
 import type { SimpleRecord } from "@/server/notion/props";
 
@@ -49,6 +50,12 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[], slots: SimpleRecor
     thumbUrl: hasSample ? `/api/mockup-shots/${s.id}/thumb?v=${encodeURIComponent(s.lastEdited)}` : null,
     variantCount: variants.length,
     listingCount: listingIds.size,
+    importJob: (() => {
+      const job = jobStatus(s.id);
+      return job
+        ? { status: job.status, done: job.done, total: job.total, imported: job.imported }
+        : null;
+    })(),
   };
 }
 
@@ -78,6 +85,7 @@ function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): Mo
     hasHighlight: fileUrl("Highlight Layer") != null,
     sourceLink: String(m.props["File Link"] ?? ""),
     shotName: shotName || null,
+    shotId: shotId ?? null,
   };
 }
 

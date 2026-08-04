@@ -28,6 +28,7 @@ import {
   priceForMargin,
   MARGIN_THIN_PCT,
   AD_PRESETS,
+  SALE_TIERS,
   offsiteAds,
   ETSY_LISTING_FEE,
   ETSY_TRANSACTION_PCT,
@@ -335,7 +336,7 @@ export function PricingPanel({ data }: { data: PricingData }) {
               }}
             >
               <div className="field">
-                <label className="kicker" htmlFor="l3-discount">SALE / DISCOUNT %</label>
+                <label className="kicker" htmlFor="l3-discount">SALE % — MAX-DISCOUNT STRESS TEST</label>
                 <input
                   id="l3-discount"
                   className="input"
@@ -343,9 +344,30 @@ export function PricingPanel({ data }: { data: PricingData }) {
                   step="1"
                   min="0"
                   max="100"
+                  title="Starts at 20% — the deepest sale the shop ever runs — so the first verdict is the worst-case margin. Real seasonal tiers are the chips below."
                   value={discountInput}
                   onChange={(e) => setDiscountInput(e.target.value)}
                 />
+                <div className="row-gap-8" style={{ flexWrap: "wrap", marginTop: 6 }}>
+                  {SALE_TIERS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className={`chip ${num(discountInput) === p ? "done" : "neutral"}`}
+                      style={{ cursor: "pointer" }}
+                      title={
+                        p === 0
+                          ? "full price — no sale running"
+                          : p === 20
+                            ? "the shop's maximum ever — the default stress test"
+                            : "a normal seasonal sale tier"
+                      }
+                      onClick={() => setDiscountInput(String(p))}
+                    >
+                      {p === 0 ? "none" : `${p}%`}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="field">
                 <label className="kicker" htmlFor="l3-ship-charged">SHIPPING CHARGED</label>

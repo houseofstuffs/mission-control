@@ -3,7 +3,8 @@ import sharp from "sharp";
 import { cachedRecords, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { getValidAccessToken } from "@/server/drive/connection";
-import { folderIdFromLink, listFolderImages, fetchFileBytes, ReconnectError } from "@/server/drive/client";
+import { folderIdFromLink, listFolderImages, fetchFileBytes, ReconnectError, type DriveFile } from "@/server/drive/client";
+import { classifyFile, flatten } from "@/lib/colourFromFilename";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // several templates × (folder list + ~7MB download + crop + upload)
@@ -21,16 +22,52 @@ export const maxDuration = 300; // several templates × (folder list + ~7MB down
  * Per-template failures skip and report; the placeholder card stays. Only
  * a dead Drive connection aborts the run, because every later fetch would
  * fail the same way.
+ *
+ * Which photo becomes the sample: the shop's convention is the PEPPER
+ * shot on every template, so the Library reads uniform. Preference order:
+ * Pepper → any detected garment colour → smallest unclassified file.
+ * Info-graphic files (size charts, care cards) are never eligible — the
+ * first run picked one as a template thumbnail, which is exactly the
+ * mistake the classifier exists to prevent.
+ *
+ * body { overwrite: true } re-picks over templates that already have a
+ * thumbnail — the one-click correction for the first run's picks.
  */
-export async function POST() {
+export async function POST(req: Request) {
   try {
+    const overwrite = Boolean(await req.json().then((b) => b?.overwrite).catch(() => false));
     const shots = cachedRecords("mockup_shots").filter((s) => {
+      if (overwrite) return true;
       const sample = s.props["Sample Image"];
       return !Array.isArray(sample) || sample.length === 0;
     });
     if (shots.length === 0) {
       return NextResponse.json({ results: [], done: "Every template already has a thumbnail." });
     }
+    // the closed set colours are detected against — same palette the
+    // review list uses
+    const palette = Array.from(
+      new Set(
+        cachedRecords("product_variants")
+          .map((v) => String(v.props["Color"] ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    /** Pepper → any garment colour → smallest unclassified. Never an info graphic. */
+    const pickSample = (files: DriveFile[]): DriveFile | null => {
+      const classified = files.map((f) => ({ f, role: classifyFile(f.name, palette) }));
+      const pepper = classified.find(
+        (c) => c.role.kind === "variant" && flatten(c.role.colour) === "pepper"
+      );
+      if (pepper) return pepper.f;
+      const anyColour = classified.find((c) => c.role.kind === "variant");
+      if (anyColour) return anyColour.f;
+      const unknown = classified
+        .filter((c) => c.role.kind === "unknown")
+        .sort((a, b) => a.f.size - b.f.size);
+      return unknown[0]?.f ?? null;
+    };
 
     const token = await getValidAccessToken();
     const results: Array<{ name: string; ok: boolean; detail: string }> = [];
@@ -62,8 +99,11 @@ export async function POST() {
           results.push({ name, ok: false, detail: "folder has no images — placeholder stays" });
           continue;
         }
-        // smallest file: same framing as every other, cheapest to move
-        const pick = [...files].sort((a, b) => a.size - b.size)[0];
+        const pick = pickSample(files);
+        if (!pick) {
+          results.push({ name, ok: false, detail: "folder holds only info graphics — placeholder stays" });
+          continue;
+        }
         const { bytes } = await fetchFileBytes(pick.id, token);
 
         const buf = Buffer.from(bytes);

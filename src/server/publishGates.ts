@@ -166,17 +166,10 @@ export function publishGates(rec: SimpleRecord): PublishGate[] {
     });
   }
 
-  // SEO hard gate: no visibility keyword attached = blocked. The bucket
-  // mix ratios are advisory; this is the only hard keyword rule.
-  const attachedKws = cachedRecords("keywords").filter((k) =>
-    rel(k.props["Etsy Listings"]).includes(rec.id)
-  );
-  const hasVisibility = attachedKws.some((k) => str(k.props["Bucket"]) === "Visibility");
-  gates.push({
-    label: hasVisibility ? "Visibility keyword attached" : "No visibility keyword attached.",
-    ok: hasVisibility,
-    fixStep: "L2",
-  });
+  // The visibility-keyword gate was removed by operator call (2026-08-04):
+  // the L2 keyword workflow guarantees visibility keywords land in the
+  // tags, so the gate never failed and was pure panel noise. All counts
+  // downstream derive from gates.length, so nothing else changes.
 
   return gates;
 }

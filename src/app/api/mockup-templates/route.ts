@@ -10,6 +10,7 @@ import {
   DEFAULT_BLEND,
   DEFAULT_FIT,
   MOCKUP_CROP_SIZE,
+  UPLOAD_BUDGET_BYTES,
   parseQuad,
   type PipelineType,
 } from "@/config/mockups";
@@ -34,10 +35,20 @@ export const maxDuration = 120; // up to four file uploads, throttled
  */
 async function compressLayer(file: File, maxEdge = 2000): Promise<File> {
   const raw = Buffer.from(await file.arrayBuffer());
-  const out = await sharp(raw)
-    .resize(maxEdge, maxEdge, { fit: "inside", withoutEnlargement: true })
-    .webp({ quality: maxEdge > 2000 ? 90 : 82 })
-    .toBuffer();
+  const encode = (quality: number) =>
+    sharp(raw)
+      .resize(maxEdge, maxEdge, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality })
+      .toBuffer();
+  // step quality down until Notion will take it — a busy 4000² photo can
+  // exceed the cap even as WebP, and this re-encode must never hand
+  // uploadFileToNotion something it already knows will bounce
+  let quality = maxEdge > 2000 ? 90 : 82;
+  let out = await encode(quality);
+  while (out.length > UPLOAD_BUDGET_BYTES && quality > 50) {
+    quality -= 8;
+    out = await encode(quality);
+  }
   return new File([out], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });
 }
 

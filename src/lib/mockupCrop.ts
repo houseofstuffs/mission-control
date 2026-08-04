@@ -83,18 +83,21 @@ function squareSource(rect: CropRect, width: number, height: number) {
   return { sx, sy, side };
 }
 
+import { UPLOAD_BUDGET_BYTES } from "@/config/mockups";
+
 /**
- * The upload budget for one cropped photo.
- *
- * Next.js route handlers reject a request body over ~10MB, and they reject
- * it in the least helpful way available: req.formData() throws "Failed to
- * parse body as FormData", which reads like malformed multipart rather than
- * "too big". A 4000² crop of a real photo encodes to ~20MB as PNG, so every
- * upload of a full-size crop failed, every time, with a message pointing
- * nowhere near the cause. Budget is set below the wall to leave room for
- * the other form fields and multipart framing.
+ * The upload budget for one cropped photo. Two walls stack here, and the
+ * shorter one rules:
+ *  - Notion rejects uploads over 5 MiB (the binding cap — see
+ *    UPLOAD_BUDGET_BYTES in src/config/mockups.ts),
+ *  - Next.js rejects request bodies over ~10 MiB, and does it by failing
+ *    the multipart parse ("Failed to parse body as FormData"), which reads
+ *    like corruption rather than size.
+ * The first budget here was 8 MiB — sized for the Next.js wall only — and
+ * busy photos that encoded to 5–6 MiB sailed through it straight into
+ * Notion's rejection.
  */
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = UPLOAD_BUDGET_BYTES;
 
 /** The floor a crop may never be shrunk past to fit the budget. */
 const MOCKUP_CROP_MIN = 2000;

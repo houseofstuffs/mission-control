@@ -27,6 +27,7 @@ import { fetchFileBytes, ReconnectError } from "@/server/drive/client";
 import {
   MOCKUP_CROP_MIN,
   MOCKUP_CROP_SIZE,
+  UPLOAD_BUDGET_BYTES,
   DEFAULT_BLEND,
   DEFAULT_FIT,
   DEFAULT_QUAD,
@@ -53,6 +54,35 @@ export interface ImportJobStatus {
 }
 
 const metaKey = (shotId: string) => `drive_import_${shotId}`;
+
+/** quality rungs tried at each size before giving up resolution instead */
+const WEBP_QUALITY_STEPS = [90, 82, 74, 66, 58];
+
+/**
+ * Encodes the crop under UPLOAD_BUDGET_BYTES — Notion's 5 MiB cap, with
+ * margin — losing quality first, resolution second, never going below
+ * MOCKUP_CROP_MIN. Same ladder as the client encoder (src/lib/mockupCrop
+ * .ts). The first version encoded once at fixed quality with no budget at
+ * all, and three busy photos came out 5.3–5.6 MiB: past every check here,
+ * dead at Notion. Returns null when even the floor size can't fit.
+ */
+async function encodeUnderBudget(
+  buf: Buffer,
+  crop: { left: number; top: number; side: number },
+  startSize: number
+): Promise<{ out: Buffer; size: number } | null> {
+  for (let size = startSize; ; size = Math.round(size * 0.8)) {
+    for (const quality of WEBP_QUALITY_STEPS) {
+      const out = await sharp(buf)
+        .extract({ left: crop.left, top: crop.top, width: crop.side, height: crop.side })
+        .resize(size, size)
+        .webp({ quality })
+        .toBuffer();
+      if (out.length <= UPLOAD_BUDGET_BYTES) return { out, size };
+    }
+    if (Math.round(size * 0.8) < MOCKUP_CROP_MIN) return null;
+  }
+}
 
 /** running with no heartbeat for this long = the process died mid-run */
 const STALE_MS = 3 * 60 * 1000;
@@ -141,12 +171,16 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
       const side = Math.min(cropPx, w, h);
       const left = Math.round(Math.min(Math.max(args.rect.x * w, 0), Math.max(w - side, 0)));
       const top = Math.round(Math.min(Math.max(args.rect.y * h, 0), Math.max(h - side, 0)));
-      const target = Math.min(cropPx, MOCKUP_CROP_SIZE);
-      const out = await sharp(buf)
-        .extract({ left, top, width: side, height: side })
-        .resize(target, target)
-        .webp({ quality: 90 })
-        .toBuffer();
+      const encoded = await encodeUnderBudget(buf, { left, top, side }, Math.min(cropPx, MOCKUP_CROP_SIZE));
+      if (!encoded) {
+        job.results.push({
+          name: f.name,
+          detail: `skipped — won't fit Notion's 5 MiB upload cap even at ${MOCKUP_CROP_MIN}px`,
+          ok: false,
+        });
+        continue;
+      }
+      const { out, size: target } = encoded;
 
       const upload = new File(
         [new Uint8Array(out)],
@@ -155,6 +189,8 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
       );
       const up = await uploadFileToNotion(upload);
       const values: Record<string, SimpleValue> = {
+        // the ACTUAL px produced — a name that overstates resolution is
+        // worse than no name
         Name: `${args.templateName} - ${f.colour} - ${target}`,
         "Pipeline Type": "Simple Placement",
         "Blend Mode": DEFAULT_BLEND,

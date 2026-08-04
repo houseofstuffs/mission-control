@@ -107,6 +107,19 @@ export const MOCKUP_CROP_SIZE = 4000;
 /** Below this the crop isn't worth keeping — flagged, and the save is blocked. */
 export const MOCKUP_CROP_MIN = 2000;
 
+/**
+ * The byte budget for any one image bound for Notion.
+ *
+ * Notion's free plan rejects uploads over 5 MiB, and that cap binds before
+ * Next.js's ~10 MiB request-body wall does. A real recovery run proved it:
+ * three busy photos encoded to 5.3–5.6 MiB — comfortably under the old
+ * 8 MiB budget, dead on arrival at Notion. 4.8 MiB leaves margin for the
+ * odd encoder wobble. Every encoder that produces a Notion-bound image —
+ * client crop, server import job, the route's layer compressor — reads
+ * this one number.
+ */
+export const UPLOAD_BUDGET_BYTES = Math.floor(4.8 * 1024 * 1024);
+
 /** A fresh shot crop starts centred, sized to whatever fits — the guard corrects it if it's infeasible. */
 export const DEFAULT_CROP_RECT = { x: 0.15, y: 0.15, size: 0.7 };
 

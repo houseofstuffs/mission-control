@@ -248,6 +248,24 @@ function main() {
     }
   );
 
+  // A sibling with NOTHING approved yet — no tags, no hook. It must still
+  // appear on L2 with explicit empty states: the panel existing is how the
+  // operator knows the design linkage works (a silent absence read as "the
+  // sibling feature is broken" in real use).
+  const emptySibling = rec(
+    "etsy_listings",
+    "listing-3",
+    "Midnight Margaritas Retro — Comfort Colors 1717 Tee",
+    {
+      Name: "Midnight Margaritas Retro — Comfort Colors 1717 Tee",
+      "Current Step": "L1",
+      "Etsy State": "Not pushed",
+      Designs: ["design-1"],
+      Shop: "STUFFS",
+      Channel: "Etsy",
+    }
+  );
+
   const variants = ["Black", "Espresso", "Pepper", "Butter"].flatMap((color, ci) =>
     ["S", "M", "L", "XL", "2XL"].map((size, si) =>
       rec("product_variants", `var-${ci}-${si}`, `${color} / ${size}`, {
@@ -381,7 +399,7 @@ function main() {
     product_variants: variants,
     designs: [design],
     niches: [niche],
-    etsy_listings: [listing, siblingListing],
+    etsy_listings: [listing, siblingListing, emptySibling],
     keywords: keywords(),
     image_slots: slots,
     mockup_templates: [template],

@@ -796,7 +796,8 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           }
         >
           <span className="kicker">
-            {open ? "▾" : "▸"} APPROVED ON {(sib.productName || sib.name).toUpperCase()} · {sib.tags.length}
+            {open ? "▾" : "▸"} APPROVED ON {(sib.productName || sib.name).toUpperCase()} · {sib.tags.length}{" "}
+            {sib.tags.length === 1 ? "tag" : "tags"}{sib.hook ? " · hook" : ""}
           </span>
           {carried > 0 ? (
             <span className="chip done" style={{ fontSize: 10 }}>{carried} already here</span>
@@ -805,9 +806,12 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
         {open ? (
           <>
             <span className="hint">
-              {sib.name} — screened and saved there. Tap + to reuse a word here; it never changes
-              that listing.
+              {sib.name} — same design. Tap + to reuse a word here; nothing writes back to that
+              listing.
             </span>
+            {sib.tags.length === 0 ? (
+              <span className="hint">No approved tags on that listing yet — they appear here once saved.</span>
+            ) : null}
             <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
               {sib.tags.map((t) => {
                 const bucket = bucketOf(t);
@@ -856,7 +860,17 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
                   hook field below and edit, or let the generator rewrite it against your title.
                 </span>
               </div>
-            ) : null}
+            ) : (
+              // the empty state IS the feature working — silence here read
+              // as "the sibling-hook panel doesn't exist"
+              <div className="well stack-12" style={{ gap: 4, padding: "8px 10px" }}>
+                <span className="kicker" style={{ fontSize: 10 }}>THEIR HOOK</span>
+                <span className="hint">
+                  No hook saved on that listing yet — once one is saved there (Description section,
+                  L2), it shows here read-only with a copy button.
+                </span>
+              </div>
+            )}
           </>
         ) : null}
       </div>
@@ -1256,6 +1270,29 @@ export function KeywordSeoPanel({ seo }: { seo: SeoData }) {
           Drafts only — nothing saves without its button.
           {prevDraft ? " Regenerating keeps the last two versions." : ""}
         </span>
+        {/* the sibling's hook, where an operator writing a hook actually
+            looks for it — section ② has the full panel, but a reference
+            that only exists two sections away isn't a reference */}
+        {seo.siblings
+          .filter((sib) => sib.hook)
+          .map((sib) => (
+            <div key={sib.id} className="well row-gap-8" style={{ alignItems: "center", padding: "6px 10px" }}>
+              <span className="hint" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <strong>{sib.productName || sib.name}</strong> hook: {sib.hook}
+              </span>
+              <button
+                type="button"
+                className="btn btn-tertiary"
+                style={{ fontSize: 11, padding: "2px 10px", whiteSpace: "nowrap" }}
+                onClick={() => {
+                  navigator.clipboard?.writeText(sib.hook);
+                  setCopiedHook(sib.id);
+                }}
+              >
+                {copiedHook === sib.id ? "✓ Copied" : "Copy"}
+              </button>
+            </div>
+          ))}
         {generateBlocker ? <span className="hint">Locked: {generateBlocker}</span> : null}
         <textarea
           id="l2-hook"

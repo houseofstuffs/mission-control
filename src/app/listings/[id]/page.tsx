@@ -410,8 +410,9 @@ function seoData(rec: NonNullable<ReturnType<typeof cachedRecord>>): SeoData {
               hook: String(l.props["Description Hook"] ?? "").trim(),
             };
           })
-          // a sibling with neither tags nor a hook has nothing to offer yet
-          .filter((s) => s.tags.length > 0 || s.hook)
+          // Empty siblings stay listed on purpose: the panel existing is
+          // how the operator knows the design linkage works at all. What
+          // they have (or don't) renders as explicit empty states inside.
           .sort((a, b) => a.name.localeCompare(b.name));
 
   let attributes: Array<{ name: string; value: string }> = [];

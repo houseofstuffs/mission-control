@@ -246,10 +246,51 @@ function main() {
       // button, so the sibling panel needs one saved to exercise it
       "Description Hook":
         "Some nights call for midnight margaritas and a little practical magic. This cozy hoodie is for the witchy one who owns both.",
+      // …and everything else green, so L7's State B (full read-only
+      // preview + live push) renders in the screenshot pass
+      Title: "Midnight Margaritas Hoodie, Practical Magic Witch Gift, Cozy Halloween Hoodie",
+      "Body Copy":
+        "🧵 Fabric: 50/50 cotton-poly fleece, the properly heavy kind — 8.0 oz/yd², built for actual cold.\n\n📏 Fit: unisex, roomy, double-lined hood. Size up for the oversized look; see the size chart photo for exact measurements.\n\n🧼 Care: wash cold inside-out, tumble dry low, no ironing over the print.",
+      "Attributes (JSON)": JSON.stringify([
+        { name: "Occasion", value: "Halloween" },
+        { name: "Style", value: "Witchy" },
+      ]),
+      "Trademark Screened": true,
+      "Trademark Screened At": "2026-08-03",
+      Price: 44.99,
+      "Cost At Creation": 24.6,
+      "Cost Basis": "Printify Standard",
+      "Cost Snapshot At": "2026-08-02",
+      "Shipping Profile Confirmed": true,
+      "Shipping Confirmed At": "2026-08-03",
+      "Colorways (JSON)": JSON.stringify(["Black", "Dark Heather"]),
+      "Etsy Listing ID": "",
       Shop: "STUFFS",
       Channel: "Etsy",
     }
   );
+
+  // L7 State B needs filled slots: a thumbnail and the two always-present
+  // graphic cards, all Placed
+  const siblingSlots = [
+    rec("image_slots", "slot2-1", "hero — flat lay black", {
+      Name: "hero — flat lay black", Listing: ["listing-2"], Position: 1,
+      Bucket: "Sell Design", "Shot Type": "Flat Lay", Status: "Placed",
+      "Asset Ref": "https://cdn.example.com/mock/hoodie-black-hero.png",
+    }),
+    rec("image_slots", "slot2-2", "size chart", {
+      Name: "size chart", Listing: ["listing-2"], Position: 2,
+      Bucket: "Sell Specifics", "Shot Type": "Graphic Card", Status: "Placed",
+      "Product Link Role": "Highlights & Sizing",
+      "Asset Ref": "https://cdn.example.com/graphics/18500-sizing.png",
+    }),
+    rec("image_slots", "slot2-3", "care info", {
+      Name: "care info", Listing: ["listing-2"], Position: 3,
+      Bucket: "Sell Specifics", "Shot Type": "Graphic Card", Status: "Placed",
+      "Product Link Role": "Care & Policies",
+      "Asset Ref": "https://cdn.example.com/graphics/18500-care.png",
+    }),
+  ];
 
   // A sibling with NOTHING approved yet — no tags, no hook. It must still
   // appear on L2 with explicit empty states: the panel existing is how the
@@ -416,14 +457,18 @@ function main() {
 
   // every database gets an explicit (possibly empty) set, so sync_state
   // exists for all of them and "never synced" banners don't fire
+  const kws = keywords();
+  // listing-2 carries a visibility keyword so its gate passes (L7 State B)
+  kws[0].props["Etsy Listings"] = ["listing-2"];
+
   const byDb: Record<string, SimpleRecord[]> = {
     products: [product, siblingProduct],
     product_variants: variants,
     designs: [design],
     niches: [niche],
     etsy_listings: [listing, siblingListing, emptySibling],
-    keywords: keywords(),
-    image_slots: slots,
+    keywords: kws,
+    image_slots: [...slots, ...siblingSlots],
     mockup_templates: [template, template2],
     mockup_shots: [mockupShot, mockupShot2],
     shipping_profiles: shippingProfiles,

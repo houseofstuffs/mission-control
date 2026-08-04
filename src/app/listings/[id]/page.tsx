@@ -12,7 +12,10 @@ import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
+import type { PushData } from "@/components/PushDraftPanel";
 import type { PrintFileData } from "@/components/PrintFilePanel";
+import { etsyConfigured } from "@/server/etsy/client";
+import { connectionStatus as etsyConnectionStatus } from "@/server/etsy/connection";
 import { needsRecompose, derivativeFor } from "@/server/recompose";
 import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { isStaleKeyword } from "@/config/keywords";
@@ -26,8 +29,10 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const rec = cachedRecord(id);
   if (!rec || rec.dbKey !== "etsy_listings") notFound();
-  // L4 reuses L5's colour intersection, so compute the slots view once
+  // L4 reuses L5's colour intersection, so compute the slots view once;
+  // L7's preview reuses both it and the pricing view
   const slots = slotsData(rec, compatForListing(rec));
+  const pricing = pricingData(rec);
 
   return (
     <div className="content-inner">
@@ -43,7 +48,8 @@ export default async function ListingRunnerPage({ params }: { params: Promise<{ 
         slots={slots}
         mockups={mockupsData(rec, slots)}
         colorways={colorwaysData(rec)}
-        pricing={pricingData(rec)}
+        pricing={pricing}
+        push={pushData(rec, slots, pricing)}
         printFile={printFileData(rec)}
       />
     </div>
@@ -254,6 +260,51 @@ function mockupsData(
     shortlist: slots.shortlist,
     tiles,
     infoGraphics,
+  };
+}
+
+/**
+ * L7's inputs — the exact bundle the push applies, plus the push record.
+ * Reuses the slots and pricing views so the preview can never disagree
+ * with the steps that own the content.
+ */
+function pushData(
+  rec: NonNullable<ReturnType<typeof cachedRecord>>,
+  slots: SlotsData,
+  pricing: PricingData
+): PushData {
+  const filled = slots.slots
+    .filter((s) => s.status === "Made" || s.status === "Placed")
+    .map((s) => ({ position: s.position, label: s.label, isGraphic: Boolean(s.productLinkRole) }));
+
+  const norm = (c: string) => c.trim().toLowerCase();
+  const colours = (() => {
+    try {
+      const parsed = JSON.parse(String(rec.props["Colorways (JSON)"] ?? "[]"));
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  })();
+  const available = new Set(slots.availableColors.map(norm));
+
+  return {
+    listingId: rec.id,
+    etsyReady: etsyConfigured() && etsyConnectionStatus().connected,
+    etsyListingId: String(rec.props["Etsy Listing ID"] ?? "").trim(),
+    pushedAt: String(rec.props["Pushed At"] ?? "").trim() || null,
+    gallery: filled,
+    title: String(rec.props["Title"] ?? "").trim(),
+    price: pricing.price,
+    cost: pricing.cost,
+    shippingCharged: pricing.product?.shippingCharged ?? null,
+    shippingCost: pricing.product?.estimatedShippingCost ?? null,
+    shippingConfirmed: pricing.shippingConfirmed,
+    colours,
+    coloursAllAvailable: colours.length > 0 && colours.every((c) => available.has(norm(c))),
+    hook: String(rec.props["Description Hook"] ?? "").trim(),
+    bodyCopy: String(rec.props["Body Copy"] ?? "").trim(),
+    tags: String(rec.props["Tags"] ?? "").split(",").map((t) => t.trim()).filter(Boolean),
   };
 }
 

@@ -609,6 +609,10 @@ export const SCHEMA: DbSpec[] = [
       Shop: { type: "select", options: ["STUFFS"] },
       Channel: { type: "select", options: ["Etsy"] },
       "Etsy Listing ID": { type: "rich_text" },
+      // L7's push record: when the copy bundle was applied to the Etsy
+      // draft, and exactly what was sent (so a re-push warns with facts)
+      "Pushed At": { type: "date" },
+      "Push Snapshot (JSON)": { type: "rich_text" },
       "Printify Product ID": { type: "rich_text" },
       "External IDs (JSON)": { type: "rich_text" },
     },

@@ -60,8 +60,13 @@ export function newState(): string {
   return base64url(randomBytes(24));
 }
 
-/** Read-only for now — shops_r covers Shipping Profiles. */
-const SCOPES = "shops_r";
+/**
+ * shops_r covers Shipping Profiles; listings_r/w are what L7's push needs —
+ * reading a draft's state and applying the copy bundle to it. Connections
+ * made before the write scopes were added carry only shops_r, so the push
+ * asks for a reconnect on its first 403 rather than failing cryptically.
+ */
+const SCOPES = "shops_r listings_r listings_w";
 
 export function authorizeUrl(redirectUri: string, state: string, codeChallenge: string): string {
   const params = new URLSearchParams({
@@ -161,13 +166,41 @@ function throttled<T>(fn: () => Promise<T>): Promise<T> {
 const MAX_429_RETRIES = 3;
 
 async function apiGet<T>(path: string, accessToken: string): Promise<T> {
+  return apiRequest<T>("GET", path, accessToken);
+}
+
+/** Insufficient OAuth scope — the fix is a reconnect, not a retry. */
+export class EtsyScopeError extends Error {
+  constructor() {
+    super(
+      "The Etsy connection was made before listing access was added — reconnect Etsy (Today page) to grant it, then push again."
+    );
+    this.name = "EtsyScopeError";
+  }
+}
+
+/**
+ * One HTTP door for every authenticated Etsy call. WRITE METHODS ARE FOR
+ * src/server/etsy/publisher.ts ONLY (spec §2.4) — this helper exists so the
+ * throttle and 429 backoff aren't duplicated, not to open a second write
+ * path. x-www-form-urlencoded body: Etsy's v3 update endpoints reject JSON.
+ */
+export async function apiRequest<T>(
+  method: "GET" | "PATCH" | "PUT" | "POST",
+  path: string,
+  accessToken: string,
+  body?: Record<string, string>
+): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const res = await throttled(() =>
       fetch(`${API_BASE}${path}`, {
+        method,
         headers: {
           "x-api-key": apiKeyHeader(),
           Authorization: `Bearer ${accessToken}`,
+          ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
         },
+        body: body ? new URLSearchParams(body).toString() : undefined,
         cache: "no-store",
       })
     );
@@ -179,6 +212,7 @@ async function apiGet<T>(path: string, accessToken: string): Promise<T> {
       await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
       continue;
     }
+    if (res.status === 403 && /scope|insufficient/i.test(text)) throw new EtsyScopeError();
     throw new Error(`Etsy ${res.status} on ${path}: ${text.slice(0, 300)}`);
   }
 }

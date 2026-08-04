@@ -131,7 +131,7 @@ export async function getValidAccessToken(): Promise<string> {
   return tokens.access_token;
 }
 
-function shopId(): number {
+export function shopId(): number {
   const id = getMeta(META.shopId);
   if (!id) throw new Error("Etsy isn't connected yet — use the Connect Etsy button first.");
   return Number(id);

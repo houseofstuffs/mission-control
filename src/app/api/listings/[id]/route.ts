@@ -27,6 +27,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.tags != null) values["Tags"] = String(body.tags);
     if (body.title != null) values["Title"] = String(body.title);
     if (body.isMultiVariant != null) values["Is Multi Variant"] = Boolean(body.isMultiVariant);
+    // L7: the Etsy draft this listing maps to — pasted after publishing
+    // the product in Printify (as draft). Accepts a bare id or the URL.
+    if (body.etsyListingId !== undefined) {
+      const raw = String(body.etsyListingId).trim();
+      const m = raw.match(/(\d{6,})/);
+      if (raw && !m) {
+        return NextResponse.json({ error: "That doesn't look like an Etsy listing ID or URL." }, { status: 400 });
+      }
+      values["Etsy Listing ID"] = m ? m[1] : "";
+    }
     // Trademark screening is a manual outside-the-app job (eRank, USPTO) —
     // the app records the attestation. Same stamp-and-clear shape as the
     // shipping confirmation below.

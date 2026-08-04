@@ -15,6 +15,7 @@ import { StyleCapture } from "./StyleCapture";
 import { ApplyPanel, CandidatesBoard, WinnerEditor, type StyleOption, type SavedPair, type CandidateData } from "./ApplyPanel";
 import { KeywordSeoPanel, SelectedTagsRail, TagSelectionProvider, useL2Dirty, type SeoData } from "./KeywordSeoPanel";
 import { ImageSlotsPanel, type SlotsData } from "./ImageSlotsPanel";
+import { PushDraftPanel, type PushData } from "./PushDraftPanel";
 import { GenerateMockupsPanel, type MockupsData } from "./GenerateMockupsPanel";
 import { ArtworkCapture, type ArtworkData } from "./ArtworkCapture";
 import { MasterAssets, type MasterAssetsData } from "./MasterAssets";
@@ -59,6 +60,7 @@ export function StepRunner({
   colorways,
   fanOut,
   pricing,
+  push,
   printFile,
 }: {
   record: RunnerRecord;
@@ -76,6 +78,7 @@ export function StepRunner({
   colorways?: ColorwaysData;
   fanOut?: FanOutData;
   pricing?: PricingData;
+  push?: PushData;
   printFile?: PrintFileData;
 }) {
   const wf = WORKFLOWS[record.workflowKey];
@@ -370,6 +373,18 @@ export function StepRunner({
         ) : null}
         {record.workflowKey === "listing" && selected.id === "L5" && slots ? (
           <ImageSlotsPanel data={slots} />
+        ) : null}
+
+        {/* L7: gates re-rendered as fixes, the full read-only preview, the
+            push, and the Shop Manager handoff — three states, one panel */}
+        {record.workflowKey === "listing" && selected.id === "L7" && push ? (
+          <PushDraftPanel
+            data={push}
+            gates={gateList}
+            busyOutside={busy}
+            onJump={setSelectedId}
+            onAttest={attest}
+          />
         ) : null}
 
         {/* C2's output: which generation won, and the board's first thumbnail.

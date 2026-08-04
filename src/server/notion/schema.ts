@@ -745,6 +745,23 @@ export const SCHEMA: DbSpec[] = [
       Notes: { type: "rich_text" },
     },
   },
+  {
+    key: "generated_mockups",
+    title: "Generated Mockups",
+    description:
+      "The compositor's output — one record per listing × variant render (a variant is already one colour). The image itself lives here as a Notion file; L5 slots reference it through the app's stable /api/generated-mockups/{id}/file route, which re-mints Notion's expiring URL on demand. Verdict is approve-by-default: the operator flags the misses. Regenerating replaces the record's image, never duplicates the record.",
+    properties: {
+      Name: { type: "title" },
+      Listing: { type: "relation", relation: "etsy_listings" },
+      Variant: { type: "relation", relation: "mockup_templates" },
+      Colour: { type: "rich_text" },
+      Image: { type: "files" },
+      Verdict: { type: "select", options: ["Approved", "Flagged"] },
+      "Generated At": { type: "date" },
+      // set when the send step placed it into a slot — the record of where
+      "Sent To Slot": { type: "relation", relation: "image_slots" },
+    },
+  },
 ];
 
 /**

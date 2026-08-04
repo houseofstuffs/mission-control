@@ -3,28 +3,39 @@
 /**
  * L4 — generate mockups. The automated pipeline plus its review gate.
  *
- * The renderer itself is Phase 3 (hosted PSD compositing), so this ships
- * as a shell: the readiness check, the plan and the grid are computed from
- * real records today, and every tile is a REAL planned template × colour
- * combination rather than a placeholder. When the renderer lands, those
- * same tiles gain an image and Approve/Flag starts meaning something —
- * the layout doesn't change.
+ * Generate runs the server-side job (src/server/mockup/generateJob.ts):
+ * the SAME renderMockup module the Test render button always used, looped
+ * over the shared plan (src/server/mockup/plan.ts), surviving navigation
+ * like the Drive import does. Tiles join their generated_mockups record —
+ * image through the stable file route, verdict persisted on the record.
  *
  * Approve-by-default is deliberate: the operator flags the misses, rather
  * than clicking through a dozen good ones to bless each.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
-import { apiJson } from "@/lib/api";
+import { apiCall, apiJson } from "@/lib/api";
 
 export interface MockupTile {
   templateId: string;
   templateName: string;
   shotType: string;
   colour: string;
-  /** the composited image, once Phase 3 renders it. Null = not generated yet. */
+  /** the render, through the stable file route. Null = not generated yet. */
   url: string | null;
+  /** the generated_mockups record behind the url */
+  generatedId: string | null;
+  /** persisted verdict; null until a render exists */
+  verdict: "Approved" | "Flagged" | null;
+}
+
+export interface GenerateJobView {
+  status: "running" | "complete" | "interrupted";
+  total: number;
+  done: number;
+  rendered: number;
+  results: Array<{ name: string; detail: string; ok: boolean }>;
 }
 
 export interface MockupsData {
@@ -58,6 +69,8 @@ export interface MockupsData {
   }>;
   /** templates for OTHER products, hidden from the picker */
   hidden: { count: number; example: string | null };
+  /** the compositor's last known run for this listing */
+  generateJob: GenerateJobView | null;
   productName: string | null;
   /** template ids assigned to THIS listing — drives the plan and L5's offers */
   shortlist: string[];
@@ -150,15 +163,82 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   // only built graphics count toward the plan — a missing one is a pill
   // below, not a phantom in the sum
   const builtGraphics = data.infoGraphics.filter((g) => g.url).length;
-  // Approve/Flag lives in the browser for now: with nothing rendered there
-  // is no image for a verdict to attach to, and persisting a judgement
-  // about an image that doesn't exist would be inventing state.
-  const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
+
+  // ---- the compositor run: start + poll, same shape as the Drive import ----
+  const [job, setJob] = useState<GenerateJobView | null>(data.generateJob);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
+  useEffect(() => {
+    if (job?.status !== "running") return;
+    const timer = setInterval(async () => {
+      const res = await apiCall<{ job?: GenerateJobView | null }>(`/api/listings/${data.listingId}/generate`);
+      if (res.ok && res.data.job) {
+        setJob(res.data.job);
+        if (res.data.job.status !== "running") router.refresh();
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.status, data.listingId]);
+
+  async function generate(regenerate: boolean) {
+    setGenBusy(true);
+    setGenError(null);
+    const res = await apiJson<{ job?: GenerateJobView }>(`/api/listings/${data.listingId}/generate`, "POST", { regenerate });
+    if (!res.ok) setGenError(res.error);
+    else if (res.data.job) setJob(res.data.job);
+    setGenBusy(false);
+  }
+
+  // Verdicts persist on the generated record; the local map is only an
+  // optimistic overlay while a PATCH is in flight.
+  const [verdictOverride, setVerdictOverride] = useState<Record<string, Verdict>>({});
   const [onlyAttention, setOnlyAttention] = useState(false);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendReport, setSendReport] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
 
   const key = (t: MockupTile) => `${t.templateId}:${t.colour}`;
-  const verdictOf = (t: MockupTile): Verdict | null =>
-    t.url === null ? null : verdicts[key(t)] ?? "approved";
+  const verdictOf = (t: MockupTile): Verdict | null => {
+    if (t.url === null || !t.generatedId) return null;
+    return (
+      verdictOverride[t.generatedId] ??
+      (t.verdict === "Flagged" ? "flagged" : "approved")
+    );
+  };
+
+  async function setVerdict(t: MockupTile, v: Verdict) {
+    if (!t.generatedId) return;
+    setVerdictOverride((cur) => ({ ...cur, [t.generatedId!]: v }));
+    const res = await apiJson(`/api/generated-mockups/${t.generatedId}`, "PATCH", {
+      verdict: v === "approved" ? "Approved" : "Flagged",
+    });
+    if (!res.ok) {
+      setGenError(res.error);
+      setVerdictOverride((cur) => {
+        const next = { ...cur };
+        delete next[t.generatedId!];
+        return next;
+      });
+    }
+  }
+
+  async function sendApproved() {
+    setSendBusy(true);
+    setGenError(null);
+    setSendReport(null);
+    const res = await apiJson<{ results?: Array<{ name: string; detail: string; ok: boolean }> }>(
+      `/api/listings/${data.listingId}/send-mockups`,
+      "POST",
+      {},
+      120_000
+    );
+    if (!res.ok) setGenError(res.error);
+    else {
+      setSendReport(res.data.results ?? []);
+      router.refresh();
+    }
+    setSendBusy(false);
+  }
 
   const generated = data.tiles.filter((t) => t.url !== null);
   const approved = generated.filter((t) => verdictOf(t) === "approved");
@@ -235,22 +315,64 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </>
             )}
           </span>
-          {/* The compositor is Phase 3. The WHY must be readable on an
-              all-green panel, not hidden in a hover tooltip — a disabled
-              button with every chip passing read as broken in live use. */}
           <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-            {blockers.length === 0 ? (
-              <span className="chip neutral" style={{ fontSize: 10 }}>waits on the Phase 3 compositor</span>
+            {generated.length > 0 && generated.length === data.tiles.length && job?.status !== "running" ? (
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12 }}
+                disabled={genBusy}
+                title="Re-render every tile — replaces the existing images"
+                onClick={() => {
+                  if (window.confirm("Re-render all mockups? Existing renders are replaced.")) generate(true);
+                }}
+              >
+                Regenerate all
+              </button>
             ) : null}
-            <button className="btn btn-primary" disabled title="Hosted PSD compositing arrives in Phase 3">
-              ⟳ Generate mockups
+            <button
+              className="btn btn-primary"
+              disabled={genBusy || job?.status === "running" || blockers.length > 0 || dirty}
+              title={dirty ? "Save the template assignment first" : blockers.length > 0 ? blockers.join(", ") : undefined}
+              onClick={() => generate(false)}
+            >
+              {genBusy || job?.status === "running" ? <span className="spinner" /> : "⟳ "}
+              Generate mockups
             </button>
           </span>
         </div>
-        <span className="hint">
-          Compositing arrives in Phase 3 — the plan is live: every pending card below is a real
-          template × colour pair the run will produce.
-        </span>
+        {job ? (
+          <div className="stack-12" style={{ gap: 4 }}>
+            {job.status === "running" ? (
+              <span className="body-sm">
+                Rendering on the server — {job.done}/{job.total} done. Safe to navigate away; progress
+                lands on this listing either way.
+              </span>
+            ) : job.status === "interrupted" ? (
+              <div className="callout blocked">
+                Run interrupted at {job.done}/{job.total} ({job.rendered} rendered) — Generate again
+                picks up only what&apos;s missing.
+                {job.results.filter((r) => !r.ok).slice(0, 1).map((r) => (
+                  <span key={r.name} style={{ display: "block" }}>✕ {r.name} — {r.detail}</span>
+                ))}
+              </div>
+            ) : (
+              <span className="body-sm">
+                ✓ Run complete — {job.rendered} of {job.total} rendered.
+                {job.results.some((r) => !r.ok) ? " Failures listed below by tile." : ""}
+              </span>
+            )}
+            {job.results.filter((r) => !r.ok).length > 0 && job.status !== "interrupted" ? (
+              <div className="stack-12" style={{ gap: 2 }}>
+                {job.results.filter((r) => !r.ok).map((r) => (
+                  <span key={r.name + r.detail} className="hint" style={{ color: "var(--status-blocked, #b3423a)" }}>
+                    ✕ {r.name} — {r.detail}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        {genError ? <div className="callout blocked">{genError}</div> : null}
       </div>
 
       {/* the picker — rows with thumbnail, coverage and per-listing yield */}
@@ -379,7 +501,11 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 className="btn btn-tertiary"
                 style={{ fontSize: 12, padding: "4px 10px" }}
                 disabled={generated.length === 0}
-                onClick={() => setVerdicts({})}
+                onClick={() => {
+                  for (const t of generated) {
+                    if (verdictOf(t) === "flagged") void setVerdict(t, "approved");
+                  }
+                }}
               >
                 Approve all
               </button>
@@ -442,7 +568,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                             className="btn btn-tertiary"
                             style={{ flex: 1, fontSize: 11, padding: "5px", borderRadius: 0 }}
                             disabled={t.url === null}
-                            onClick={() => setVerdicts((c) => ({ ...c, [key(t)]: "approved" }))}
+                            onClick={() => setVerdict(t, "approved")}
                           >
                             Approve
                           </button>
@@ -450,7 +576,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                             className="btn btn-tertiary"
                             style={{ flex: 1, fontSize: 11, padding: "5px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
                             disabled={t.url === null}
-                            onClick={() => setVerdicts((c) => ({ ...c, [key(t)]: "flagged" }))}
+                            onClick={() => setVerdict(t, "flagged")}
                           >
                             Flag
                           </button>
@@ -497,10 +623,25 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
             Approved mockups drop into matching image slots at L5, by shot type and colour. Flagged
             and ungenerated ones stay here until they&apos;re ready.
           </span>
-          <button className="btn btn-save" disabled={approved.length === 0} title={approved.length === 0 ? "Nothing generated yet" : undefined}>
+          <button
+            className="btn btn-save"
+            disabled={approved.length === 0 || sendBusy}
+            title={approved.length === 0 ? "Nothing generated yet" : undefined}
+            onClick={sendApproved}
+          >
+            <Spinner active={sendBusy} />
             Send {approved.length} approved → image slots
           </button>
         </div>
+        {sendReport ? (
+          <div className="stack-12" style={{ gap: 2 }}>
+            {sendReport.map((r) => (
+              <span key={r.name + r.detail} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
+                {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );

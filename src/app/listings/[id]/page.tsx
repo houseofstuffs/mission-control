@@ -11,6 +11,8 @@ import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import { parseQuad } from "@/config/mockups";
+import { listingMockupPlan, generatedFor } from "@/server/mockup/plan";
+import { generateJobStatus } from "@/server/mockup/generateJob";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
 import type { PushData } from "@/components/PushDraftPanel";
@@ -195,28 +197,22 @@ function mockupsData(
   const design = designId ? cachedRecord(designId) : null;
 
   const norm = (c: string) => c.trim().toLowerCase();
-  const sells = new Set(slots.availableColors.map(norm));
-  const shortlist = new Set(slots.shortlist);
-  // colour-neutral variants composite onto any colourway; colour-tagged
-  // ones only where that colour survives the availability intersection.
-  // With a shortlist assigned, only its templates' variants plan tiles —
-  // that's the assignment MEANING something. Shot-less variants (hand
-  // intakes) always pass; they were made deliberately, one at a time.
-  const usable = slots.templates.filter(
-    (t) =>
-      (!t.garmentColor.trim() || sells.size === 0 || sells.has(norm(t.garmentColor))) &&
-      (shortlist.size === 0 || t.shotId === null || shortlist.has(t.shotId))
-  );
-
-  const tiles: MockupTile[] = [];
-  for (const t of usable) {
-    // a colour-tagged variant already IS one colour; a neutral one runs
-    // against every colour the listing sells
-    const colours = t.garmentColor.trim() ? [t.garmentColor.trim()] : slots.availableColors;
-    for (const colour of colours) {
-      tiles.push({ templateId: t.id, templateName: t.name, shotType: t.shotType, colour, url: null });
-    }
-  }
+  // ONE plan derivation, shared with the generate job (src/server/mockup/
+  // plan.ts) — the grid the operator reviews and the run the job executes
+  // can never disagree. Tiles join their generated record when one exists.
+  const plan = listingMockupPlan(rec);
+  const tiles: MockupTile[] = plan.tiles.map((t) => {
+    const g = generatedFor(rec.id, t.variantId);
+    return {
+      templateId: t.variantId,
+      templateName: t.variantName,
+      shotType: t.shotType,
+      colour: t.colour,
+      url: g ? `/api/generated-mockups/${g.id}/file?v=${encodeURIComponent(g.lastEdited)}` : null,
+      generatedId: g?.id ?? null,
+      verdict: g ? (String(g.props["Verdict"] ?? "Approved") as "Approved" | "Flagged") : null,
+    };
+  });
 
   // every branded graphic the slot plan expects, present or not — a missing
   // one must show as missing here, because L5's Graphic Card slots will
@@ -276,9 +272,10 @@ function mockupsData(
     };
   });
 
-  // distinct TEMPLATES behind the usable variants — a shot-less hand
+  // distinct TEMPLATES behind the planned tiles — a shot-less hand
   // intake counts as its own template of one
-  const templatesInPlay = new Set(usable.map((t) => t.shotId ?? t.id)).size;
+  const shotByVariant = new Map(slots.templates.map((t) => [t.id, t.shotId ?? t.id]));
+  const templatesInPlay = new Set(plan.tiles.map((t) => shotByVariant.get(t.variantId) ?? t.variantId)).size;
 
   return {
     listingId: rec.id,
@@ -286,7 +283,7 @@ function mockupsData(
       printifyProduct: String(rec.props["Printify Product ID"] ?? "").trim().length > 0,
       psdMaster: String(design?.props["Master PNG Link"] ?? "").trim().length > 0,
       templatesInPlay,
-      variantCount: usable.length,
+      variantCount: new Set(plan.tiles.map((t) => t.variantId)).size,
       colours: slots.availableColors,
     },
     allTemplates,
@@ -294,6 +291,12 @@ function mockupsData(
       count: hiddenShots.length,
       example: hiddenShots[0]?.title ?? null,
     },
+    generateJob: (() => {
+      const j = generateJobStatus(rec.id);
+      return j
+        ? { status: j.status, done: j.done, total: j.total, rendered: j.rendered, results: j.results }
+        : null;
+    })(),
     productName: product ? productLabel(product) : null,
     shortlist: slots.shortlist,
     tiles,

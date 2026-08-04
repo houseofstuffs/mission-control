@@ -258,10 +258,10 @@ export const SCHEMA: DbSpec[] = [
       // auto-import (pending Google OAuth) can list the folder and detect
       // colours from filenames without any manual dropping.
       "Drive Folder Link": { type: "url" },
-      // Which garment this shoot was OF — L4's picker filters to the
-      // listing's product so it stays short as the library grows. Unset
-      // means "shown for every listing", never silently hidden.
-      Product: { type: "relation", relation: "products" },
+      // "Product" (relation → products) is added in provisioning pass 2 —
+      // Products is created after Mockup Shots, and an inline forward
+      // reference here made the patch step fail with "Relation target
+      // 'products' not provisioned yet" on every run, not just the first.
       "Crop Set At": { type: "date" },
       // Set by hand after actually looking at a real multi-colour batch —
       // this app can't detect framing drift between photos on its own.
@@ -782,6 +782,10 @@ export const SECOND_PASS_RELATIONS: Array<{
   // Niche-level product-line fit: which seeded Products this niche wants.
   // Two-way so the Products side shows which niches point at it.
   { dbKey: "niches", propName: "Product Fit", targetKey: "products", dual: "Niche Fit" },
+  // Which garment a mockup shoot was OF — L4's picker filters to the
+  // listing's product. Forward reference (Products is created after
+  // Mockup Shots), hence pass 2. Unset = shown for every listing.
+  { dbKey: "mockup_shots", propName: "Product", targetKey: "products" },
 ];
 
 /** Property renames applied during provisioning — content is preserved. */

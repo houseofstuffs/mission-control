@@ -268,7 +268,14 @@ export async function checkSchema(): Promise<SchemaCheck> {
       databases.push({ key: db.key, title: db.title, registered: true, reachable: false, missingProperties: [] });
       continue;
     }
-    const missingProperties = Object.keys(db.properties).filter((name) => !current.properties?.[name]);
+    // second-pass relations are real properties too — a check that skips
+    // them would report "all provisioned" while a forward-referenced
+    // relation (e.g. Mockup Shots → Product) was still missing
+    const expected = [
+      ...Object.keys(db.properties),
+      ...SECOND_PASS_RELATIONS.filter((r) => r.dbKey === db.key).map((r) => r.propName),
+    ];
+    const missingProperties = expected.filter((name) => !current.properties?.[name]);
     databases.push({ key: db.key, title: db.title, registered: true, reachable: true, missingProperties });
   }
   const ok = databases.every((d) => d.registered && d.reachable && d.missingProperties.length === 0);

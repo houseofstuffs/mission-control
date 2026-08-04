@@ -43,6 +43,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Nothing to import — tick at least one file with a colour." }, { status: 400 });
     }
 
+    // a live job is a conflict, not a server error — the second tab gets
+    // told what's running, with the count to watch
+    const existing = jobStatus(shotId);
+    if (existing?.status === "running") {
+      return NextResponse.json(
+        { error: `An import is already running for this template (${existing.done}/${existing.total}) — wait for it to finish.` },
+        { status: 409 }
+      );
+    }
+
     const job = startImportJob({
       shotId,
       templateName: shot.title || "Untitled template",

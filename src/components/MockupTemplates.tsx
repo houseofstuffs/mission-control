@@ -1796,11 +1796,14 @@ export function MockupTemplatesSection({
   shots,
   palette,
   drive,
+  duplicateVariants = 0,
 }: {
   templates: MockupTemplateCard[];
   shots: MockupShotOption[];
   palette: string[];
   drive: DriveStatus;
+  /** exact-name variant twins — non-zero renders the one-click cleanup */
+  duplicateVariants?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -1815,7 +1818,7 @@ export function MockupTemplatesSection({
     const err = searchParams.get("drive_error");
     if (!connected && !err) return;
     if (connected) setDriveNotice("Google Drive connected — templates with a folder link can auto-import now.");
-    if (err) setDriveError(err);
+    if (err) setDriveError(`Google Drive: ${err}`);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("drive_connected");
     params.delete("drive_error");
@@ -1838,6 +1841,26 @@ export function MockupTemplatesSection({
   // offers a re-pick over everything — the correction path for the first
   // run's wrong picks. Goes dormant by disinterest, not by vanishing.
   const missingThumbs = shots.filter((s) => !s.thumbUrl).length;
+  const [deduping, setDeduping] = useState(false);
+  const [dedupeReport, setDedupeReport] = useState<string | null>(null);
+  async function dedupeVariants() {
+    if (!window.confirm(`Remove ${duplicateVariants} duplicate variant${duplicateVariants === 1 ? "" : "s"}? One record of each name is kept; the extras are archived in Notion (recoverable from its trash).`)) {
+      return;
+    }
+    setDeduping(true);
+    setDriveError(null);
+    const res = await apiJson<{ removed?: number; names?: string[] }>("/api/mockup-templates/dedupe", "POST", {}, 120_000);
+    if (!res.ok) setDriveError(res.error);
+    else {
+      setDedupeReport(
+        res.data.removed
+          ? `Archived ${res.data.removed} duplicate${res.data.removed === 1 ? "" : "s"}: ${(res.data.names ?? []).join(", ")}`
+          : "No duplicates found."
+      );
+      router.refresh();
+    }
+    setDeduping(false);
+  }
   const [backfilling, setBackfilling] = useState(false);
   const [backfillReport, setBackfillReport] = useState<Array<{ name: string; ok: boolean; detail: string }> | null>(null);
   async function backfillThumbs(overwrite: boolean) {
@@ -1884,7 +1907,20 @@ export function MockupTemplatesSection({
       ) : null}
       {savedNotice ? <div className="callout">{savedNotice}</div> : null}
       {driveNotice ? <span className="hint">{driveNotice}</span> : null}
-      {driveError ? <div className="callout blocked">Google Drive: {driveError}</div> : null}
+      {driveError ? <div className="callout blocked">{driveError}</div> : null}
+      {duplicateVariants > 0 ? (
+        <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" onClick={dedupeVariants} disabled={deduping}>
+            <Spinner active={deduping} />
+            Remove {duplicateVariants} duplicate {duplicateVariants === 1 ? "variant" : "variants"}
+          </button>
+          <span className="hint">
+            Exact-name twins from a double import — one of each is kept, the extras are archived in
+            Notion (recoverable from its trash).
+          </span>
+        </div>
+      ) : null}
+      {dedupeReport ? <span className="hint">{dedupeReport}</span> : null}
       {shots.length > 0 && drive.configured && drive.connected ? (
         <div className="row-gap-12" style={{ alignItems: "center", flexWrap: "wrap" }}>
           {missingThumbs > 0 ? (

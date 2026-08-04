@@ -20,7 +20,7 @@
  */
 import sharp from "sharp";
 import { getMeta, setMeta } from "@/server/cache/db";
-import { createRecord } from "@/server/notion/store";
+import { cachedRecords, createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { getValidAccessToken } from "@/server/drive/connection";
 import { fetchFileBytes, ReconnectError } from "@/server/drive/client";
@@ -144,9 +144,35 @@ export function startImportJob(args: StartArgs): ImportJobStatus {
   return job;
 }
 
+/**
+ * One colour, one variant, per template — checked against the CACHE at
+ * save time, not just in the review list. The review list's "already
+ * added" dedupe computes when the folder is LISTED; a stale tab whose
+ * list predates another run still has everything ticked, and two files
+ * in one folder can detect as the same colour. Both paths land here, and
+ * the cache reflects every earlier save in this very job, so the second
+ * True Navy skips no matter which door it came through.
+ */
+function colourAlreadyOnTemplate(shotId: string, colour: string): boolean {
+  const norm = colour.trim().toLowerCase();
+  return cachedRecords("mockup_templates").some(
+    (t) =>
+      ((t.props["Shot"] as string[] | null) ?? []).includes(shotId) &&
+      String(t.props["Garment Color"] ?? "").trim().toLowerCase() === norm
+  );
+}
+
 async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
   for (const f of args.files) {
     try {
+      if (colourAlreadyOnTemplate(args.shotId, f.colour)) {
+        job.results.push({
+          name: f.name,
+          detail: `skipped — a ${f.colour} variant already exists on this template (duplicate guard)`,
+          ok: false,
+        });
+        continue;
+      }
       const token = await getValidAccessToken();
       const { bytes } = await fetchFileBytes(f.id, token);
       const buf = Buffer.from(bytes);
@@ -163,7 +189,9 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
       if (cropPx < MOCKUP_CROP_MIN) {
         job.results.push({
           name: f.name,
-          detail: `skipped — crop yields ${cropPx}px, under ${MOCKUP_CROP_MIN}`,
+          // the source's REAL dimensions, because filenames lie about
+          // them — "…_2000x2000.png" arrived at 1742px on the short edge
+          detail: `skipped — crop yields ${cropPx}px, under ${MOCKUP_CROP_MIN} (source is actually ${w}×${h})`,
           ok: false,
         });
         continue;

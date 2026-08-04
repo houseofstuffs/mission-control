@@ -157,6 +157,9 @@ export default function LibraryPage() {
           shots={mockupShots.map((s) => shotOption(s, mockups, imageSlots))}
           palette={palette}
           drive={{ configured: driveConfigured(), ...driveConnectionStatus() }}
+          // exact-name twins — the duplicate-import incident's residue.
+          // Non-zero surfaces the one-click cleanup.
+          duplicateVariants={mockups.length - new Set(mockups.map((m) => (m.title || "").trim())).size}
         />
       </div>
     </div>

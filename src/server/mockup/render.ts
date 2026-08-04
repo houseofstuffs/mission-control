@@ -21,6 +21,7 @@ import sharp from "sharp";
 import {
   RENDER_MAX_EDGE,
   DISPLACEMENT_STRENGTH,
+  FABRIC_TEXTURE_STRENGTH,
   DEFAULT_QUAD,
   DEFAULT_FIT,
   type Quad,
@@ -250,6 +251,40 @@ export async function renderMockup(
   if (spec.pipelineType === "Simple Placement") {
     if (!quad) throw new Error("This template has no print-area corners yet — open it and place them.");
     const warped = warpToQuad(artwork, quad, base.width, base.height, fit);
+
+    if (spec.blend === "Print (DTG)") {
+      // White-underbase equivalent: art composites NORMAL so its colours
+      // stay true on any garment, then the garment's own weave comes back
+      // as a soft-light texture pass CLIPPED to the printed pixels. The
+      // texture layer is the base's luminance, alpha = artAlpha × strength
+      // — so fabric shows through the ink without tinting it the way
+      // multiply does (off-white × espresso = brown was the bug).
+      const texture = Buffer.alloc(base.data.length);
+      for (let i = 0; i < base.data.length; i += 4) {
+        const a = warped.data[i + 3];
+        if (a === 0) continue; // outside the print — fully transparent
+        const l = Math.round(
+          0.2126 * base.data[i] + 0.7152 * base.data[i + 1] + 0.0722 * base.data[i + 2]
+        );
+        texture[i] = l;
+        texture[i + 1] = l;
+        texture[i + 2] = l;
+        texture[i + 3] = Math.round(a * FABRIC_TEXTURE_STRENGTH);
+      }
+      const texturePng = await sharp(texture, {
+        raw: { width: base.width, height: base.height, channels: 4 },
+      })
+        .png()
+        .toBuffer();
+      return sharp(await toPng(base))
+        .composite([
+          { input: await toPng(warped), blend: "over" },
+          { input: texturePng, blend: "soft-light" },
+        ])
+        .png()
+        .toBuffer();
+    }
+
     return sharp(await toPng(base))
       .composite([{ input: await toPng(warped), blend: spec.blend === "Normal" ? "over" : "multiply" }])
       .png()

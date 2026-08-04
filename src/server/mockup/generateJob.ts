@@ -138,6 +138,8 @@ export interface GenerateArgs {
   listingId: string;
   /** re-render tiles that already have an image (default: skip them) */
   regenerate?: boolean;
+  /** re-render ONLY tiles whose record is Flagged — the flag IS the redo list */
+  onlyFlagged?: boolean;
 }
 
 export function startGenerateJob(args: GenerateArgs): GenerateJobStatus {
@@ -149,14 +151,21 @@ export function startGenerateJob(args: GenerateArgs): GenerateJobStatus {
   if (!rec || rec.dbKey !== "etsy_listings") throw new Error("Listing not found in cache — refresh first.");
 
   const plan = listingMockupPlan(rec);
-  const tiles = args.regenerate
-    ? plan.tiles
-    : plan.tiles.filter((t) => !generatedFor(args.listingId, t.variantId));
+  const tiles = args.onlyFlagged
+    ? plan.tiles.filter((t) => {
+        const g = generatedFor(args.listingId, t.variantId);
+        return g != null && String(g.props["Verdict"] ?? "") === "Flagged";
+      })
+    : args.regenerate
+      ? plan.tiles
+      : plan.tiles.filter((t) => !generatedFor(args.listingId, t.variantId));
   if (tiles.length === 0) {
     throw new Error(
-      plan.tiles.length === 0
-        ? "The plan is empty — assign templates and colours first."
-        : "Every planned mockup is already generated — use Regenerate to redo them."
+      args.onlyFlagged
+        ? "Nothing is flagged — flag the misses first; the flag is the redo list."
+        : plan.tiles.length === 0
+          ? "The plan is empty — assign templates and colours first."
+          : "Every planned mockup is already generated — use Regenerate to redo them."
     );
   }
 

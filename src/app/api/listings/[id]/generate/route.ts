@@ -15,7 +15,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         { status: 409 }
       );
     }
-    const job = startGenerateJob({ listingId: id, regenerate: Boolean(body.regenerate) });
+    const job = startGenerateJob({ listingId: id, regenerate: Boolean(body.regenerate), onlyFlagged: Boolean(body.onlyFlagged) });
     return NextResponse.json({ job });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

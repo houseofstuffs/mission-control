@@ -18,9 +18,25 @@ export const PIPELINE_TYPES = ["Simple Placement", "Full Displacement"] as const
 export type PipelineType = (typeof PIPELINE_TYPES)[number];
 
 /** Simple Placement's composite step. Multiply sinks ink into fabric; normal for stickers/frames. */
-export const BLEND_MODES = ["Multiply", "Normal"] as const;
+/**
+ * Print (DTG) is the default and the honest one: real DTG lays a white
+ * underbase, so design colours stay TRUE on any garment and the fabric
+ * shows through only as subtle texture. Multiply — the old default — is a
+ * light-garment trick that tints the art with the shirt: the first real
+ * generate turned an off-white margarita glass brown on Espresso and
+ * invisible on Black. Multiply stays available for deliberately-vintage
+ * looks on light garments; Normal is a flat paste-over with no texture.
+ */
+export const BLEND_MODES = ["Print (DTG)", "Multiply", "Normal"] as const;
 export type BlendMode = (typeof BLEND_MODES)[number];
-export const DEFAULT_BLEND: BlendMode = "Multiply";
+export const DEFAULT_BLEND: BlendMode = "Print (DTG)";
+
+/**
+ * How strongly the garment's weave shows through the print in Print (DTG)
+ * mode. 0 = flat sticker, 1 = fully fabric-modulated. ~0.25 reads as ink
+ * on fabric without shifting the design's colour identity.
+ */
+export const FABRIC_TEXTURE_STRENGTH = 0.25;
 
 /**
  * How artwork meets the print area when their ratios disagree — a property

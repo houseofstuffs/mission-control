@@ -181,10 +181,10 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.status, data.listingId]);
 
-  async function generate(regenerate: boolean) {
+  async function generate(opts: { regenerate?: boolean; onlyFlagged?: boolean }) {
     setGenBusy(true);
     setGenError(null);
-    const res = await apiJson<{ job?: GenerateJobView }>(`/api/listings/${data.listingId}/generate`, "POST", { regenerate });
+    const res = await apiJson<{ job?: GenerateJobView }>(`/api/listings/${data.listingId}/generate`, "POST", opts);
     if (!res.ok) setGenError(res.error);
     else if (res.data.job) setJob(res.data.job);
     setGenBusy(false);
@@ -242,6 +242,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   const generated = data.tiles.filter((t) => t.url !== null);
   const approved = generated.filter((t) => verdictOf(t) === "approved");
+  const flagged = generated.filter((t) => verdictOf(t) === "flagged");
   const attention = data.tiles.filter((t) => t.url === null || verdictOf(t) === "flagged");
 
   const blockers = [
@@ -316,6 +317,18 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
             )}
           </span>
           <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            {flagged.length > 0 && job?.status !== "running" ? (
+              // the flag IS the redo list — re-render only the misses
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12 }}
+                disabled={genBusy}
+                title="Re-render only the flagged mockups — approved ones are left alone"
+                onClick={() => generate({ onlyFlagged: true })}
+              >
+                ⟳ Regenerate flagged · {flagged.length}
+              </button>
+            ) : null}
             {generated.length > 0 && generated.length === data.tiles.length && job?.status !== "running" ? (
               <button
                 className="btn btn-tertiary"
@@ -323,7 +336,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 disabled={genBusy}
                 title="Re-render every tile — replaces the existing images"
                 onClick={() => {
-                  if (window.confirm("Re-render all mockups? Existing renders are replaced.")) generate(true);
+                  if (window.confirm("Re-render all mockups? Existing renders are replaced.")) generate({ regenerate: true });
                 }}
               >
                 Regenerate all
@@ -333,7 +346,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               className="btn btn-primary"
               disabled={genBusy || job?.status === "running" || blockers.length > 0 || dirty}
               title={dirty ? "Save the template assignment first" : blockers.length > 0 ? blockers.join(", ") : undefined}
-              onClick={() => generate(false)}
+              onClick={() => generate({})}
             >
               {genBusy || job?.status === "running" ? <span className="spinner" /> : "⟳ "}
               Generate mockups
@@ -530,43 +543,64 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                     <span className="chip neutral" style={{ fontSize: 10 }}>{tiles[0].shotType}</span>
                   ) : null}
                 </span>
+                {/* compact 3-across review grid — cards stay small (~150px)
+                    so a whole template's colours fit one glance; the full
+                    render loads only when a tile is CLICKED (new tab via
+                    the stable file route), never eagerly at full size */}
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-                    gap: 12,
+                    gridTemplateColumns: "repeat(3, minmax(110px, 150px))",
+                    justifyContent: "start",
+                    gap: 10,
                   }}
                 >
                   {visible.map((t) => {
                     const v = verdictOf(t);
                     return (
                       <div key={key(t)} className="card" style={{ padding: 0, overflow: "hidden", gap: 0 }}>
-                        <div
+                        <a
+                          href={t.url ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={t.url ? "Open full size in a new tab" : undefined}
                           style={{
                             aspectRatio: "1 / 1",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             background: "var(--surface-sunk, #f4efe2)",
+                            cursor: t.url ? "zoom-in" : "default",
                           }}
                         >
                           {t.url ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={t.url} alt={`${t.templateName} — ${t.colour}`} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            <img
+                              src={t.url}
+                              alt={`${t.templateName} — ${t.colour}`}
+                              loading="lazy"
+                              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            />
                           ) : (
-                            <span className="hint" style={{ fontSize: 11 }}>not generated</span>
+                            <span className="hint" style={{ fontSize: 10 }}>not generated</span>
                           )}
-                        </div>
-                        <div className="row-gap-8" style={{ padding: "7px 10px", alignItems: "center", justifyContent: "space-between" }}>
-                          <span className="body-sm" style={{ fontWeight: 600 }}>{t.colour}</span>
-                          <span className={`chip ${v === "approved" ? "done" : v === "flagged" ? "stale" : "neutral"}`} style={{ fontSize: 10 }}>
+                        </a>
+                        <div className="row-gap-8" style={{ padding: "4px 8px", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                          <span
+                            className="body-sm"
+                            style={{ fontWeight: 600, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                            title={t.colour}
+                          >
+                            {t.colour}
+                          </span>
+                          <span className={`chip ${v === "approved" ? "done" : v === "flagged" ? "stale" : "neutral"}`} style={{ fontSize: 9, flex: "none" }}>
                             {v === "approved" ? "approved" : v === "flagged" ? "flagged" : "pending"}
                           </span>
                         </div>
                         <div style={{ display: "flex", borderTop: "1px solid var(--border-soft, #e7e2d6)" }}>
                           <button
                             className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 11, padding: "5px", borderRadius: 0 }}
+                            style={{ flex: 1, fontSize: 10, padding: "4px 2px", borderRadius: 0 }}
                             disabled={t.url === null}
                             onClick={() => setVerdict(t, "approved")}
                           >
@@ -574,7 +608,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                           </button>
                           <button
                             className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 11, padding: "5px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
+                            style={{ flex: 1, fontSize: 10, padding: "4px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
                             disabled={t.url === null}
                             onClick={() => setVerdict(t, "flagged")}
                           >

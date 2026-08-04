@@ -1072,6 +1072,26 @@ function TemplateRow({
               type="button"
               className="btn btn-tertiary"
               style={{ fontSize: 12, padding: "3px 10px", alignSelf: "flex-start" }}
+              title="Re-stamps every variant with this template's CURRENT print region and the default blend — for regions redrawn after import, and the old Multiply default"
+              disabled={busy}
+              onClick={async () => {
+                if (!window.confirm(`Re-apply this template's print region + default blend to ${variants.length} ${variants.length === 1 ? "variant" : "variants"}?`)) return;
+                setBusy(true);
+                setError(null);
+                const res = await apiJson<{ updated?: number; blend?: string }>(`/api/mockup-shots/${s.id}/resync-variants`, "POST", {});
+                if (!res.ok) setError(res.error);
+                else router.refresh();
+                setBusy(false);
+              }}
+            >
+              ⟳ Re-sync {variants.length} {variants.length === 1 ? "variant" : "variants"}
+            </button>
+          ) : null}
+          {variants.length > 0 ? (
+            <button
+              type="button"
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "3px 10px", alignSelf: "flex-start" }}
               aria-expanded={showVariants}
               onClick={() => setShowVariants((v) => !v)}
             >

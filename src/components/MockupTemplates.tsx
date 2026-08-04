@@ -1231,11 +1231,13 @@ function TemplateDefine({
 
   const blocked = !name.trim()
     ? "Name the template."
-    : !sample
-      ? "Import one sample photo to draw the geometry on."
-      : phase !== "region"
-        ? "Confirm the crop, then place the print region."
-        : null;
+    : !productId
+      ? "Pick the product this shoot is of — L4's picker filters on it."
+      : !sample
+        ? "Import one sample photo to draw the geometry on."
+        : phase !== "region"
+          ? "Confirm the crop, then place the print region."
+          : null;
 
   return (
     <div className="card supporting stack-12">
@@ -1263,9 +1265,9 @@ function TemplateDefine({
           />
         </div>
         <div className="field" style={{ flex: "1 1 200px" }}>
-          <label className="kicker" htmlFor="td-product">PRODUCT · OPTIONAL</label>
+          <label className="kicker" htmlFor="td-product">PRODUCT · WHICH GARMENT THIS SHOOT IS OF</label>
           <select id="td-product" className="select" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">any product</option>
+            <option value="">pick the garment…</option>
             {products.map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.label}</option>
             ))}

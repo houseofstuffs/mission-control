@@ -924,6 +924,12 @@ a:hover { color: var(--candy); }
 .idea-card .hover-reveal { opacity: 0; transition: opacity 0.12s ease; }
 .idea-card:hover .hover-reveal,
 .idea-card:focus-within .hover-reveal { opacity: 1; }
+
+/* the same reveal pattern for rows OUTSIDE idea-cards (e.g. the Products
+   graphic strips) — scope it to the row itself so only ITS control shows */
+.hover-scope .hover-reveal { opacity: 0; transition: opacity 0.12s ease; }
+.hover-scope:hover .hover-reveal,
+.hover-scope:focus-within .hover-reveal { opacity: 1; }
 .idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .idea-actions .btn { font-size: 12px; padding: 6px 12px; }
 

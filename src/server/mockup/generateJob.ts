@@ -140,6 +140,9 @@ export interface GenerateArgs {
   regenerate?: boolean;
   /** re-render ONLY tiles whose record is Flagged — the flag IS the redo list */
   onlyFlagged?: boolean;
+  /** re-render ONLY these variants' tiles, generated or not — the
+   *  crop-adjust modal targets exactly what it just re-framed */
+  variantIds?: string[];
 }
 
 export function startGenerateJob(args: GenerateArgs): GenerateJobStatus {
@@ -151,21 +154,27 @@ export function startGenerateJob(args: GenerateArgs): GenerateJobStatus {
   if (!rec || rec.dbKey !== "etsy_listings") throw new Error("Listing not found in cache — refresh first.");
 
   const plan = listingMockupPlan(rec);
-  const tiles = args.onlyFlagged
-    ? plan.tiles.filter((t) => {
-        const g = generatedFor(args.listingId, t.variantId);
-        return g != null && String(g.props["Verdict"] ?? "") === "Flagged";
-      })
-    : args.regenerate
-      ? plan.tiles
-      : plan.tiles.filter((t) => !generatedFor(args.listingId, t.variantId));
+  const wanted = new Set(args.variantIds ?? []);
+  const tiles =
+    wanted.size > 0
+      ? plan.tiles.filter((t) => wanted.has(t.variantId))
+      : args.onlyFlagged
+        ? plan.tiles.filter((t) => {
+            const g = generatedFor(args.listingId, t.variantId);
+            return g != null && String(g.props["Verdict"] ?? "") === "Flagged";
+          })
+        : args.regenerate
+          ? plan.tiles
+          : plan.tiles.filter((t) => !generatedFor(args.listingId, t.variantId));
   if (tiles.length === 0) {
     throw new Error(
-      args.onlyFlagged
-        ? "Nothing is flagged — flag the misses first; the flag is the redo list."
-        : plan.tiles.length === 0
-          ? "The plan is empty — assign templates and colours first."
-          : "Every planned mockup is already generated — use Regenerate to redo them."
+      wanted.size > 0
+        ? "That variant isn't in this listing's plan — refresh and retry."
+        : args.onlyFlagged
+          ? "Nothing is flagged — flag the misses first; the flag is the redo list."
+          : plan.tiles.length === 0
+            ? "The plan is empty — assign templates and colours first."
+            : "Every planned mockup is already generated — use Regenerate to redo them."
     );
   }
 

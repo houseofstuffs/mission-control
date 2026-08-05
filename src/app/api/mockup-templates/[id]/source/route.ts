@@ -63,6 +63,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 80 })
       .toBuffer();
+    // where the crop box should START: the rect behind the variant's
+    // current framing, else the shot's shared rect — "nudge from here",
+    // never a from-scratch re-derivation
+    let startRect = String(variant.props["Source Crop Rect (JSON)"] ?? "").trim();
+    if (!startRect) {
+      const shotId = ((variant.props["Shot"] as string[] | null) ?? [])[0];
+      const shot = shotId ? cachedRecord(shotId) : null;
+      startRect = String(shot?.props["Crop Rect (JSON)"] ?? "").trim();
+    }
     return new NextResponse(new Uint8Array(preview), {
       headers: {
         "Content-Type": "image/jpeg",
@@ -70,6 +79,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         "x-source-width": String(w),
         "x-source-height": String(h),
         "x-source-file-id": fileId,
+        ...(startRect ? { "x-source-crop-rect": startRect } : {}),
       },
     });
   } catch (err) {

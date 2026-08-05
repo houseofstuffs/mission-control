@@ -15,7 +15,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         { status: 409 }
       );
     }
-    const job = startGenerateJob({ listingId: id, regenerate: Boolean(body.regenerate), onlyFlagged: Boolean(body.onlyFlagged) });
+    const job = startGenerateJob({
+      listingId: id,
+      regenerate: Boolean(body.regenerate),
+      onlyFlagged: Boolean(body.onlyFlagged),
+      variantIds: Array.isArray(body.variantIds) ? body.variantIds.map(String).filter(Boolean) : undefined,
+    });
     return NextResponse.json({ job });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

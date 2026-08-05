@@ -5,8 +5,55 @@ import { uploadFileToNotion } from "@/server/notion/upload";
 import { getValidAccessToken, connectionStatus } from "@/server/drive/connection";
 import { fetchFileBytes } from "@/server/drive/client";
 import { encodeUnderBudget } from "@/server/drive/importJob";
-import { MOCKUP_CROP_MIN, MOCKUP_CROP_SIZE } from "@/config/mockups";
+import { MOCKUP_CROP_MIN, MOCKUP_CROP_SIZE, parseQuad, type Quad } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
+
+type Rect = { x: number; y: number; size: number };
+
+function parseRect(raw: unknown): Rect | null {
+  try {
+    const p = JSON.parse(String(raw ?? ""));
+    if (p && typeof p.x === "number" && typeof p.y === "number" && typeof p.size === "number") return p;
+  } catch {
+    /* not set */
+  }
+  return null;
+}
+
+/** the crop's pixel frame — EXACTLY the maths the crop itself uses */
+function frame(rect: Rect, w: number, h: number) {
+  const side = Math.min(Math.round(rect.size * Math.min(w, h)), w, h);
+  const left = Math.round(Math.min(Math.max(rect.x * w, 0), Math.max(w - side, 0)));
+  const top = Math.round(Math.min(Math.max(rect.y * h, 0), Math.max(h - side, 0)));
+  return { left, top, side };
+}
+
+const quadsEqual = (a: Quad, b: Quad) =>
+  a.every((p, i) => Math.abs(p.x - b[i].x) < 0.002 && Math.abs(p.y - b[i].y) < 0.002);
+
+/**
+ * Re-expresses a quad drawn on the OLD framing in the NEW framing, by way
+ * of source pixels. Clamped to [0,1]; reports whether clamping actually
+ * moved anything (the print region fell partly outside the new frame).
+ */
+function remapQuad(quad: Quad, from: Rect, to: Rect, w: number, h: number): { quad: Quad; clipped: boolean } | null {
+  const f1 = frame(from, w, h);
+  const f2 = frame(to, w, h);
+  if (!f1.side || !f2.side) return null;
+  let clipped = false;
+  const mapped = quad.map((p) => {
+    const sx = f1.left + p.x * f1.side;
+    const sy = f1.top + p.y * f1.side;
+    const nx = (sx - f2.left) / f2.side;
+    const ny = (sy - f2.top) / f2.side;
+    const cx = Math.min(1, Math.max(0, nx));
+    const cy = Math.min(1, Math.max(0, ny));
+    if (Math.abs(cx - nx) > 0.001 || Math.abs(cy - ny) > 0.001) clipped = true;
+    return { x: cx, y: cy };
+  }) as Quad;
+  // a quad that clamps into a sliver is no quad at all
+  return parseQuad(mapped) ? { quad: mapped, clipped } : null;
+}
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -99,15 +146,50 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const file = new File([new Uint8Array(out)], `${newName || "variant"}.webp`, { type: "image/webp" });
     const up = await uploadFileToNotion(file);
 
+    // --- re-map the print region to the NEW framing -------------------
+    // The quad is normalized to the cropped frame, so re-framing moves
+    // the garment under a fixed quad — art drifts off the chest unless
+    // the quad rides along. Baseline: a quad that still equals the
+    // SHOT's maps from the shot's own rect (that pair is always
+    // internally consistent, even for variants re-cropped before
+    // remapping existed); a hand-tweaked quad maps from the variant's
+    // stored rect — the framing it was tweaked on.
+    const newRect: Rect = { x, y, size };
+    const variantQuad = parseQuad(String(variant.props["Print Area Quad (JSON)"] ?? ""));
+    const storedRect = parseRect(variant.props["Source Crop Rect (JSON)"]);
+    const shotId = ((variant.props["Shot"] as string[] | null) ?? [])[0];
+    const shot = shotId ? cachedRecord(shotId) : null;
+    const shotQuad = shot ? parseQuad(String(shot.props["Print Region Quad (JSON)"] ?? "")) : null;
+    const shotRect = shot ? parseRect(shot.props["Crop Rect (JSON)"]) : null;
+
+    let quadStatus: "remapped" | "remapped-clipped" | "unmapped" = "unmapped";
+    let mappedQuad: Quad | null = null;
+    if (variantQuad) {
+      const baseline =
+        shotQuad && shotRect && quadsEqual(variantQuad, shotQuad)
+          ? { quad: shotQuad, rect: shotRect }
+          : storedRect
+            ? { quad: variantQuad, rect: storedRect }
+            : null;
+      if (baseline) {
+        const out = remapQuad(baseline.quad, baseline.rect, newRect, w, h);
+        if (out) {
+          mappedQuad = out.quad;
+          quadStatus = out.clipped ? "remapped-clipped" : "remapped";
+        }
+      }
+    }
+
     const values: Record<string, SimpleValue> = {
       "Base Image": [{ name: file.name, uploadId: up.id }],
-      "Source Crop Rect (JSON)": JSON.stringify({ x, y, size }),
+      "Source Crop Rect (JSON)": JSON.stringify(newRect),
     };
+    if (mappedQuad) values["Print Area Quad (JSON)"] = JSON.stringify(mappedQuad);
     if (newName && newName !== variant.title) values["Name"] = newName;
     if (!stored && fromLink) values["Source Drive File"] = fromLink;
     await updateRecord("mockup_templates", id, values);
 
-    return NextResponse.json({ ok: true, size: target });
+    return NextResponse.json({ ok: true, size: target, quad: quadStatus });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

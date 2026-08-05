@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
+import { CropAdjustModal } from "./CropAdjustModal";
 
 export interface MockupTile {
   /** the variant behind this tile — the unique key; templateId is the GROUP */
@@ -254,6 +255,29 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [onlyAttention, setOnlyAttention] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
   const [sendReport, setSendReport] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
+
+  // ---- crop adjust: fix the frame where the miss is SEEN ----
+  const [cropTile, setCropTile] = useState<MockupTile | null>(null);
+  const [cropNote, setCropNote] = useState<string | null>(null);
+
+  async function onCropSaved(variantId: string, result: { size: number; quad: string }) {
+    setCropTile(null);
+    setCropNote(
+      result.quad === "remapped"
+        ? `✓ re-cropped → ${result.size}px · print region re-mapped · regenerating…`
+        : result.quad === "remapped-clipped"
+          ? `✓ re-cropped → ${result.size}px · ⚠ print region fell partly outside the new frame — check the render, corners may need a re-place`
+          : `✓ re-cropped → ${result.size}px · ⚠ print region could NOT be re-mapped — re-place corners on this variant`
+    );
+    // regenerate exactly what was re-framed — this listing's tiles for
+    // that variant (other listings regenerate on their own pages)
+    const res = await apiJson<{ job?: GenerateJobView }>(`/api/listings/${data.listingId}/generate`, "POST", {
+      variantIds: [variantId],
+    });
+    if (!res.ok) setGenError(res.error);
+    else if (res.data.job) setJob(res.data.job);
+    router.refresh();
+  }
 
   const key = (t: MockupTile) => `${t.variantId}:${t.colour}`;
   const verdictOf = (t: MockupTile): Verdict | null => {
@@ -671,6 +695,11 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </button>
             </span>
           </div>
+          {cropNote ? (
+            <span className="hint" style={{ color: cropNote.includes("⚠") ? "var(--status-stale, #b8792a)" : "var(--status-done, #3e7a4e)" }}>
+              {cropNote}
+            </span>
+          ) : null}
 
           {groups.map((tiles) => {
             const visible = tiles.filter(shown);
@@ -683,16 +712,16 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                     <span className="chip neutral" style={{ fontSize: 10 }}>{tiles[0].shotType}</span>
                   ) : null}
                 </span>
-                {/* compact 3-across review grid — cards stay small (~150px)
-                    so a whole template's colours fit one glance; the full
-                    render loads only when a tile is CLICKED (new tab via
-                    the stable file route), never eagerly at full size */}
+                {/* 3-across review grid at FULL panel width — the
+                    thumbnail is the thing being judged, so the tiles take
+                    every pixel the column gives (minmax(0,1fr), the
+                    can't-widen-the-page track). Full render still loads
+                    only when a tile is CLICKED (new tab, stable route). */}
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(3, minmax(110px, 150px))",
-                    justifyContent: "start",
-                    gap: 10,
+                    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                    gap: 12,
                   }}
                 >
                   {visible.map((t) => {
@@ -740,7 +769,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                         <div style={{ display: "flex", borderTop: "1px solid var(--border-soft, #e7e2d6)" }}>
                           <button
                             className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 10, padding: "4px 2px", borderRadius: 0 }}
+                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0 }}
                             disabled={t.url === null}
                             onClick={() => setVerdict(t, "approved")}
                           >
@@ -748,11 +777,22 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                           </button>
                           <button
                             className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 10, padding: "4px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
+                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
                             disabled={t.url === null}
                             onClick={() => setVerdict(t, "flagged")}
                           >
                             Flag
+                          </button>
+                          <button
+                            className="btn btn-tertiary"
+                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
+                            title="Re-frame this variant from its original photo — big crop canvas, replaces the stored file"
+                            onClick={() => {
+                              setCropNote(null);
+                              setCropTile(t);
+                            }}
+                          >
+                            Crop
                           </button>
                         </div>
                       </div>
@@ -817,6 +857,15 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           </div>
         ) : null}
       </div>
+
+      {cropTile ? (
+        <CropAdjustModal
+          variantId={cropTile.variantId}
+          variantName={`${cropTile.templateName} — ${cropTile.colour}`}
+          onClose={() => setCropTile(null)}
+          onSaved={(result) => onCropSaved(cropTile.variantId, result)}
+        />
+      ) : null}
     </div>
   );
 }

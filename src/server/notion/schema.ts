@@ -388,6 +388,13 @@ export const SCHEMA: DbSpec[] = [
       "Print Areas (JSON)": { type: "rich_text" },
       "Max Print Width px": { type: "number" },
       "Max Print Height px": { type: "number" },
+      // The print area's PHYSICAL size, hand-copied from Printify's
+      // blueprint page (e.g. front 22.25 × 22.25). Printify's catalog API
+      // speaks px only, so inches can't be derived — but with these set,
+      // the Place readout can say what the art actually prints at instead
+      // of only a percentage of the area.
+      "Print Area Width in": { type: "number" },
+      "Print Area Height in": { type: "number" },
       "Aspect Ratios": { type: "rich_text" },
       "Recomposition Flag": { type: "checkbox" },
       "Base Cost Min": { type: "number" },

@@ -79,7 +79,7 @@ function driveFileId(link: string): string | null {
  * links aren't fetchable anonymously unless truly public); anything else
  * is tried as a plain URL. Errors name the fix, not just the failure.
  */
-async function fetchMaster(link: string): Promise<Buffer> {
+export async function fetchMaster(link: string): Promise<Buffer> {
   const fileId = driveFileId(link);
   if (fileId && driveStatus().connected) {
     const token = await getValidAccessToken();

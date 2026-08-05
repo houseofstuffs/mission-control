@@ -12,7 +12,7 @@
  * when the parent regenerates the affected tiles. Opens at the CURRENT
  * placement, never a reset to defaults.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Kicker, Spinner } from "./ui";
 import { ModalShell } from "./ModalShell";
 import { apiJson } from "@/lib/api";
@@ -25,6 +25,13 @@ import {
   type Quad,
 } from "@/config/mockups";
 
+interface ContentBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export function PlacementModal({
   listingId,
   designId,
@@ -33,6 +40,7 @@ export function PlacementModal({
   colour,
   quad,
   current,
+  printArea,
   onClose,
   onSaved,
 }: {
@@ -45,6 +53,8 @@ export function PlacementModal({
   quad: Quad | null;
   /** the listing's stored placement map — the modal edits into it */
   current: PlacementMap;
+  /** the REAL print area, for the printed-size readout */
+  printArea: { wPx: number | null; hPx: number | null; wIn: number | null; hIn: number | null };
   onClose: () => void;
   onSaved: (scope: "all" | "variant") => void;
 }) {
@@ -56,6 +66,67 @@ export function PlacementModal({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ---- the REAL master, alpha intact — the preview composites what the
+  // renderer composites. The C2 snapshot thumb painted transparency as
+  // solid black and hid where the art actually ends.
+  const [masterUrl, setMasterUrl] = useState<string | null>(null);
+  const [masterDims, setMasterDims] = useState<{ width: number; height: number } | null>(null);
+  const [content, setContent] = useState<ContentBox | null>(null);
+  const [masterFallback, setMasterFallback] = useState(false);
+  useEffect(() => {
+    if (!designId) return;
+    let revoke: string | null = null;
+    (async () => {
+      try {
+        const res = await fetch(`/api/designs/${designId}/master-preview`, { cache: "no-store" });
+        if (!res.ok) {
+          setMasterFallback(true);
+          return;
+        }
+        const w = Number(res.headers.get("x-master-width"));
+        const h = Number(res.headers.get("x-master-height"));
+        const cw = Number(res.headers.get("x-content-width"));
+        const chh = Number(res.headers.get("x-content-height"));
+        const blob = await res.blob();
+        revoke = URL.createObjectURL(blob);
+        setMasterUrl(revoke);
+        setMasterDims(w && h ? { width: w, height: h } : null);
+        setContent(
+          cw && chh
+            ? {
+                left: Number(res.headers.get("x-content-left")) || 0,
+                top: Number(res.headers.get("x-content-top")) || 0,
+                width: cw,
+                height: chh,
+              }
+            : null
+        );
+      } catch {
+        setMasterFallback(true);
+      }
+    })();
+    return () => {
+      if (revoke) URL.revokeObjectURL(revoke);
+    };
+  }, [designId]);
+
+  // ---- print truth: how big the VISIBLE art prints, independent of the
+  // mockup. Printify fits the FILE to the area; empty canvas prints as
+  // nothing but still shrinks the art's share. Placement never enters —
+  // Printify doesn't know about it.
+  const areaAspect = printArea.wPx && printArea.hPx ? printArea.wPx / printArea.hPx : null;
+  const masterAspect = masterDims ? masterDims.width / masterDims.height : null;
+  let fileFracW = 1;
+  let fileFracH = 1;
+  if (areaAspect && masterAspect) {
+    if (masterAspect > areaAspect) fileFracH = areaAspect / masterAspect;
+    else fileFracW = masterAspect / areaAspect;
+  }
+  const contentFracW = content && masterDims ? content.width / masterDims.width : 1;
+  const contentFracH = content && masterDims ? content.height / masterDims.height : 1;
+  const printedW = printArea.wIn ? printArea.wIn * fileFracW * contentFracW : null;
+  const printedH = printArea.hIn ? printArea.hIn * fileFracH * contentFracH : null;
 
   // drag-to-move on the preview: pointer deltas become dx/dy fractions
   const previewRef = useRef<HTMLDivElement>(null);
@@ -176,18 +247,37 @@ export function PlacementModal({
                   cursor: "move",
                 }}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/designs/${designId}/thumb`}
-                  alt=""
-                  draggable={false}
+                {/* the FILE CANVAS gets its own dashed outline: a master
+                    with empty space renders art smaller than its canvas,
+                    and where the file ends should be visible, not
+                    guessable. The img inside keeps the master's alpha. */}
+                <div
                   style={{
+                    ...(masterDims
+                      ? {
+                          aspectRatio: `${masterDims.width} / ${masterDims.height}`,
+                          ...(masterDims.width / masterDims.height >= box.w / Math.max(box.h, 0.0001)
+                            ? { width: "100%" }
+                            : { height: "100%" }),
+                        }
+                      : { maxWidth: "100%", maxHeight: "100%" }),
                     maxWidth: "100%",
                     maxHeight: "100%",
+                    border: "1.5px dashed rgba(255,255,255,0.55)",
+                    boxSizing: "border-box",
                     transform: `translate(${p.dx * 100}%, ${p.dy * 100}%) rotate(${p.rot}deg) scale(${p.scale})`,
                     pointerEvents: "none",
+                    display: "flex",
                   }}
-                />
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={masterUrl ?? `/api/designs/${designId}/thumb`}
+                    alt=""
+                    draggable={false}
+                    style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }}
+                  />
+                </div>
               </div>
             ) : (
               <span className="hint" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -231,6 +321,46 @@ export function PlacementModal({
               Reset
             </button>
           </div>
+
+          {/* print truth — what actually comes off the printer, which
+              placement can never change */}
+          {masterFallback ? (
+            <div className="callout stale" style={{ fontSize: 12 }}>
+              Couldn&apos;t load the design master (Drive?) — previewing the flattened snapshot, so
+              transparency and true art size may be misrepresented here. The render itself is
+              unaffected.
+            </div>
+          ) : masterDims ? (
+            <div className="callout" style={{ fontSize: 12 }}>
+              <strong>Printed for real:</strong>{" "}
+              {printedW && printedH ? (
+                <>
+                  visible art ≈ {printedW.toFixed(1)}″ × {printedH.toFixed(1)}″ on the{" "}
+                  {printArea.wIn}″ × {printArea.hIn}″ print area
+                </>
+              ) : (
+                <>
+                  visible art fills ≈ {Math.round(fileFracW * contentFracW * 100)}% ×{" "}
+                  {Math.round(fileFracH * contentFracH * 100)}% of the print area
+                  <span className="hint"> — set Print Area Width/Height (in) on the product to see inches</span>
+                </>
+              )}
+              {content && masterDims && (contentFracW < 0.98 || contentFracH < 0.98) ? (
+                <>
+                  {" "}· the file is {masterDims.width}×{masterDims.height}px but its visible art is only{" "}
+                  {content.width}×{content.height}px — empty canvas prints as nothing yet shrinks the
+                  art&apos;s share of the area
+                </>
+              ) : null}
+            </div>
+          ) : null}
+          {!isIdentityPlacement(p) ? (
+            <div className="callout stale" style={{ fontSize: 12 }}>
+              ⚠ Placement changes the <strong>mockup only</strong> — Printify prints the uploaded
+              file at its own placement. If you scale here, make the same change in Printify, or the
+              photos will promise a bigger print than the buyer gets.
+            </div>
+          ) : null}
 
           <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
             <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

@@ -95,6 +95,8 @@ export interface MockupsData {
   masterLink: string;
   /** how the design sits in the print region — default + per-variant */
   placement: PlacementMap;
+  /** the REAL print area: px from Printify, inches hand-set when known */
+  printArea: { wPx: number | null; hPx: number | null; wIn: number | null; hIn: number | null };
 }
 
 type Verdict = "approved" | "flagged";
@@ -1013,6 +1015,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           colour={placeTile.colour}
           quad={placeTile.quad}
           current={data.placement}
+          printArea={data.printArea}
           onClose={() => setPlaceTile(null)}
           onSaved={(scope) => onPlaceSaved(scope, placeTile.variantId)}
         />

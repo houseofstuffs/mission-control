@@ -9,6 +9,11 @@ export const dynamic = "force-dynamic";
  * slot's Asset Ref — points HERE, and this re-mints the signed URL on
  * demand. Redirect, not proxy: the browser fetches the bytes from Notion's
  * CDN directly.
+ *
+ * ?download=1 proxies instead, with a Content-Disposition filename. A
+ * redirect can't carry one across origins, so a plain download link would
+ * save the render under Notion's opaque hash — useless in a folder of
+ * twelve. Same re-minting, one extra hop, only on the download path.
  */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -29,6 +34,24 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       rec = await refreshRecord("generated_mockups", id);
       target = url();
       if (!target) return NextResponse.json({ error: "No image on this record." }, { status: 404 });
+    }
+    if (new URL(req.url).searchParams.get("download")) {
+      const res = await fetch(target);
+      if (!res.ok) {
+        return NextResponse.json({ error: `Couldn't fetch the render (${res.status}).` }, { status: 502 });
+      }
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const stored = ((rec.props["Image"] as Array<{ name?: string }> | null) ?? [])[0]?.name ?? "";
+      const ext = (stored.match(/\.(webp|png|jpe?g)$/i)?.[1] ?? "webp").toLowerCase();
+      // the variant name the operator already recognises, not a hash
+      const base = (rec.title || "mockup").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+      return new NextResponse(bytes, {
+        headers: {
+          "Content-Type": res.headers.get("content-type") ?? `image/${ext}`,
+          "Content-Disposition": `attachment; filename="${base}.${ext}"`,
+          "Cache-Control": "private, max-age=600",
+        },
+      });
     }
     return NextResponse.redirect(target, { headers: { "Cache-Control": "private, max-age=600" } });
   } catch (err) {

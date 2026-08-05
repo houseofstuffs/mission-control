@@ -31,6 +31,9 @@ export interface ProductCardData {
   costMin: number | null;
   costMax: number | null;
   variantCount: number | null;
+  /** distinct colours — the figure the Library, L4 and L5 all speak in */
+  colourCount: number;
+  sizeCount: number;
   syncedAt: string | null;
   hasVoiceText: boolean;
   /** the saved boilerplate itself — prefills the voice editor */
@@ -178,10 +181,22 @@ function ProductCard({
           )}
         </div>
       </div>
-      {/* Method, count and pull date ride in the tooltip — the line stays
-          clean, the transparency is one hover away. */}
-      <div className="body-sm muted" title={methodTitle}>
-        {p.variantCount ?? 0} variants
+      {/* Colours, not variants: colour × size rows are a number nobody
+          works in, while every mockup screen counts colours. The size and
+          row counts stay one hover away.
+          Method, count and pull date ride in the tooltip too — the line
+          stays clean, the transparency is one hover away. */}
+      <div
+        className="body-sm muted"
+        title={[
+          p.sizeCount > 0 ? `${p.sizeCount} size${p.sizeCount === 1 ? "" : "s"}` : null,
+          `${p.variantCount ?? 0} colour × size variant${(p.variantCount ?? 0) === 1 ? "" : "s"}`,
+          methodTitle,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      >
+        {p.colourCount} {p.colourCount === 1 ? "colour" : "colours"}
         {p.estimatedCost != null ? (
           <>
             {" · est. "}

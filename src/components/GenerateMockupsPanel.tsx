@@ -266,6 +266,31 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [cropTile, setCropTile] = useState<MockupTile | null>(null);
   const [cropNote, setCropNote] = useState<string | null>(null);
 
+  // ---- the colour grid: approved tiles → one square, into slot 12 ----
+  const [gridLayout, setGridLayout] = useState("2x2");
+  const [gridBusy, setGridBusy] = useState(false);
+  const [gridNote, setGridNote] = useState<string | null>(null);
+
+  async function buildGrid() {
+    setGridBusy(true);
+    setGridNote(null);
+    setGenError(null);
+    const res = await apiJson<{ used?: number; layout?: string; slot?: { position: number; label: string } }>(
+      `/api/listings/${data.listingId}/grid-composite`,
+      "POST",
+      { layout: gridLayout },
+      180_000
+    );
+    if (!res.ok) setGenError(res.error);
+    else {
+      setGridNote(
+        `✓ ${res.data.layout} grid from ${res.data.used} approved renders → slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
+      );
+      router.refresh();
+    }
+    setGridBusy(false);
+  }
+
   // ---- placement: how the design sits in the region ----
   const [placeTile, setPlaceTile] = useState<MockupTile | null>(null);
 
@@ -756,6 +781,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                           rel="noreferrer"
                           title={t.url ? "Open full size in a new tab" : undefined}
                           style={{
+                            position: "relative",
                             aspectRatio: "1 / 1",
                             display: "flex",
                             alignItems: "center",
@@ -775,6 +801,44 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                           ) : (
                             <span className="hint" style={{ fontSize: 10 }}>not generated</span>
                           )}
+                          {t.generatedId ? (
+                            // full-size original, named after the variant —
+                            // for assembling composites outside the app
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title="Download the full-size render"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                window.location.href = `/api/generated-mockups/${t.generatedId}/file?download=1`;
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.location.href = `/api/generated-mockups/${t.generatedId}/file?download=1`;
+                                }
+                              }}
+                              style={{
+                                position: "absolute",
+                                right: 5,
+                                bottom: 5,
+                                width: 24,
+                                height: 24,
+                                borderRadius: 7,
+                                background: "rgba(255,255,255,0.88)",
+                                border: "1px solid var(--border-soft, #e7e2d6)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 13,
+                                cursor: "pointer",
+                              }}
+                            >
+                              ↓
+                            </span>
+                          ) : null}
                         </a>
                         <div className="row-gap-8" style={{ padding: "4px 8px", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
                           <span
@@ -883,6 +947,51 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </span>
             ))}
           </div>
+        ) : null}
+
+        {/* the colour grid, assembled here rather than in Canva: renders
+            are already square and consistent, so tiling them is a resize
+            and a place. Rebuilds replace the slot's image. */}
+        <div
+          className="row-gap-12"
+          style={{
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            alignItems: "center",
+            borderTop: "1px dashed var(--border-soft, #e7e0ce)",
+            paddingTop: 10,
+          }}
+        >
+          <span className="hint" style={{ flex: "1 1 240px" }}>
+            Build the <strong>colour grid</strong> for the Grid Composite slot from approved renders —
+            no Canva round-trip. Approval order fills the cells.
+          </span>
+          <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              className="select input-compact"
+              style={{ width: "auto", fontSize: 12 }}
+              aria-label="Grid layout"
+              value={gridLayout}
+              onChange={(e) => setGridLayout(e.target.value)}
+            >
+              {["2x2", "3x1", "2x3", "3x2", "3x3"].map((l) => (
+                <option key={l} value={l}>{l.replace("x", " × ")}</option>
+              ))}
+            </select>
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12 }}
+              disabled={gridBusy || approved.length === 0}
+              title={approved.length === 0 ? "Approve some renders first" : "Tile approved renders into one square image"}
+              onClick={buildGrid}
+            >
+              <Spinner active={gridBusy} />
+              Build grid from approved
+            </button>
+          </span>
+        </div>
+        {gridNote ? (
+          <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
         ) : null}
       </div>
 

@@ -23,6 +23,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const approved = cachedRecords("generated_mockups").filter(
       (g) =>
         ((g.props["Listing"] as string[] | null) ?? []).includes(id) &&
+        // a Variant-less record is a built composite (the grid), already
+        // placed in its own slot — it isn't a tile awaiting a home
+        ((g.props["Variant"] as string[] | null) ?? []).length > 0 &&
         String(g.props["Verdict"] ?? "") === "Approved" &&
         Array.isArray(g.props["Image"]) &&
         (g.props["Image"] as unknown[]).length > 0

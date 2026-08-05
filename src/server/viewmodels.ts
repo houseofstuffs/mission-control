@@ -336,6 +336,11 @@ export function productCards(): ProductCardData[] {
     costMin: num(p.props["Base Cost Min"]),
     costMax: num(p.props["Base Cost Max"]),
     variantCount: num(p.props["Variant Count"]),
+    // Colours is the number actually used for work — the Library, L4 and
+    // L5 all think in colours, never in colour × size rows. Computed from
+    // the cached variants so it can't drift from what those screens see.
+    colourCount: new Set(own.map((v) => str(v.props["Color"]).trim().toLowerCase()).filter(Boolean)).size,
+    sizeCount: new Set(own.map((v) => str(v.props["Size"]).trim().toLowerCase()).filter(Boolean)).size,
     syncedAt: str(p.props["Synced At"]) || null,
     hasVoiceText: str(p.props["Shop Voice Text"]).trim().length > 0,
     voiceText: str(p.props["Shop Voice Text"]),

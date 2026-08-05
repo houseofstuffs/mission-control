@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { Kicker, Spinner } from "./ui";
 import { apiJson } from "@/lib/api";
 import { QuadEditor, rectToQuad, quadToRect, type Dims } from "./QuadEditor";
+import { ModalShell } from "./ModalShell";
 import { cropSquarePixels, type CropRect } from "@/lib/mockupCrop";
 import { DEFAULT_CROP_RECT, MOCKUP_CROP_MIN, isIdentityPlacement, type ArtPlacement, type Quad } from "@/config/mockups";
 
@@ -161,20 +162,7 @@ export function CropAdjustModal({
   const aspect = srcDims ? srcDims.width / srcDims.height : 1;
 
   return (
-    <div className="modal-scrim" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-label={`Adjust crop — ${variantName}`}
-        style={{
-          width: "min(1100px, 92vw)",
-          maxHeight: "92vh",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          padding: 18,
-        }}
-      >
+    <ModalShell label={`Adjust crop — ${variantName}`} width="min(1100px, 92vw)" busy={busy} onClose={onClose}>
         <div className="row-gap-12" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap" }}>
           <Kicker>ADJUST CROP · {variantName.toUpperCase()}</Kicker>
           {px !== null ? (
@@ -267,7 +255,6 @@ export function CropAdjustModal({
             </span>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 }

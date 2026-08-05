@@ -14,6 +14,7 @@
  */
 import { useRef, useState } from "react";
 import { Kicker, Spinner } from "./ui";
+import { ModalShell } from "./ModalShell";
 import { apiJson } from "@/lib/api";
 import {
   clampPlacement,
@@ -117,20 +118,7 @@ export function PlacementModal({
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
   return (
-    <div className="modal-scrim" onClick={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-label={`Place artwork — ${variantName}`}
-        style={{
-          width: "min(920px, 92vw)",
-          maxHeight: "92vh",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-          padding: 18,
-        }}
-      >
+    <ModalShell label={`Place artwork — ${variantName}`} width="min(920px, 92vw)" busy={busy} onClose={onClose}>
         <Kicker>PLACE ARTWORK · {variantName.toUpperCase()} — {colour.toUpperCase()}</Kicker>
 
         <div style={{ flex: "1 1 auto", minHeight: 0, overflowY: "auto" }} className="stack-12">
@@ -277,7 +265,6 @@ export function PlacementModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

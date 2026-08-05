@@ -29,6 +29,7 @@ import {
   type CropRect,
 } from "@/lib/mockupCrop";
 import { QuadEditor, rectToQuad, quadToRect, type Dims } from "./QuadEditor";
+import { PrintRegionModal } from "./PrintRegionModal";
 import {
   PIPELINE_TYPES,
   BLEND_MODES,
@@ -764,6 +765,8 @@ function TemplateRow({
   // loop, and a per-run count is also what catches a variant the stamp
   // missed (count printed < count on the button = something skipped)
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  // the shot-level geometry fix: wrong region = wrong for every colour
+  const [editingRegion, setEditingRegion] = useState(false);
 
   async function saveEdits() {
     setBusy(true);
@@ -921,9 +924,20 @@ function TemplateRow({
             <span className={`chip ${s.cropRect ? "done" : "stale"}`}>
               {s.cropRect ? "crop set" : "no crop"}
             </span>
-            <span className={`chip ${s.printRegionQuad ? "done" : "stale"}`}>
-              {s.printRegionQuad ? "print region set" : "no print region"}
-            </span>
+            {/* the chip IS the fix — a region that's wrong for the shoot
+                is wrong for every colour, so it's editable at the shot */}
+            <button
+              type="button"
+              className={`chip ${s.printRegionQuad ? "done" : "stale"}`}
+              style={{ cursor: "pointer" }}
+              title="Re-place the print region on this template's sample — then push it to every variant"
+              onClick={() => {
+                setSyncResult(null);
+                setEditingRegion(true);
+              }}
+            >
+              {s.printRegionQuad ? "print region set ✎" : "no print region — draw it"}
+            </button>
             <span className="chip count">
               {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
             </span>
@@ -1009,6 +1023,19 @@ function TemplateRow({
           {syncResult ? (
             <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>✓ {syncResult}</span>
           ) : null}
+          <button
+            type="button"
+            className="btn btn-tertiary"
+            style={{ fontSize: 12, padding: "3px 10px", alignSelf: "flex-start" }}
+            title="Re-place the printable zone on this template's sample photo"
+            disabled={busy}
+            onClick={() => {
+              setSyncResult(null);
+              setEditingRegion(true);
+            }}
+          >
+            ⬚ Re-place print region
+          </button>
           {variants.length > 0 ? (
             <button
               type="button"
@@ -1031,6 +1058,21 @@ function TemplateRow({
         </>
       )}
       {error ? <div className="callout blocked">{error}</div> : null}
+      {editingRegion ? (
+        <PrintRegionModal
+          shotId={s.id}
+          shotName={s.name}
+          sampleUrl={s.thumbUrl}
+          variantCount={variants.length}
+          current={s.printRegionQuad}
+          onClose={() => setEditingRegion(false)}
+          onDone={(message) => {
+            setEditingRegion(false);
+            setSyncResult(message);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

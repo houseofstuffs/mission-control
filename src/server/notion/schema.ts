@@ -576,6 +576,11 @@ export const SCHEMA: DbSpec[] = [
       // gets a mockup slot) rather than "none" — the L5 offered-template
       // filter treats blank as the sold-colours set, never as zero.
       "Mockup Colors (JSON)": { type: "rich_text" },
+      // How THIS design sits inside the print region, at render time —
+      // {"default": {scale,dx,dy,rot}, "perVariant": {variantId: {...}}}.
+      // Listing-scoped by design: crop belongs to the variant, the quad
+      // to the template, placement to the design being sold here.
+      "Mockup Placement (JSON)": { type: "rich_text" },
       // Alternate design masters for SPECIFIC colours — {"espresso": link}.
       // Printify prints per-variant art within one listing, so a single
       // master can make a mockup factually wrong (dark-version eyes that

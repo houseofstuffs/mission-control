@@ -24,6 +24,8 @@ import {
   FABRIC_TEXTURE_STRENGTH,
   DEFAULT_QUAD,
   DEFAULT_FIT,
+  isIdentityPlacement,
+  type ArtPlacement,
   type Quad,
   type PipelineType,
   type BlendMode,
@@ -37,6 +39,8 @@ export interface TemplateSpec {
   blend: BlendMode;
   /** how artwork meets the area when ratios disagree — never stretched */
   fit?: FitMode;
+  /** design-in-region adjustment (listing-scoped) — identity when absent */
+  placement?: ArtPlacement | null;
 }
 
 export interface TemplateLayers {
@@ -123,7 +127,14 @@ function sample(src: Raw, x: number, y: number, out: [number, number, number, nu
  *   Fit inside — whole artwork, centred, leftover transparent (contain)
  *   Fill area  — area covered edge-to-edge, overflow cropped equally (cover)
  */
-function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number, fit: FitMode): Raw {
+function warpToQuad(
+  artwork: Raw,
+  quad: Quad,
+  width: number,
+  height: number,
+  fit: FitMode,
+  placement?: ArtPlacement | null
+): Raw {
   const px: Quad = quad.map((p) => ({ x: p.x * (width - 1), y: p.y * (height - 1) })) as Quad;
   const inv = invert(squareToQuad(px));
 
@@ -165,6 +176,16 @@ function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number, fit
   const out = Buffer.alloc(width * height * 4);
   const rgba: [number, number, number, number] = [0, 0, 0, 0];
 
+  // placement: the design moves WITHIN the region, clipped to it like
+  // real DTG. Inverse mapping again — for a canvas pixel's (u,v) inside
+  // the quad, where was that point before the design was scaled/moved/
+  // rotated? Rotation runs in quad-METRIC space (u stretched by the
+  // region's aspect) so it stays visually rigid on non-square regions.
+  const place = placement && !isIdentityPlacement(placement) ? placement : null;
+  const rotRad = place ? (-place.rot * Math.PI) / 180 : 0;
+  const cosR = Math.cos(rotRad);
+  const sinR = Math.sin(rotRad);
+
   // only the quad's bounding box can receive pixels
   const minX = Math.max(0, Math.floor(Math.min(...px.map((p) => p.x))));
   const maxX = Math.min(width - 1, Math.ceil(Math.max(...px.map((p) => p.x))));
@@ -174,9 +195,18 @@ function warpToQuad(artwork: Raw, quad: Quad, width: number, height: number, fit
   for (let y = minY; y <= maxY; y++) {
     for (let x = minX; x <= maxX; x++) {
       const w = inv[6] * x + inv[7] * y + inv[8];
-      const u = (inv[0] * x + inv[1] * y + inv[2]) / w;
-      const v = (inv[3] * x + inv[4] * y + inv[5]) / w;
+      let u = (inv[0] * x + inv[1] * y + inv[2]) / w;
+      let v = (inv[3] * x + inv[4] * y + inv[5]) / w;
       if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      if (place) {
+        const mx = (u - 0.5 - place.dx) * quadAspect;
+        const my = v - 0.5 - place.dy;
+        const rx = mx * cosR - my * sinR;
+        const ry = mx * sinR + my * cosR;
+        u = rx / (quadAspect * place.scale) + 0.5;
+        v = ry / place.scale + 0.5;
+        if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+      }
       // remap through the contain band; outside it stays transparent
       const au = (u - u0) / uw;
       const av = (v - v0) / vh;
@@ -250,7 +280,7 @@ export async function renderMockup(
 
   if (spec.pipelineType === "Simple Placement") {
     if (!quad) throw new Error("This template has no print-area corners yet — open it and place them.");
-    const warped = warpToQuad(artwork, quad, base.width, base.height, fit);
+    const warped = warpToQuad(artwork, quad, base.width, base.height, fit, spec.placement);
 
     if (spec.blend === "Print (DTG)") {
       // White-underbase equivalent: art composites NORMAL so its colours
@@ -297,7 +327,7 @@ export async function renderMockup(
   }
   // Placement first: the quad if one was saved (optional crop guide), else a
   // centred box — the artwork has to sit somewhere before the fabric warps it.
-  const placed = warpToQuad(artwork, quad ?? DEFAULT_QUAD, base.width, base.height, fit);
+  const placed = warpToQuad(artwork, quad ?? DEFAULT_QUAD, base.width, base.height, fit, spec.placement);
   const map = await loadRaw(layers.displacement).then((m) =>
     m.width === base.width && m.height === base.height
       ? m

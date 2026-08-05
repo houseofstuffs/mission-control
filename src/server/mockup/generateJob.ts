@@ -25,6 +25,7 @@ import { fetchFileBytes } from "@/server/drive/client";
 import { connectionStatus as driveStatus } from "@/server/drive/connection";
 import {
   parseQuad,
+  parsePlacementMap,
   DEFAULT_BLEND,
   DEFAULT_FIT,
   UPLOAD_BUDGET_BYTES,
@@ -198,6 +199,8 @@ async function runJob(rec: SimpleRecord, tiles: PlanTile[], job: GenerateJobStat
   // plus any per-colour overrides (a colour whose art the single master
   // gets wrong renders from its own link; everything else shares)
   const overrides = perColourArt(rec);
+  // how the design sits in the region — listing default, per-variant wins
+  const placementMap = parsePlacementMap(String(rec.props["Mockup Placement (JSON)"] ?? ""));
   const masters = new Map<string, Buffer>();
   const masterFor = async (link: string): Promise<Buffer> => {
     const got = masters.get(link);
@@ -251,6 +254,7 @@ async function runJob(rec: SimpleRecord, tiles: PlanTile[], job: GenerateJobStat
           quad: parseQuad(String(template.props["Print Area Quad (JSON)"] ?? "")),
           blend: (String(template.props["Blend Mode"] ?? "") || DEFAULT_BLEND) as BlendMode,
           fit: (String(template.props["Fit"] ?? "") || DEFAULT_FIT) as FitMode,
+          placement: placementMap.perVariant[tile.variantId] ?? placementMap.default,
         },
         { base: layers.base, displacement: layers.displacement, shadow: layers.shadow, highlight: layers.highlight },
         master,

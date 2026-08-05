@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { cachedRecord } from "@/server/notion/store";
 import { getValidAccessToken, connectionStatus } from "@/server/drive/connection";
 import { fetchFileBytes } from "@/server/drive/client";
+import { quadBaseline, quadToSourceCoords } from "@/server/mockup/cropGeometry";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -72,6 +73,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       const shot = shotId ? cachedRecord(shotId) : null;
       startRect = String(shot?.props["Crop Rect (JSON)"] ?? "").trim();
     }
+    // the print region GLUED TO THE GARMENT — expressed in source-image
+    // coordinates so the crop editor can ghost it under the drag box.
+    // Cropping stops being guesswork: line the box's centre up with the
+    // region's centre instead of eyeballing the garment.
+    const baseline = quadBaseline(variant);
+    const ghost = baseline ? quadToSourceCoords(baseline.quad, baseline.rect, w, h) : null;
     return new NextResponse(new Uint8Array(preview), {
       headers: {
         "Content-Type": "image/jpeg",
@@ -80,6 +87,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         "x-source-height": String(h),
         "x-source-file-id": fileId,
         ...(startRect ? { "x-source-crop-rect": startRect } : {}),
+        ...(ghost ? { "x-print-region-source-quad": JSON.stringify(ghost) } : {}),
       },
     });
   } catch (err) {

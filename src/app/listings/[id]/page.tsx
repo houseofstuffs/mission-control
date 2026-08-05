@@ -10,7 +10,7 @@ import { compatForListing } from "@/server/imageSlots";
 import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
-import { parseQuad } from "@/config/mockups";
+import { parseQuad, parsePlacementMap } from "@/config/mockups";
 import { listingMockupPlan, generatedFor, perColourArt } from "@/server/mockup/plan";
 import { generateJobStatus } from "@/server/mockup/generateJob";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
@@ -211,12 +211,14 @@ function mockupsData(
     const g = generatedFor(rec.id, t.variantId);
     const shotId = shotOfVariant.get(t.variantId) ?? null;
     const shot = shotId ? cachedRecord(shotId) : null;
+    const variant = cachedRecord(t.variantId);
     return {
       variantId: t.variantId,
       templateId: shotId ?? t.variantId,
       templateName: shot?.title || t.variantName,
       shotType: t.shotType,
       colour: t.colour,
+      quad: parseQuad(String(variant?.props["Print Area Quad (JSON)"] ?? "")),
       url: g ? `/api/generated-mockups/${g.id}/file?v=${encodeURIComponent(g.lastEdited)}` : null,
       generatedId: g?.id ?? null,
       verdict: g ? (String(g.props["Verdict"] ?? "Approved") as "Approved" | "Flagged") : null,
@@ -312,6 +314,7 @@ function mockupsData(
     artOverrides: perColourArt(rec),
     designId: designId ?? null,
     masterLink: String(design?.props["Master PNG Link"] ?? "").trim(),
+    placement: parsePlacementMap(String(rec.props["Mockup Placement (JSON)"] ?? "")),
   };
 }
 

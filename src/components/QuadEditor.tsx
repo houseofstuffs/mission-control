@@ -64,6 +64,7 @@ export function QuadEditor({
   onChange,
   squareOnly = false,
   centerGuides = false,
+  ghost = null,
 }: {
   src: string;
   quad: Quad;
@@ -72,6 +73,10 @@ export function QuadEditor({
   squareOnly?: boolean;
   /** dashed canvas-centre lines plus solid lines through the box's own centre — centring is done when the two pairs coincide */
   centerGuides?: boolean;
+  /** non-interactive dashed reference polygons (canvas-normalized) with a
+   *  centre cross each — e.g. the print region ghosted under a crop box,
+   *  so cropping is lining up two centres instead of eyeballing */
+  ghost?: Quad[] | null;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [locked, setLocked] = useState(() => squareOnly || isRectangle(quad));
@@ -189,6 +194,25 @@ export function QuadEditor({
           preserveAspectRatio="none"
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
         >
+          {(ghost ?? []).map((g, gi) => {
+            const gx = (g.reduce((a, p) => a + p.x, 0) / 4) * 100;
+            const gy = (g.reduce((a, p) => a + p.y, 0) / 4) * 100;
+            // difference-blend white: visible on any photo without
+            // shouting over it — a reference, not a control
+            const stroke = { stroke: "#fff", strokeWidth: gi === 0 ? 1.4 : 1, strokeDasharray: "5 4" } as const;
+            return (
+              <g key={gi} style={{ mixBlendMode: "difference", opacity: 0.65 }}>
+                <polygon
+                  points={g.map((p) => `${p.x * 100},${p.y * 100}`).join(" ")}
+                  fill="none"
+                  {...stroke}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <line x1={gx - 2.2} y1={gy} x2={gx + 2.2} y2={gy} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+                <line x1={gx} y1={gy - 2.2} x2={gx} y2={gy + 2.2} stroke="#fff" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+              </g>
+            );
+          })}
           <polygon
             points={quad.map((p) => `${p.x * 100},${p.y * 100}`).join(" ")}
             fill="rgba(31,72,151,0.14)"

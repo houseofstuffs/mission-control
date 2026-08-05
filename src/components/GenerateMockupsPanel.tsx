@@ -17,6 +17,8 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { CropAdjustModal } from "./CropAdjustModal";
+import { PlacementModal } from "./PlacementModal";
+import type { PlacementMap, Quad } from "@/config/mockups";
 
 export interface MockupTile {
   /** the variant behind this tile — the unique key; templateId is the GROUP */
@@ -26,6 +28,8 @@ export interface MockupTile {
   templateName: string;
   shotType: string;
   colour: string;
+  /** the variant's print region — the placement preview draws inside it */
+  quad: Quad | null;
   /** the render, through the stable file route. Null = not generated yet. */
   url: string | null;
   /** the generated_mockups record behind the url */
@@ -89,6 +93,8 @@ export interface MockupsData {
    *  L4, because the review grid is where art × garment judgments happen */
   designId: string | null;
   masterLink: string;
+  /** how the design sits in the print region — default + per-variant */
+  placement: PlacementMap;
 }
 
 type Verdict = "approved" | "flagged";
@@ -259,6 +265,22 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   // ---- crop adjust: fix the frame where the miss is SEEN ----
   const [cropTile, setCropTile] = useState<MockupTile | null>(null);
   const [cropNote, setCropNote] = useState<string | null>(null);
+
+  // ---- placement: how the design sits in the region ----
+  const [placeTile, setPlaceTile] = useState<MockupTile | null>(null);
+
+  async function onPlaceSaved(scope: "all" | "variant", variantId: string) {
+    setPlaceTile(null);
+    setCropNote(`✓ placement saved · regenerating ${scope === "all" ? "all tiles" : "the tile"}…`);
+    const res = await apiJson<{ job?: GenerateJobView }>(
+      `/api/listings/${data.listingId}/generate`,
+      "POST",
+      scope === "all" ? { regenerate: true } : { variantIds: [variantId] }
+    );
+    if (!res.ok) setGenError(res.error);
+    else if (res.data.job) setJob(res.data.job);
+    router.refresh();
+  }
 
   async function onCropSaved(variantId: string, result: { size: number; quad: string }) {
     setCropTile(null);
@@ -766,33 +788,39 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                             {v === "approved" ? "approved" : v === "flagged" ? "flagged" : "pending"}
                           </span>
                         </div>
+                        {/* edit tools left, verdict right — ONE verdict
+                            button showing the action available now (the
+                            chip above already states the current state) */}
                         <div style={{ display: "flex", borderTop: "1px solid var(--border-soft, #e7e2d6)" }}>
                           <button
                             className="btn btn-tertiary"
                             style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0 }}
-                            disabled={t.url === null}
-                            onClick={() => setVerdict(t, "approved")}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
-                            disabled={t.url === null}
-                            onClick={() => setVerdict(t, "flagged")}
-                          >
-                            Flag
-                          </button>
-                          <button
-                            className="btn btn-tertiary"
-                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
-                            title="Re-frame this variant from its original photo — big crop canvas, replaces the stored file"
+                            title="Re-frame this variant from its original photo — replaces the stored file"
                             onClick={() => {
                               setCropNote(null);
                               setCropTile(t);
                             }}
                           >
                             Crop
+                          </button>
+                          <button
+                            className="btn btn-tertiary"
+                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)" }}
+                            title="Scale / move / tilt the design inside the print region — saved on this listing"
+                            onClick={() => {
+                              setCropNote(null);
+                              setPlaceTile(t);
+                            }}
+                          >
+                            Place
+                          </button>
+                          <button
+                            className="btn btn-tertiary"
+                            style={{ flex: 1, fontSize: 11, padding: "5px 2px", borderRadius: 0, borderLeft: "1px solid var(--border-soft, #e7e2d6)", fontWeight: 700 }}
+                            disabled={t.url === null}
+                            onClick={() => setVerdict(t, v === "approved" ? "flagged" : "approved")}
+                          >
+                            {v === "approved" ? "Flag" : "Approve"}
                           </button>
                         </div>
                       </div>
@@ -862,8 +890,22 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         <CropAdjustModal
           variantId={cropTile.variantId}
           variantName={`${cropTile.templateName} — ${cropTile.colour}`}
+          placement={data.placement.perVariant[cropTile.variantId] ?? data.placement.default}
           onClose={() => setCropTile(null)}
           onSaved={(result) => onCropSaved(cropTile.variantId, result)}
+        />
+      ) : null}
+      {placeTile ? (
+        <PlacementModal
+          listingId={data.listingId}
+          designId={data.designId}
+          variantId={placeTile.variantId}
+          variantName={placeTile.templateName}
+          colour={placeTile.colour}
+          quad={placeTile.quad}
+          current={data.placement}
+          onClose={() => setPlaceTile(null)}
+          onSaved={(scope) => onPlaceSaved(scope, placeTile.variantId)}
         />
       ) : null}
     </div>

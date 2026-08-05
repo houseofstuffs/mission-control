@@ -98,6 +98,67 @@ export function parseQuad(raw: unknown): Quad | null {
   return pts as Quad;
 }
 
+/**
+ * How a DESIGN sits inside the print region — the third, listing-scoped
+ * adjustment in the family:
+ *   crop      = the photo's framing        (variant, shared, persisted)
+ *   quad      = the garment's printable zone (template)
+ *   placement = how THIS design sits in that zone (listing/design)
+ * scale is a factor about the region's centre; dx/dy are fractions of the
+ * region's width/height; rot in degrees, clockwise. Applied at render
+ * time inside the quad plane, clipped to the region like real DTG.
+ */
+export interface ArtPlacement {
+  scale: number;
+  dx: number;
+  dy: number;
+  rot: number;
+}
+export const IDENTITY_PLACEMENT: ArtPlacement = { scale: 1, dx: 0, dy: 0, rot: 0 };
+
+export function clampPlacement(p: Partial<ArtPlacement> | null | undefined): ArtPlacement {
+  const n = (v: unknown, lo: number, hi: number, dflt: number) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : dflt;
+  };
+  return {
+    scale: n(p?.scale, 0.2, 3, 1),
+    dx: n(p?.dx, -0.75, 0.75, 0),
+    dy: n(p?.dy, -0.75, 0.75, 0),
+    rot: n(p?.rot, -180, 180, 0),
+  };
+}
+
+export const isIdentityPlacement = (p: ArtPlacement) =>
+  Math.abs(p.scale - 1) < 0.005 && Math.abs(p.dx) < 0.005 && Math.abs(p.dy) < 0.005 && Math.abs(p.rot) < 0.05;
+
+/** The listing's stored placement: one default + per-variant exceptions. */
+export interface PlacementMap {
+  default: ArtPlacement | null;
+  perVariant: Record<string, ArtPlacement>;
+}
+
+export function parsePlacementMap(raw: unknown): PlacementMap {
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw || "{}") : raw;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { default: null, perVariant: {} };
+    const o = parsed as { default?: unknown; perVariant?: Record<string, unknown> };
+    const perVariant: Record<string, ArtPlacement> = {};
+    if (o.perVariant && typeof o.perVariant === "object" && !Array.isArray(o.perVariant)) {
+      for (const [id, v] of Object.entries(o.perVariant)) {
+        if (v && typeof v === "object") {
+          const c = clampPlacement(v as Partial<ArtPlacement>);
+          if (!isIdentityPlacement(c)) perVariant[id] = c;
+        }
+      }
+    }
+    const dflt = o.default && typeof o.default === "object" ? clampPlacement(o.default as Partial<ArtPlacement>) : null;
+    return { default: dflt && !isIdentityPlacement(dflt) ? dflt : null, perVariant };
+  } catch {
+    return { default: null, perVariant: {} };
+  }
+}
+
 /** Fresh templates start from a centred rectangle the corner UI drags from. */
 export const DEFAULT_QUAD: Quad = [
   { x: 0.3, y: 0.3 },

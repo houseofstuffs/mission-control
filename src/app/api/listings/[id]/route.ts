@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, cachedRecords, updateRecord } from "@/server/notion/store";
 import { markStepsStale } from "@/server/steps";
+import { parsePlacementMap } from "@/config/mockups";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       } catch {
         colorwaysChanged = true;
       }
+    }
+
+    // L4's placement — how the design sits in the print region. Clamped
+    // and identity-pruned by parsePlacementMap's own rules on read; here
+    // we store what the modal sent after the same clamp.
+    if (body.mockupPlacement !== undefined) {
+      const map = parsePlacementMap(body.mockupPlacement ?? {});
+      const empty = map.default === null && Object.keys(map.perVariant).length === 0;
+      values["Mockup Placement (JSON)"] = empty ? "" : JSON.stringify(map);
     }
 
     // L4's per-colour art overrides — {"Espresso": "https://…"}. A colour

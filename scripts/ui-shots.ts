@@ -63,6 +63,7 @@ const SHOTS: Shot[] = [
   { name: "library", path: "/library", full: true },
   { name: "l4-artwork", path: "/listings/listing-1?step=L4", clicks: ["Edit artwork"], full: true },
   { name: "l4-crop-modal", path: "/listings/listing-1?step=L4", clicks: ["Crop"] },
+  { name: "l4-place-modal", path: "/listings/listing-1?step=L4", clicks: ["Place"] },
   { name: "library-adjust-crop", path: "/library", clicks: ["Show 1", "Adjust crop"], full: true },
   { name: "library-define", path: "/library", clicks: ["＋ New template"], full: true },
   { name: "library-variants", path: "/library", clicks: ["＋ Add colour variants"], full: true },

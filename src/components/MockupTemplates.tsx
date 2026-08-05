@@ -61,6 +61,12 @@ export interface MockupTemplateCard {
   shotName: string | null;
   /** the owning template's id — how variants group under their template card */
   shotId: string | null;
+  /** whether the ORIGINAL Drive source file id is stored — Adjust crop can
+   *  load the real photo directly; false = legacy import, ask for the link */
+  hasSource: boolean;
+  /** where Adjust crop's box starts: the variant's own stored rect, else
+   *  the shot's shared rect, else null (defaults to a centred box) */
+  sourceCropRect: CropRect | null;
 }
 
 /* ---------- corner placement ---------- */
@@ -597,6 +603,74 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
   const [artFile, setArtFile] = useState<File | null>(null);
   const [opacity, setOpacity] = useState(100);
 
+  // ---- Adjust crop: a one-time re-crop from the SOURCE photo that
+  // REPLACES the stored Base Image — for the photo framed differently
+  // from its batch, where the shared rect lands the garment off-centre.
+  // Not a render-time transform: fix once, every future listing inherits.
+  const [adjustingCrop, setAdjustingCrop] = useState(false);
+  const [srcUrl, setSrcUrl] = useState<string | null>(null);
+  const [srcDims, setSrcDims] = useState<Dims | null>(null);
+  const [srcNeedsLink, setSrcNeedsLink] = useState(false);
+  const [srcLinkInput, setSrcLinkInput] = useState("");
+  const [cropRect, setCropRect] = useState<CropRect>(t.sourceCropRect ?? DEFAULT_CROP_RECT);
+  const [cropResult, setCropResult] = useState<string | null>(null);
+
+  function closeAdjust() {
+    setAdjustingCrop(false);
+    setSrcUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return null;
+    });
+    setSrcDims(null);
+    setSrcNeedsLink(false);
+  }
+
+  async function loadSource(link?: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const qs = link ? `?link=${encodeURIComponent(link)}` : "";
+      const res = await fetch(`/api/mockup-templates/${t.id}/source${qs}`, { cache: "no-store" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        if (json?.needsSource) setSrcNeedsLink(true);
+        else setError(json?.error ?? `Couldn't load the source photo (${res.status}).`);
+      } else {
+        const w = Number(res.headers.get("x-source-width"));
+        const h = Number(res.headers.get("x-source-height"));
+        const blob = await res.blob();
+        setSrcUrl((old) => {
+          if (old) URL.revokeObjectURL(old);
+          return URL.createObjectURL(blob);
+        });
+        setSrcDims(w && h ? { width: w, height: h } : null);
+        setSrcNeedsLink(false);
+        setCropRect(t.sourceCropRect ?? DEFAULT_CROP_RECT);
+      }
+    } catch {
+      setError("Couldn't reach the server. Try again.");
+    }
+    setBusy(false);
+  }
+
+  async function saveCrop() {
+    setBusy(true);
+    setError(null);
+    const res = await apiJson<{ size?: number }>(`/api/mockup-templates/${t.id}/recrop`, "POST", {
+      rect: cropRect,
+      ...(srcLinkInput.trim() ? { driveLink: srcLinkInput.trim() } : {}),
+    });
+    if (!res.ok) setError(res.error);
+    else {
+      setCropResult(
+        `re-cropped → ${res.data.size ?? "?"}px — stored file replaced; regenerate existing mockups to pick it up`
+      );
+      closeAdjust();
+      router.refresh();
+    }
+    setBusy(false);
+  }
+
   useEffect(() => () => {
     if (result) URL.revokeObjectURL(result);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -718,6 +792,72 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
             </button>
           </div>
         </>
+      ) : adjustingCrop ? (
+        srcNeedsLink ? (
+          <div className="stack-12" style={{ gap: 6 }}>
+            <span className="hint">
+              This variant was imported before source tracking, so the original photo&apos;s location
+              isn&apos;t stored. Paste its Drive share link — it&apos;s remembered after this.
+            </span>
+            <input
+              className="input"
+              placeholder="https://drive.google.com/file/d/…"
+              value={srcLinkInput}
+              onChange={(e) => setSrcLinkInput(e.target.value)}
+            />
+            <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                disabled={busy || !srcLinkInput.trim()}
+                onClick={() => loadSource(srcLinkInput.trim())}
+              >
+                <Spinner active={busy} />
+                Load source photo
+              </button>
+              <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={closeAdjust} disabled={busy}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : srcUrl && srcDims ? (
+          <>
+            <span className="hint">
+              Drag the box to where THIS photo&apos;s garment sits — the centre guides line up when
+              it&apos;s centred. Saving replaces the stored file for good.
+            </span>
+            <QuadEditor
+              src={srcUrl}
+              squareOnly
+              centerGuides
+              quad={rectToQuad(cropRect, srcDims)}
+              onChange={(q) => setCropRect(quadToRect(q, srcDims))}
+            />
+            {(() => {
+              const px = cropSquarePixels(srcDims.width, srcDims.height, cropRect);
+              const under = px < MOCKUP_CROP_MIN;
+              return (
+                <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="hint" style={under ? { color: "var(--status-blocked, #b3423a)", fontWeight: 700 } : undefined}>
+                    crop yields {px}px{under ? ` — under the ${MOCKUP_CROP_MIN}px floor, widen the box` : ""}
+                  </span>
+                  <button className="btn btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={saveCrop} disabled={busy || under}>
+                    <Spinner active={busy} />
+                    Re-crop &amp; replace
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={closeAdjust} disabled={busy}>
+                    Cancel
+                  </button>
+                </div>
+              );
+            })()}
+          </>
+        ) : (
+          <span className="hint">
+            <Spinner active />
+            loading the source photo from Drive…
+          </span>
+        )
       ) : (
         <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
           <button
@@ -758,11 +898,32 @@ function TemplateCard({ t }: { t: MockupTemplateCard }) {
               {t.quadSet ? "Re-place corners" : "Place corners"}
             </button>
           ) : null}
+          {t.shotId ? (
+            // crop problems (garment off-centre) are NOT quad problems —
+            // this re-frames from the source; corners move art on the frame
+            <button
+              className="btn btn-tertiary"
+              style={{ fontSize: 12, padding: "5px 10px" }}
+              disabled={busy}
+              title="Re-frame this variant from its original photo — replaces the stored file, one time"
+              onClick={() => {
+                setCropResult(null);
+                setAdjustingCrop(true);
+                if (t.hasSource) void loadSource();
+                else setSrcNeedsLink(true);
+              }}
+            >
+              Adjust crop
+            </button>
+          ) : null}
           {t.sourceLink ? (
             <a className="body-sm" href={t.sourceLink} target="_blank" rel="noreferrer">source ↗</a>
           ) : null}
         </div>
       )}
+      {cropResult ? (
+        <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>✓ {cropResult}</span>
+      ) : null}
 
       {error ? <div className="callout blocked">{error}</div> : null}
       {result ? (
@@ -853,6 +1014,10 @@ function TemplateRow({
   // variants collapsed by default — the card is for recognition, the
   // expansion is for work on one template's colours
   const [showVariants, setShowVariants] = useState(false);
+  // re-sync's receipt — the button re-enabling silently read as a failed
+  // loop, and a per-run count is also what catches a variant the stamp
+  // missed (count printed < count on the button = something skipped)
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   async function saveEdits() {
     setBusy(true);
@@ -1078,14 +1243,25 @@ function TemplateRow({
                 if (!window.confirm(`Re-apply this template's print region + default blend to ${variants.length} ${variants.length === 1 ? "variant" : "variants"}?`)) return;
                 setBusy(true);
                 setError(null);
+                setSyncResult(null);
                 const res = await apiJson<{ updated?: number; blend?: string }>(`/api/mockup-shots/${s.id}/resync-variants`, "POST", {});
                 if (!res.ok) setError(res.error);
-                else router.refresh();
+                else {
+                  const n = res.data.updated ?? 0;
+                  setSyncResult(
+                    `re-stamped ${n} ${n === 1 ? "variant" : "variants"} · blend → ${res.data.blend ?? "?"} · quad refreshed` +
+                      (n < variants.length ? ` · ⚠ ${variants.length - n} not linked to this template — check their Shot relation` : "")
+                  );
+                  router.refresh();
+                }
                 setBusy(false);
               }}
             >
               ⟳ Re-sync {variants.length} {variants.length === 1 ? "variant" : "variants"}
             </button>
+          ) : null}
+          {syncResult ? (
+            <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>✓ {syncResult}</span>
           ) : null}
           {variants.length > 0 ? (
             <button

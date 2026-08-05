@@ -11,7 +11,7 @@ import { printifyConfigured } from "@/server/printify/client";
 import { anthropicConfigured } from "@/server/anthropic/client";
 import { variantAllowed } from "@/config/design-prompt";
 import { parseQuad } from "@/config/mockups";
-import { listingMockupPlan, generatedFor } from "@/server/mockup/plan";
+import { listingMockupPlan, generatedFor, perColourArt } from "@/server/mockup/plan";
 import { generateJobStatus } from "@/server/mockup/generateJob";
 import type { ColorwaysData } from "@/components/ColorwaysPanel";
 import type { PricingData } from "@/components/PricingPanel";
@@ -201,11 +201,20 @@ function mockupsData(
   // plan.ts) — the grid the operator reviews and the run the job executes
   // can never disagree. Tiles join their generated record when one exists.
   const plan = listingMockupPlan(rec);
+  // tiles group under the SHOT (the template), never the variant — a
+  // variant IS one colour, so variant-level grouping renders every tile
+  // as its own one-card "group" and the review grid degenerates to a
+  // full-width column (the live one-per-row bug). Shot-less hand intakes
+  // stay their own group of one, which is honest.
+  const shotOfVariant = new Map(slots.templates.map((t) => [t.id, t.shotId]));
   const tiles: MockupTile[] = plan.tiles.map((t) => {
     const g = generatedFor(rec.id, t.variantId);
+    const shotId = shotOfVariant.get(t.variantId) ?? null;
+    const shot = shotId ? cachedRecord(shotId) : null;
     return {
-      templateId: t.variantId,
-      templateName: t.variantName,
+      variantId: t.variantId,
+      templateId: shotId ?? t.variantId,
+      templateName: shot?.title || t.variantName,
       shotType: t.shotType,
       colour: t.colour,
       url: g ? `/api/generated-mockups/${g.id}/file?v=${encodeURIComponent(g.lastEdited)}` : null,
@@ -274,8 +283,7 @@ function mockupsData(
 
   // distinct TEMPLATES behind the planned tiles — a shot-less hand
   // intake counts as its own template of one
-  const shotByVariant = new Map(slots.templates.map((t) => [t.id, t.shotId ?? t.id]));
-  const templatesInPlay = new Set(plan.tiles.map((t) => shotByVariant.get(t.variantId) ?? t.variantId)).size;
+  const templatesInPlay = new Set(plan.tiles.map((t) => shotOfVariant.get(t.variantId) ?? t.variantId)).size;
 
   return {
     listingId: rec.id,
@@ -301,6 +309,9 @@ function mockupsData(
     shortlist: slots.shortlist,
     tiles,
     infoGraphics,
+    artOverrides: perColourArt(rec),
+    designId: designId ?? null,
+    masterLink: String(design?.props["Master PNG Link"] ?? "").trim(),
   };
 }
 

@@ -18,6 +18,9 @@ import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 
 export interface MockupTile {
+  /** the variant behind this tile — the unique key; templateId is the GROUP */
+  variantId: string;
+  /** the SHOT the variant belongs to — tiles group under it in the review grid */
   templateId: string;
   templateName: string;
   shotType: string;
@@ -78,6 +81,13 @@ export interface MockupsData {
    *  listing. url null = expected by the slot plan but not built yet; that
    *  absence renders as a "needed" pill, never silence. */
   infoGraphics: Array<{ label: string; url: string | null }>;
+  /** per-colour design masters, NORMALIZED colour → link. Colours absent
+   *  here render from the design's Master PNG Link. */
+  artOverrides: Record<string, string>;
+  /** the design behind this listing — the master link edits IN PLACE at
+   *  L4, because the review grid is where art × garment judgments happen */
+  designId: string | null;
+  masterLink: string;
 }
 
 type Verdict = "approved" | "flagged";
@@ -190,6 +200,54 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setGenBusy(false);
   }
 
+  // ---- design artwork: the master edits HERE (the review grid is where
+  // art × garment judgments happen), plus per-colour exceptions ----
+  const normColour = (c: string) => c.trim().toLowerCase();
+  const [artOpen, setArtOpen] = useState(Object.keys(data.artOverrides).length > 0);
+  const [masterDraft, setMasterDraft] = useState(data.masterLink);
+  const [artDraft, setArtDraft] = useState<Record<string, string>>(() => {
+    const d: Record<string, string> = {};
+    for (const c of data.ready.colours) d[c] = data.artOverrides[normColour(c)] ?? "";
+    return d;
+  });
+  const [artBusy, setArtBusy] = useState(false);
+  const [artError, setArtError] = useState<string | null>(null);
+  const [artSavedAt, setArtSavedAt] = useState<string | null>(null);
+  const masterDirty = masterDraft.trim() !== data.masterLink;
+  const artDirty =
+    masterDirty ||
+    data.ready.colours.some((c) => (artDraft[c] ?? "").trim() !== (data.artOverrides[normColour(c)] ?? ""));
+
+  async function saveArtwork() {
+    setArtBusy(true);
+    setArtError(null);
+    // the master lives on the DESIGN record — same field C7 saves, same
+    // staleness ripple (derivatives flip stale on a master change)
+    if (masterDirty && data.designId) {
+      const res = await apiJson(`/api/designs/${data.designId}`, "PATCH", { artworkLink: masterDraft.trim() });
+      if (!res.ok) {
+        setArtError(res.error);
+        setArtBusy(false);
+        return;
+      }
+    }
+    const overrides: Record<string, string> = {};
+    for (const c of data.ready.colours) {
+      const link = (artDraft[c] ?? "").trim();
+      if (link) overrides[c] = link;
+    }
+    const res = await apiJson(`/api/listings/${data.listingId}`, "PATCH", { artOverrides: overrides });
+    if (!res.ok) setArtError(res.error);
+    else {
+      const n = Object.keys(overrides).length;
+      setArtSavedAt(
+        [masterDirty ? "master updated" : null, `${n} ${n === 1 ? "override" : "overrides"}`].filter(Boolean).join(" · ")
+      );
+      router.refresh();
+    }
+    setArtBusy(false);
+  }
+
   // Verdicts persist on the generated record; the local map is only an
   // optimistic overlay while a PATCH is in flight.
   const [verdictOverride, setVerdictOverride] = useState<Record<string, Verdict>>({});
@@ -197,7 +255,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [sendBusy, setSendBusy] = useState(false);
   const [sendReport, setSendReport] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
 
-  const key = (t: MockupTile) => `${t.templateId}:${t.colour}`;
+  const key = (t: MockupTile) => `${t.variantId}:${t.colour}`;
   const verdictOf = (t: MockupTile): Verdict | null => {
     if (t.url === null || !t.generatedId) return null;
     return (
@@ -278,16 +336,28 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
             {READY_LABEL.map(([field, label]) => {
               const v = data.ready[field];
               const ok = typeof v === "number" ? v > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
+              // the PSD master chip IS the way into the artwork editor —
+              // swapping the master is a decision made while looking at
+              // this grid, so the control lives on the chip, not at C7
+              const opensArt = field === "psdMaster";
               return (
                 <span
                   key={label}
                   className={`chip ${ok ? "done" : "stale"}`}
-                  style={{ fontSize: 11 }}
-                  title={field === "colours" && ok ? data.ready.colours.join(", ") : undefined}
+                  style={{ fontSize: 11, cursor: opensArt ? "pointer" : undefined }}
+                  title={
+                    field === "colours" && ok
+                      ? data.ready.colours.join(", ")
+                      : opensArt
+                        ? "Click to edit the design master / per-colour artwork"
+                        : undefined
+                  }
+                  onClick={opensArt ? () => setArtOpen(true) : undefined}
                 >
                   {ok ? "✓ " : ""}
                   {label}
                   {field === "colours" ? ` · ${data.ready.colours.length}` : ""}
+                  {opensArt ? " ✎" : ""}
                 </span>
               );
             })}
@@ -386,6 +456,76 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           </div>
         ) : null}
         {genError ? <div className="callout blocked">{genError}</div> : null}
+      </div>
+
+      {/* design artwork — right under the ready card because the review
+          grid is where art × garment-colour judgments happen. One control:
+          the listing-level master (the design's own link, edited in place)
+          plus per-colour exceptions. Printify prints per-variant art, so a
+          colour whose art differs (dark-version eyes on Espresso) is a
+          correctness fix, not a nicety. */}
+      <div className="card supporting">
+        <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+          <Kicker>
+            DESIGN ARTWORK · MASTER + PER-COLOUR
+            {Object.keys(data.artOverrides).length > 0 ? ` · ${Object.keys(data.artOverrides).length} OVERRIDE${Object.keys(data.artOverrides).length === 1 ? "" : "S"}` : ""}
+          </Kicker>
+          <button className="btn btn-tertiary" style={{ fontSize: 12, padding: "4px 10px" }} onClick={() => setArtOpen((v) => !v)}>
+            {artOpen ? "Hide" : "Edit artwork"}
+          </button>
+        </div>
+        {artOpen ? (
+          <>
+            <span className="hint">
+              The master is the default for every colour; a colour with its own link renders from
+              THAT instead. Swap → save → Regenerate the affected tiles. A master change also marks
+              derivatives stale, same as editing it at C7.
+            </span>
+            <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <span className="body-sm" style={{ fontWeight: 700, width: 110, flex: "none" }}>Master · all</span>
+              <input
+                className="input"
+                style={{ flex: "1 1 240px", fontSize: 12 }}
+                placeholder="the design's Master PNG Link"
+                value={masterDraft}
+                disabled={!data.designId}
+                onChange={(e) => {
+                  setArtSavedAt(null);
+                  setMasterDraft(e.target.value);
+                }}
+              />
+            </div>
+            {data.ready.colours.map((c) => (
+              <div key={c} className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+                <span className="body-sm" style={{ fontWeight: 600, width: 110, flex: "none", paddingLeft: 12 }}>{c}</span>
+                <input
+                  className="input"
+                  style={{ flex: "1 1 240px", fontSize: 12 }}
+                  placeholder="uses the master — paste a Drive link to override"
+                  value={artDraft[c] ?? ""}
+                  onChange={(e) => {
+                    setArtSavedAt(null);
+                    setArtDraft((cur) => ({ ...cur, [c]: e.target.value }));
+                  }}
+                />
+              </div>
+            ))}
+            {artError ? <div className="callout blocked">{artError}</div> : null}
+            <div className="row-gap-8" style={{ alignItems: "center" }}>
+              {artDirty ? (
+                <button className="btn btn-save" style={{ fontSize: 12 }} onClick={saveArtwork} disabled={artBusy}>
+                  <Spinner active={artBusy} />
+                  Save artwork links
+                </button>
+              ) : null}
+              {artSavedAt && !artDirty ? (
+                <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>
+                  ✓ {artSavedAt} — Regenerate the affected colours to apply
+                </span>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
 
       {/* the picker — rows with thumbnail, coverage and per-listing yield */}

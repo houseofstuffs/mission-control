@@ -61,6 +61,8 @@ const SHOTS: Shot[] = [
   { name: "products", path: "/products", full: true },
   { name: "listings", path: "/listings" },
   { name: "library", path: "/library", full: true },
+  { name: "l4-artwork", path: "/listings/listing-1?step=L4", clicks: ["Edit artwork"], full: true },
+  { name: "library-adjust-crop", path: "/library", clicks: ["Show 1", "Adjust crop"], full: true },
   { name: "library-define", path: "/library", clicks: ["＋ New template"], full: true },
   { name: "library-variants", path: "/library", clicks: ["＋ Add colour variants"], full: true },
 ];

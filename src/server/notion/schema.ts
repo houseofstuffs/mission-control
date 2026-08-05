@@ -288,6 +288,15 @@ export const SCHEMA: DbSpec[] = [
       "Pipeline Type": { type: "select", options: [...PIPELINE_TYPES] },
       // Required for BOTH pipelines — the photo everything lands on.
       "Base Image": { type: "files" },
+      // Where the Base Image CAME FROM — the Drive file id and the
+      // normalized crop that produced it. This pair is what makes
+      // "Adjust crop" possible: re-crop the original source and REPLACE
+      // the stored file (one-time, persisted — never a render-time
+      // transform), so a variant framed off from its batch is fixed once
+      // for every future listing. Variants imported before this existed
+      // have neither; the adjust flow asks for the source link instead.
+      "Source Drive File": { type: "rich_text" },
+      "Source Crop Rect (JSON)": { type: "rich_text" },
       // Required ONLY for Full Displacement; unused under Simple Placement.
       "Displacement Map": { type: "files" },
       // Optional even under Full Displacement — composited only if present,
@@ -567,6 +576,12 @@ export const SCHEMA: DbSpec[] = [
       // gets a mockup slot) rather than "none" — the L5 offered-template
       // filter treats blank as the sold-colours set, never as zero.
       "Mockup Colors (JSON)": { type: "rich_text" },
+      // Alternate design masters for SPECIFIC colours — {"espresso": link}.
+      // Printify prints per-variant art within one listing, so a single
+      // master can make a mockup factually wrong (dark-version eyes that
+      // don't register on Espresso). Colours not listed here use the
+      // design's Master PNG Link; the generate job resolves per tile.
+      "Per-Colour Art (JSON)": { type: "rich_text" },
       // Keyword ids ✕'d off the L2 shortlist — "not for this listing",
       // persisted so the shortlist doesn't re-offer them every visit.
       // They stay in the bank and the full pool; picking one from

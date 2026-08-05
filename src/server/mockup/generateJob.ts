@@ -19,7 +19,7 @@ import { getMeta, setMeta } from "@/server/cache/db";
 import { cachedRecord, cachedRecords, createRecord, updateRecord, refreshRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { renderMockup } from "@/server/mockup/render";
-import { listingMockupPlan, generatedFor, masterPngLink, type PlanTile } from "@/server/mockup/plan";
+import { listingMockupPlan, generatedFor, masterPngLink, perColourArt, type PlanTile } from "@/server/mockup/plan";
 import { getValidAccessToken } from "@/server/drive/connection";
 import { fetchFileBytes } from "@/server/drive/client";
 import { connectionStatus as driveStatus } from "@/server/drive/connection";
@@ -185,12 +185,27 @@ export function startGenerateJob(args: GenerateArgs): GenerateJobStatus {
 }
 
 async function runJob(rec: SimpleRecord, tiles: PlanTile[], job: GenerateJobStatus): Promise<void> {
-  // the master once per run, not per tile — it's the same artwork every time
-  let master: Buffer;
+  // one fetch per DISTINCT artwork, not per tile — the default master
+  // plus any per-colour overrides (a colour whose art the single master
+  // gets wrong renders from its own link; everything else shares)
+  const overrides = perColourArt(rec);
+  const masters = new Map<string, Buffer>();
+  const masterFor = async (link: string): Promise<Buffer> => {
+    const got = masters.get(link);
+    if (got) return got;
+    const buf = await fetchMaster(link);
+    masters.set(link, buf);
+    return buf;
+  };
+
+  // the default is still fetched up front — a run that can't get the
+  // master fails loudly at tile 0, not colour by colour
+  let defaultLink: string;
   try {
     const m = masterPngLink(rec);
     if (!m) throw new Error("The design has no Master PNG Link — save it at C7.");
-    master = await fetchMaster(m.link);
+    defaultLink = m.link;
+    await masterFor(defaultLink);
   } catch (err) {
     job.results.push({ name: "design master", detail: (err as Error).message, ok: false });
     job.status = "interrupted";
@@ -201,6 +216,7 @@ async function runJob(rec: SimpleRecord, tiles: PlanTile[], job: GenerateJobStat
   for (const tile of tiles) {
     const label = `${tile.variantName}`;
     try {
+      const master = await masterFor(overrides[tile.colour.trim().toLowerCase()] ?? defaultLink);
       let template = cachedRecord(tile.variantId);
       if (!template) throw new Error("variant vanished from the cache — refresh and re-run");
 

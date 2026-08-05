@@ -68,7 +68,23 @@ function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): Mo
     return (v[0] as { url?: string })?.url || null;
   };
   const shotId = ((m.props["Shot"] as string[] | null) ?? [])[0];
-  const shotName = shotId ? shotsById.get(shotId)?.title ?? null : null;
+  const shot = shotId ? shotsById.get(shotId) : undefined;
+  const shotName = shot?.title ?? null;
+  // the crop the Adjust-crop editor starts from: the variant's own stored
+  // rect, else the shot's shared rect (legacy variants predate per-variant
+  // provenance and start where the batch cropped)
+  const parseRect = (raw: unknown) => {
+    try {
+      const parsed = JSON.parse(String(raw ?? ""));
+      if (parsed && typeof parsed.x === "number" && typeof parsed.y === "number" && typeof parsed.size === "number") {
+        return parsed as { x: number; y: number; size: number };
+      }
+    } catch {
+      /* not set */
+    }
+    return null;
+  };
+  const sourceCropRect = parseRect(m.props["Source Crop Rect (JSON)"]) ?? parseRect(shot?.props["Crop Rect (JSON)"]);
   return {
     id: m.id,
     name: m.title || "Untitled variant",
@@ -88,6 +104,8 @@ function templateCard(m: SimpleRecord, shotsById: Map<string, SimpleRecord>): Mo
     sourceLink: String(m.props["File Link"] ?? ""),
     shotName: shotName || null,
     shotId: shotId ?? null,
+    hasSource: String(m.props["Source Drive File"] ?? "").trim().length > 0,
+    sourceCropRect,
   };
 }
 

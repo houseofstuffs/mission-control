@@ -89,6 +89,27 @@ export function generatedFor(listingId: string, variantId: string): SimpleRecord
   );
 }
 
+/**
+ * Per-colour design overrides — normalized colour → master link. Colours
+ * absent from the map use the design's Master PNG Link. Printify prints
+ * per-variant art within one listing, so this is a correctness feature,
+ * not a convenience: a dark-colour override makes that colour's mockups
+ * match what the buyer actually receives.
+ */
+export function perColourArt(rec: SimpleRecord): Record<string, string> {
+  try {
+    const parsed = JSON.parse(String(rec.props["Per-Colour Art (JSON)"] ?? "{}"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [colour, link] of Object.entries(parsed)) {
+      if (typeof link === "string" && link.trim()) out[norm(colour)] = link.trim();
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** The design master PNG's source link for a listing, plus its design id. */
 export function masterPngLink(rec: SimpleRecord): { link: string; designId: string } | null {
   const designId = ((rec.props["Designs"] as string[] | null) ?? [])[0];

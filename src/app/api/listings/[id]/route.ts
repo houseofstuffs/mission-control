@@ -118,6 +118,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
 
+    // L4's per-colour art overrides — {"Espresso": "https://…"}. A colour
+    // with a link renders its mockups from THAT master; everything else
+    // uses the design's Master PNG Link. Blank links drop out, an empty
+    // map clears the field entirely.
+    if (body.artOverrides !== undefined) {
+      const src =
+        body.artOverrides && typeof body.artOverrides === "object" && !Array.isArray(body.artOverrides)
+          ? (body.artOverrides as Record<string, unknown>)
+          : {};
+      const clean: Record<string, string> = {};
+      for (const [colour, link] of Object.entries(src)) {
+        const l = String(link ?? "").trim();
+        if (colour.trim() && l) clean[colour.trim()] = l;
+      }
+      values["Per-Colour Art (JSON)"] = Object.keys(clean).length > 0 ? JSON.stringify(clean) : "";
+    }
+
     // L4's template assignment — which mockup templates this listing uses.
     // Changing it after L5 placed variants from the old set makes those
     // placements suspect, so it staleness-marks like a colourway change.

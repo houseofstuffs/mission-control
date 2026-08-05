@@ -66,7 +66,7 @@ const WEBP_QUALITY_STEPS = [90, 82, 74, 66, 58];
  * all, and three busy photos came out 5.3–5.6 MiB: past every check here,
  * dead at Notion. Returns null when even the floor size can't fit.
  */
-async function encodeUnderBudget(
+export async function encodeUnderBudget(
   buf: Buffer,
   crop: { left: number; top: number; side: number },
   startSize: number
@@ -227,6 +227,10 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
         Shot: [args.shotId],
         "Print Area Quad (JSON)": JSON.stringify(args.quad ?? DEFAULT_QUAD),
         "Base Image": [{ name: upload.name, uploadId: up.id }],
+        // provenance for "Adjust crop" — the source file and the rect
+        // that framed it, so a re-crop starts from the real photo
+        "Source Drive File": f.id,
+        "Source Crop Rect (JSON)": JSON.stringify(args.rect),
       };
       await createRecord("mockup_templates", values);
       job.imported++;

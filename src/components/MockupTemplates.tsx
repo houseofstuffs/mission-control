@@ -1051,13 +1051,33 @@ function TemplateRow({
                 setBusy(true);
                 setError(null);
                 setSyncResult(null);
-                const res = await apiJson<{ updated?: number; blend?: string }>(`/api/mockup-shots/${s.id}/resync-variants`, "POST", {});
+                const res = await apiJson<{
+                  updated?: number;
+                  blend?: string;
+                  shotType?: string | null;
+                  staleFlagged?: number;
+                  listingsAffected?: number;
+                }>(`/api/mockup-shots/${s.id}/resync-variants`, "POST", {});
                 if (!res.ok) setError(res.error);
                 else {
                   const n = res.data.updated ?? 0;
+                  const flagged = res.data.staleFlagged ?? 0;
+                  // the receipt names EVERYTHING the run touched — a
+                  // verdict flipping without a line here reads as the app
+                  // acting on its own
                   setSyncResult(
-                    `re-stamped ${n} ${n === 1 ? "variant" : "variants"} · blend → ${res.data.blend ?? "?"} · quad refreshed` +
-                      (n < variants.length ? ` · ⚠ ${variants.length - n} not linked to this template — check their Shot relation` : "")
+                    [
+                      `re-stamped ${n} ${n === 1 ? "variant" : "variants"}`,
+                      res.data.shotType ? `shot type → ${res.data.shotType}` : "⚠ no shot type set on this template",
+                      `blend → ${res.data.blend ?? "?"}`,
+                      "quad refreshed",
+                      flagged > 0
+                        ? `${flagged} ${flagged === 1 ? "render" : "renders"} flagged stale across ${res.data.listingsAffected ?? "?"} ${res.data.listingsAffected === 1 ? "listing" : "listings"} (geometry moved) — regenerate flagged at L4`
+                        : null,
+                      n < variants.length ? `⚠ ${variants.length - n} not linked to this template — check their Shot relation` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
                   );
                   router.refresh();
                 }

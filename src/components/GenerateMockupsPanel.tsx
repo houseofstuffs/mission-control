@@ -36,6 +36,8 @@ export interface MockupTile {
   generatedId: string | null;
   /** persisted verdict; null until a render exists */
   verdict: "Approved" | "Flagged" | null;
+  /** the slot position currently holding this render; null = not placed */
+  placedInSlot: number | null;
 }
 
 export interface GenerateJobView {
@@ -270,7 +272,16 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [verdictOverride, setVerdictOverride] = useState<Record<string, Verdict>>({});
   const [onlyAttention, setOnlyAttention] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
-  const [sendReport, setSendReport] = useState<Array<{ name: string; detail: string; ok: boolean }> | null>(null);
+  const [sendReport, setSendReport] = useState<Array<{
+    name: string;
+    detail: string;
+    ok: boolean;
+    skipped?: boolean;
+    suggestion?: { slotId: string; position: number; label: string; slotShotType: string };
+    generatedId?: string;
+  }> | null>(null);
+  /** selective send — one template's renders instead of everything */
+  const [sendTemplate, setSendTemplate] = useState<string>("");
 
   // ---- crop adjust: fix the frame where the miss is SEEN ----
   const [cropTile, setCropTile] = useState<MockupTile | null>(null);
@@ -282,6 +293,10 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [gridPicked, setGridPicked] = useState<string[]>([]); // generatedIds, in cell order
   const [gridBusy, setGridBusy] = useState(false);
   const [gridNote, setGridNote] = useState<string | null>(null);
+  // grid failures surface HERE, in the grid block — the first version
+  // routed them to the Generate card's error box, where a failed BUILD
+  // read as a failed RUN and the build itself looked like a silent no-op
+  const [gridError, setGridError] = useState<string | null>(null);
   const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cells: string[]; hasGridSlot: boolean } | null>(null);
 
   const gridCells = { "2x2": 4, "3x1": 3, "2x3": 6, "3x2": 6, "3x3": 9 }[gridLayout] ?? 4;
@@ -295,14 +310,14 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   async function buildGrid() {
     setGridBusy(true);
     setGridNote(null);
-    setGenError(null);
+    setGridError(null);
     const res = await apiJson<{ recordId?: string; url?: string; layout?: string; cells?: string[]; hasGridSlot?: boolean }>(
       `/api/listings/${data.listingId}/grid-composite`,
       "POST",
       { layout: gridLayout, generatedIds: gridPicked },
       180_000
     );
-    if (!res.ok) setGenError(res.error);
+    if (!res.ok) setGridError(res.error);
     else {
       setGridStaged({
         recordId: res.data.recordId!,
@@ -323,7 +338,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
       "POST",
       { assignRecordId: gridStaged.recordId }
     );
-    if (!res.ok) setGenError(res.error);
+    if (!res.ok) setGridError(res.error);
     else {
       setGridNote(
         `✓ grid placed — ${gridStaged.layout} · ${gridStaged.cells.join(" → ")} · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
@@ -406,10 +421,10 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setSendBusy(true);
     setGenError(null);
     setSendReport(null);
-    const res = await apiJson<{ results?: Array<{ name: string; detail: string; ok: boolean }> }>(
+    const res = await apiJson<{ results?: NonNullable<typeof sendReport> }>(
       `/api/listings/${data.listingId}/send-mockups`,
       "POST",
-      {},
+      sendTemplate ? { templateId: sendTemplate } : {},
       120_000
     );
     if (!res.ok) setGenError(res.error);
@@ -435,6 +450,32 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   const generated = data.tiles.filter((t) => t.url !== null);
   const approved = generated.filter((t) => verdictOf(t) === "approved");
+
+  // ---- send accounting: the button counts what ISN'T placed yet ----
+  const approvedToSend = approved.filter((t) => !sendTemplate || t.templateId === sendTemplate);
+  const unplacedToSend = approvedToSend.filter((t) => !t.placedInSlot);
+  const sendableTemplates = [...new Map(approved.map((t) => [t.templateId, t.templateName])).entries()];
+
+  async function assignSuggestion(
+    generatedId: string,
+    suggestion: { slotId: string; position: number; label: string }
+  ) {
+    setSendBusy(true);
+    const res = await apiJson<{ results?: NonNullable<typeof sendReport> }>(
+      `/api/listings/${data.listingId}/send-mockups`,
+      "POST",
+      { assign: { generatedId, slotId: suggestion.slotId } }
+    );
+    if (!res.ok) setGenError(res.error);
+    else {
+      // the retargeted line replaces its failed original in the report
+      setSendReport((cur) =>
+        (cur ?? []).map((r) => (r.generatedId === generatedId ? { ...(res.data.results?.[0] ?? r) } : r))
+      );
+      router.refresh();
+    }
+    setSendBusy(false);
+  }
   const flagged = generated.filter((t) => verdictOf(t) === "flagged");
   const attention = data.tiles.filter((t) => t.url === null || verdictOf(t) === "flagged");
 
@@ -1009,24 +1050,64 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
       <div className="card supporting">
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
           <span className="hint" style={{ flex: "1 1 260px" }}>
-            Approved mockups drop into matching image slots at L5, by shot type and colour. Flagged
-            and ungenerated ones stay here until they&apos;re ready.
+            Send fills <strong>empty matching slots only</strong> — it never overwrites an asset,
+            never touches a slot you&apos;ve edited, and skips renders already placed. L5 stays yours.
           </span>
-          <button
-            className="btn btn-save"
-            disabled={approved.length === 0 || sendBusy}
-            title={approved.length === 0 ? "Nothing generated yet" : undefined}
-            onClick={sendApproved}
-          >
-            <Spinner active={sendBusy} />
-            Send {approved.length} approved → image slots
-          </button>
+          <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+            {sendableTemplates.length > 1 ? (
+              <select
+                className="select input-compact"
+                style={{ width: "auto", fontSize: 12 }}
+                aria-label="Send only this template's renders"
+                value={sendTemplate}
+                onChange={(e) => setSendTemplate(e.target.value)}
+              >
+                <option value="">send: all templates</option>
+                {sendableTemplates.map(([tid, tname]) => (
+                  <option key={tid} value={tid}>send only: {tname}</option>
+                ))}
+              </select>
+            ) : null}
+            <button
+              className="btn btn-save"
+              disabled={unplacedToSend.length === 0 || sendBusy}
+              title={
+                unplacedToSend.length === 0
+                  ? approvedToSend.length > 0
+                    ? "Everything approved here is already in a slot"
+                    : "Nothing approved yet"
+                  : undefined
+              }
+              onClick={sendApproved}
+            >
+              <Spinner active={sendBusy} />
+              Send {unplacedToSend.length} new approved → image slots
+            </button>
+          </span>
         </div>
         {sendReport ? (
           <div className="stack-12" style={{ gap: 2 }}>
             {sendReport.map((r) => (
-              <span key={r.name + r.detail} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
-                {r.ok ? "✓" : "✕"} {r.name} — {r.detail}
+              <span
+                key={r.name + r.detail}
+                className="hint"
+                style={{
+                  color: r.ok ? (r.skipped ? undefined : "var(--status-done, #3e7a4e)") : "var(--status-blocked, #b3423a)",
+                  opacity: r.skipped ? 0.75 : 1,
+                }}
+              >
+                {r.ok ? (r.skipped ? "·" : "✓") : "✕"} {r.name} — {r.detail}
+                {r.suggestion && r.generatedId ? (
+                  <button
+                    className="btn btn-tertiary"
+                    style={{ fontSize: 11, padding: "1px 8px", marginLeft: 8 }}
+                    disabled={sendBusy}
+                    title={`Fills slot ${r.suggestion.position} even though it's typed ${r.suggestion.slotShotType || "differently"} — the slot stays empty otherwise`}
+                    onClick={() => assignSuggestion(r.generatedId!, r.suggestion!)}
+                  >
+                    place in slot {r.suggestion.position} anyway →
+                  </button>
+                ) : null}
               </span>
             ))}
           </div>
@@ -1146,6 +1227,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </div>
             </div>
           ) : null}
+          {gridError ? <div className="callout blocked">grid build — {gridError}</div> : null}
           {gridNote ? (
             <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
           ) : null}

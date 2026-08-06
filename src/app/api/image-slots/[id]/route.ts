@@ -39,6 +39,25 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.notes != null) values["Notes"] = String(body.notes);
 
     if (body.mockupTemplateId !== undefined) {
+      // COLOUR GUARD — server-side, so no path around the UI can cross a
+      // coloured slot: "colorway — espresso" refuses a Black variant no
+      // matter who asks. Colour-neutral variants pass (they render every
+      // colour). Send has the same rule; this closes the manual door.
+      if (body.mockupTemplateId) {
+        const tplRec = cachedRecord(String(body.mockupTemplateId));
+        const slotColour = String(slot.props["Colour"] ?? "").trim().toLowerCase();
+        const tplColour = String(tplRec?.props["Garment Color"] ?? "").trim().toLowerCase();
+        if (slotColour && tplColour && slotColour !== tplColour) {
+          return NextResponse.json(
+            {
+              error: `This slot is ${String(slot.props["Colour"])} — that variant is ${String(
+                tplRec?.props["Garment Color"]
+              )}. Pick the ${String(slot.props["Colour"])} variant of the same shot instead.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
       values["Mockup Template"] = body.mockupTemplateId ? [String(body.mockupTemplateId)] : [];
       // auto-fill shot type from the template unless the caller overrode it
       if (body.mockupTemplateId && body.shotType === undefined) {

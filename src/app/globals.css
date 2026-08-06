@@ -638,14 +638,18 @@ a:hover { color: var(--candy); }
 
 .l5-slot {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  /* four columns since the drag grip landed: grip | number | content |
+     controls. The grip was added as a fourth CHILD of a three-column
+     grid, which scattered every row — number mid-row, title right-
+     aligned, controls wrapped. Columns and children must agree. */
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   background: #ffffff;
   border: 1px solid var(--border-soft, #e7dfce);
   border-left-width: 4px;
   border-radius: 11px;
-  padding: 10px 14px;
+  padding: 10px 14px 10px 8px;
 }
 .l5-slot .ord { font-size: 12px; color: var(--text-secondary, #8b8275); font-weight: 700; width: 22px; text-align: center; }
 .l5-slot .mid { min-width: 0; }
@@ -684,8 +688,8 @@ a:hover { color: var(--candy); }
 .l5-ico { width: 26px; height: 26px; border-radius: 7px; background: #dce5f1; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
 
 @media (max-width: 560px) {
-  .l5-slot { grid-template-columns: auto 1fr; gap: 10px; }
-  .l5-slot .l5-right { grid-column: 2; justify-content: flex-start; margin-top: 2px; }
+  .l5-slot { grid-template-columns: auto auto 1fr; gap: 10px; }
+  .l5-slot .l5-right { grid-column: 3; justify-content: flex-start; margin-top: 2px; }
 }
 
 /* ---------- table (Listings) ---------- */

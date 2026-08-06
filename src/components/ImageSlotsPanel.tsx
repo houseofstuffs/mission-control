@@ -27,6 +27,8 @@ export interface SlotRow {
   shotType: string;
   status: string;
   assetRef: string;
+  /** the colour this slot is FOR (per-colour colorway slots); "" = any */
+  colour: string;
   templateId: string | null;
   /** set only on slots seeded to pull from a Product-level reusable graphic */
   productLinkRole: string | null;
@@ -221,6 +223,8 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   const [error, setError] = useState<string | null>(null);
   /** one row open at a time — the point is to not have fourteen sets of controls mounted */
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** which slot's asset link is being hand-edited (internal paths show as thumbnails otherwise) */
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   /** buckets collapsed BY the operator — open by default, comp behaviour */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   /** hide Placed rows — "what still needs me" is the working question */
@@ -262,46 +266,62 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     if (busy) return;
     e.preventDefault();
     e.stopPropagation();
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     setDragId(slotId);
     dragDrop.current = null;
   }
-  function moveDrag(e: React.PointerEvent) {
+  // WINDOW-level listeners for the drag itself — the same pattern as the
+  // quad editor, which is proven on the operator's pen. The first version
+  // kept capture on the grip and handled moves there; Safari's pen path
+  // cancelled the gesture and the drag "did nothing". Bubbled window
+  // events survive that.
+  useEffect(() => {
     if (!dragId) return;
-    const y = e.clientY;
-    const rows = displayedOrder().filter((s) => s.id !== dragId && rowRefs.current.has(s.id));
-    let beforeId: string | null = null;
-    let bucket = rows.length ? rows[rows.length - 1].bucket : String(BUCKETS[0]);
-    for (const s of rows) {
-      const r = rowRefs.current.get(s.id)!.getBoundingClientRect();
-      if (y < r.top + r.height / 2) {
-        beforeId = s.id;
-        bucket = s.bucket;
-        break;
+    function move(e: PointerEvent) {
+      const y = e.clientY;
+      const rows = displayedOrder().filter((s) => s.id !== dragId && rowRefs.current.has(s.id));
+      let beforeId: string | null = null;
+      let bucket = rows.length ? rows[rows.length - 1].bucket : String(BUCKETS[0]);
+      for (const s of rows) {
+        const r = rowRefs.current.get(s.id)!.getBoundingClientRect();
+        if (y < r.top + r.height / 2) {
+          beforeId = s.id;
+          bucket = s.bucket;
+          break;
+        }
       }
+      dragDrop.current = { beforeId, bucket };
+      setDropBeforeId(beforeId);
+      e.preventDefault(); // the drag is ours — never a scroll
     }
-    dragDrop.current = { beforeId, bucket };
-    setDropBeforeId(beforeId);
-  }
-  async function endDrag() {
-    const drop = dragDrop.current;
-    const dragged = dragId;
-    setDragId(null);
-    setDropBeforeId(null);
-    dragDrop.current = null;
-    if (!drop || !dragged) return;
-    const ids = displayedOrder().map((s) => s.id).filter((x) => x !== dragged);
-    const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
-    ids.splice(idx, 0, dragged);
-    const draggedSlot = data.slots.find((s) => s.id === dragged);
-    const bucketChange =
-      draggedSlot && drop.bucket !== draggedSlot.bucket ? { slotId: dragged, bucket: drop.bucket } : undefined;
-    if (!bucketChange && ids.join() === displayedOrder().map((s) => s.id).join()) return; // dropped where it was
-    await call("reorder", `/api/listings/${data.listingId}/slots-reorder`, "POST", {
-      orderedIds: ids,
-      bucketChange,
-    });
-  }
+    async function up() {
+      const drop = dragDrop.current;
+      const dragged = dragId;
+      setDragId(null);
+      setDropBeforeId(null);
+      dragDrop.current = null;
+      if (!drop || !dragged) return;
+      const ids = displayedOrder().map((s) => s.id).filter((x) => x !== dragged);
+      const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
+      ids.splice(idx, 0, dragged);
+      const draggedSlot = data.slots.find((s) => s.id === dragged);
+      const bucketChange =
+        draggedSlot && drop.bucket !== draggedSlot.bucket ? { slotId: dragged, bucket: drop.bucket } : undefined;
+      if (!bucketChange && ids.join() === displayedOrder().map((s) => s.id).join()) return; // dropped where it was
+      await call("reorder", `/api/listings/${data.listingId}/slots-reorder`, "POST", {
+        orderedIds: ids,
+        bucketChange,
+      });
+    }
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragId]);
 
   // ---- colorway slots ↔ the listing's current mockup colours ----
   const [colorwayNote, setColorwayNote] = useState<string | null>(null);
@@ -563,9 +583,6 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                               title="Drag to reorder — works across buckets"
                               onClick={(e) => e.stopPropagation()}
                               onPointerDown={(e) => beginDrag(e, s.id)}
-                              onPointerMove={moveDrag}
-                              onPointerUp={endDrag}
-                              onPointerCancel={endDrag}
                             >
                               ⠿
                             </span>
@@ -631,27 +648,93 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                     <option value="">Shot type…</option>
                                     {SHOT_TYPES.map((t) => <option key={t}>{t}</option>)}
                                   </select>
-                                  <select
-                                    className="select input-compact"
-                                    style={{ width: 150 }}
-                                    value={s.templateId ?? ""}
-                                    disabled={busy !== null}
-                                    onChange={(e) => patch(s.id, { mockupTemplateId: e.target.value || null })}
-                                  >
-                                    <option value="">Variant…</option>
-                                    {offered.map((t) => (
-                                      <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                  </select>
-                                  <input
-                                    className="input input-compact"
-                                    style={{ flex: "1 1 180px" }}
-                                    placeholder="asset link…"
-                                    defaultValue={s.assetRef}
-                                    onBlur={(e) => {
-                                      if (e.target.value !== s.assetRef) patch(s.id, { assetRef: e.target.value });
-                                    }}
-                                  />
+                                  {s.colour ? (
+                                    // a coloured slot decides the COLOUR itself — the
+                                    // operator picks the SHOT, and the matching-colour
+                                    // variant is selected for them. No way to cross
+                                    // espresso art into the black slot from here.
+                                    <select
+                                      className="select input-compact"
+                                      style={{ width: 170 }}
+                                      value={offered.find((t) => t.id === s.templateId)?.shotId ?? ""}
+                                      disabled={busy !== null}
+                                      title={`Shots with a ${s.colour} variant — the colour is this slot's own`}
+                                      onChange={(e) => {
+                                        const shotId = e.target.value;
+                                        if (!shotId) {
+                                          patch(s.id, { mockupTemplateId: null });
+                                          return;
+                                        }
+                                        const match = offered.find(
+                                          (t) => t.shotId === shotId && norm(t.garmentColor) === norm(s.colour)
+                                        );
+                                        if (match) patch(s.id, { mockupTemplateId: match.id });
+                                      }}
+                                    >
+                                      <option value="">Shot… ({s.colour} decided by slot)</option>
+                                      {[...new Map(
+                                        offered
+                                          .filter((t) => t.shotId && norm(t.garmentColor) === norm(s.colour))
+                                          .map((t) => [t.shotId!, t.name.replace(/\s+-\s+[^-]+\s+-\s+\d+$/, "")])
+                                      ).entries()].map(([sid, sname]) => (
+                                        <option key={sid} value={sid}>{sname}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <select
+                                      className="select input-compact"
+                                      style={{ width: 150 }}
+                                      value={s.templateId ?? ""}
+                                      disabled={busy !== null}
+                                      onChange={(e) => patch(s.id, { mockupTemplateId: e.target.value || null })}
+                                    >
+                                      <option value="">Variant…</option>
+                                      {offered.map((t) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                  {s.assetRef.startsWith("/api/") && editingAssetId !== s.id ? (
+                                    // an internal file-route path is plumbing, not information —
+                                    // show the ASSET: thumbnail, open link, and a replace toggle
+                                    <span className="row-gap-8" style={{ alignItems: "center" }}>
+                                      <a href={s.assetRef} target="_blank" rel="noreferrer" title="Open the placed asset full size">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                          src={s.assetRef}
+                                          alt={s.label}
+                                          loading="lazy"
+                                          style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border-soft, #e7e2d6)", display: "block" }}
+                                        />
+                                      </a>
+                                      <a className="body-sm" href={s.assetRef} target="_blank" rel="noreferrer">
+                                        open ↗
+                                      </a>
+                                      <button
+                                        type="button"
+                                        className="btn btn-tertiary"
+                                        style={{ fontSize: 11, padding: "2px 8px" }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingAssetId(s.id);
+                                        }}
+                                      >
+                                        replace…
+                                      </button>
+                                    </span>
+                                  ) : (
+                                    <input
+                                      className="input input-compact"
+                                      style={{ flex: "1 1 180px" }}
+                                      placeholder="asset link…"
+                                      defaultValue={s.assetRef}
+                                      autoFocus={editingAssetId === s.id}
+                                      onBlur={(e) => {
+                                        if (e.target.value !== s.assetRef) patch(s.id, { assetRef: e.target.value });
+                                        setEditingAssetId(null);
+                                      }}
+                                    />
+                                  )}
                                   {/* the gate reads role-carrying slots and ONLY those — a
                                       hand-added size chart without the role stayed invisible
                                       to "Graphic card: size chart" forever. Settable here. */}

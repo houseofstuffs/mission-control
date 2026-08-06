@@ -71,6 +71,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return NextResponse.json({
       updated: variants.length,
       blend: DEFAULT_BLEND,
+      shotType: shotType || null,
       moved: changed.size,
       staleFlagged: staleCount,
       listingsAffected: staleByListing.size,

@@ -179,6 +179,7 @@ export async function refreshColorwaySlots(listingId: string): Promise<{
   let migrated = 0;
   let added = 0;
   let position = Math.max(0, ...slots.map((s) => Number(s.props["Position"]) || 0));
+  const newIds: string[] = [];
   for (const colour of missing) {
     const reuse = reusable[migrated];
     if (reuse) {
@@ -189,7 +190,7 @@ export async function refreshColorwaySlots(listingId: string): Promise<{
       migrated++;
     } else {
       position++;
-      await createRecord("image_slots", {
+      const created = await createRecord("image_slots", {
         Name: `colorway — ${colour.toLowerCase()}`,
         Listing: [listingId],
         Position: position,
@@ -198,9 +199,29 @@ export async function refreshColorwaySlots(listingId: string): Promise<{
         Status: "Planned",
         Colour: colour,
       });
+      newIds.push(created.id);
       added++;
     }
   }
+
+  // KEEP THE RUN CONTIGUOUS: colorway slots group at the first colorway's
+  // position, in their existing relative order, everything else closing
+  // around them — a new pepper at position 16 with its siblings at 3-4
+  // splits the run across the colour grid. Reordering only writes the
+  // positions that changed; assets and titles are untouched.
+  const after = slotsForListing(listingId);
+  const cw = after.filter((s) => isColorway(s) || newIds.includes(s.id));
+  const firstIdx = after.findIndex((s) => cw.some((c) => c.id === s.id));
+  if (firstIdx >= 0) {
+    const rest = after.filter((s) => !cw.some((c) => c.id === s.id));
+    const ordered = [...rest.slice(0, firstIdx), ...cw, ...rest.slice(firstIdx)];
+    for (let i = 0; i < ordered.length; i++) {
+      if ((Number(ordered[i].props["Position"]) || 0) !== i + 1) {
+        await updateRecord("image_slots", ordered[i].id, { Position: i + 1 });
+      }
+    }
+  }
+
   const totalSlots = slots.length + added;
   return { added, migrated, already, totalSlots, overCap: totalSlots > 20 };
 }

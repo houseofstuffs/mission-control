@@ -156,6 +156,7 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
         shotType: String(s.props["Shot Type"] ?? ""),
         status: String(s.props["Status"] ?? "Planned"),
         assetRef,
+        colour: String(s.props["Colour"] ?? "").trim(),
         templateId: ((s.props["Mockup Template"] as string[] | null) ?? [])[0] ?? null,
         productLinkRole: role || null,
         provenance,
@@ -222,6 +223,11 @@ function mockupsData(
       url: g ? `/api/generated-mockups/${g.id}/file?v=${encodeURIComponent(g.lastEdited)}` : null,
       generatedId: g?.id ?? null,
       verdict: g ? (String(g.props["Verdict"] ?? "Approved") as "Approved" | "Flagged") : null,
+      // which slot already holds this render — drives "Send N NEW" and
+      // the skip-quietly semantics on repeat sends
+      placedInSlot: g
+        ? slots.slots.find((sl) => sl.assetRef.startsWith(`/api/generated-mockups/${g.id}/file`))?.position ?? null
+        : null,
     };
   });
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { archiveRecord, cachedRecord, cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
+import { archiveRecord, cachedRecord, cachedRecords, createRecord, refreshRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { UPLOAD_BUDGET_BYTES } from "@/config/mockups";
 
@@ -135,18 +135,42 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     const used = picked.slice(0, cells);
 
-    // fetch through our own stable route so expiring Notion URLs re-mint
-    const origin = new URL(req.url).origin;
+    // Load each render's bytes DIRECTLY — the first version fetched the
+    // app's own public origin from inside the container, which the
+    // deployment's egress swallowed into a bare "fetch failed". Notion
+    // URLs expire, so a dead link gets one refreshRecord retry, and every
+    // failure names the render and the step.
+    const cellBytes = async (g: (typeof used)[number]): Promise<Buffer> => {
+      const urlOf = (rec: typeof g) => {
+        const v = rec.props["Image"];
+        return Array.isArray(v) && v.length > 0 ? ((v[0] as { url?: string })?.url ?? "") : "";
+      };
+      const tryFetch = async (url: string) => {
+        if (!url) throw new Error("no stored image");
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error(`${res.status}`);
+        return Buffer.from(await res.arrayBuffer());
+      };
+      try {
+        return await tryFetch(urlOf(g));
+      } catch {
+        // expired Notion URL — re-mint once, then report honestly
+        const fresh = await refreshRecord("generated_mockups", g.id);
+        return tryFetch(urlOf(fresh));
+      }
+    };
     const tiles: Buffer[] = [];
     for (const g of used) {
-      const res = await fetch(`${origin}/api/generated-mockups/${g.id}/file?download=1`, { cache: "no-store" });
-      if (!res.ok) {
+      try {
+        tiles.push(await cellBytes(g));
+      } catch (err) {
         return NextResponse.json(
-          { error: `Couldn't fetch "${g.title}" (${res.status}) — try regenerating it.` },
+          {
+            error: `Couldn't fetch the ${String(g.props["Colour"] ?? "") || "?"} render ("${g.title}") for its grid cell — ${(err as Error).message}. Try regenerating that tile.`,
+          },
           { status: 502 }
         );
       }
-      tiles.push(Buffer.from(await res.arrayBuffer()));
     }
 
     // Cell geometry. Cells are derived from EXACT edge boundaries rather

@@ -19,6 +19,7 @@ import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { downscaleImage } from "@/lib/downscale";
 import { detectColour, classifyFolder, type ClassifiedFile } from "@/lib/colourFromFilename";
+import { SHOT_TYPES } from "@/config/images";
 import {
   nativeDimensions,
   cropOutputSize,
@@ -721,6 +722,8 @@ export interface MockupShotOption {
   importJob: { status: "running" | "complete" | "interrupted"; done: number; total: number; imported: number } | null;
   /** which garment this shoot is OF — L4 filters on it; empty = every listing */
   productId: string;
+  /** HOW this shoot renders — Send's join key; empty = Send can't place its renders */
+  shotType: string;
 }
 
 /** the product choices the template pickers offer */
@@ -756,6 +759,7 @@ function TemplateRow({
   const [name, setName] = useState(s.name);
   const [link, setLink] = useState(s.driveFolderLink);
   const [productId, setProductId] = useState(s.productId);
+  const [shotType, setShotType] = useState(s.shotType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // variants collapsed by default — the card is for recognition, the
@@ -775,9 +779,14 @@ function TemplateRow({
       name: name.trim(),
       driveFolderLink: link.trim(),
       productId,
+      ...(shotType ? { shotType } : {}),
     });
     if (!res.ok) setError(res.error);
     else {
+      // a type change only reaches Send once the variants carry it
+      if (shotType && shotType !== s.shotType && variants.length > 0) {
+        setSyncResult(`shot type saved — hit ⟳ Re-sync to stamp it onto the ${variants.length} ${variants.length === 1 ? "variant" : "variants"} (Send matches on the variant's type)`);
+      }
       setMode("view");
       router.refresh();
     }
@@ -820,10 +829,12 @@ function TemplateRow({
               type="button"
               className="btn btn-tertiary"
               style={{ fontSize: 12, padding: "3px 10px" }}
-              title="Rename, or change the Drive folder link"
+              title="Rename, or change the Drive folder, product or shot type"
               onClick={() => {
                 setName(s.name);
                 setLink(s.driveFolderLink);
+                setProductId(s.productId);
+                setShotType(s.shotType);
                 setError(null);
                 setMode("edit");
               }}
@@ -876,6 +887,21 @@ function TemplateRow({
               ))}
             </select>
             <span className="hint">L4&apos;s template picker filters on this, so it stays short as the library grows.</span>
+          </div>
+          <div className="field">
+            <label className="kicker" htmlFor={`tr-shot-${s.id}`} style={{ fontSize: 10 }}>SHOT TYPE · HOW SEND MATCHES SLOTS</label>
+            <select
+              id={`tr-shot-${s.id}`}
+              className="select"
+              value={shotType}
+              onChange={(e) => setShotType(e.target.value)}
+            >
+              <option value="">— not set (Send can&apos;t place these renders) —</option>
+              {SHOT_TYPES.filter((t) => t !== "Video" && t !== "Graphic Card").map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+            <span className="hint">After changing it, run ⟳ Re-sync so the variants carry the new type.</span>
           </div>
           {name.trim() !== s.name && s.variantCount > 0 ? (
             <span className="hint">
@@ -938,6 +964,27 @@ function TemplateRow({
             >
               {s.printRegionQuad ? "print region set ✎" : "no print region — draw it"}
             </button>
+            {s.shotType ? (
+              <span className="chip neutral">{s.shotType}</span>
+            ) : (
+              // the pill IS the fix — this exact gap failed every Send
+              <button
+                type="button"
+                className="chip stale"
+                style={{ cursor: "pointer" }}
+                title="Send matches renders to slots by shot type — set it, then Re-sync"
+                onClick={() => {
+                  setName(s.name);
+                  setLink(s.driveFolderLink);
+                  setProductId(s.productId);
+                  setShotType(s.shotType);
+                  setError(null);
+                  setMode("edit");
+                }}
+              >
+                no shot type — Send can&apos;t match
+              </button>
+            )}
             <span className="chip count">
               {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
             </span>
@@ -1111,6 +1158,7 @@ function TemplateDefine({
   const [name, setName] = useState("");
   const [driveLink, setDriveLink] = useState("");
   const [productId, setProductId] = useState(products.length === 1 ? products[0].id : "");
+  const [shotType, setShotType] = useState("");
   const [sample, setSample] = useState<File | null>(null);
   const [dims, setDims] = useState<Dims | null>(null);
   const [samplePreview, setSamplePreview] = useState<string | null>(null);
@@ -1178,6 +1226,7 @@ function TemplateDefine({
     form.append("printRegionQuad", JSON.stringify(regionQuad));
     if (driveLink.trim()) form.append("driveFolderLink", driveLink.trim());
     if (productId) form.append("productId", productId);
+    if (shotType) form.append("shotType", shotType);
     if (croppedFile) form.append("sampleImage", croppedFile);
     const res = await apiCall("/api/mockup-shots", { method: "POST", body: form });
     if (!res.ok) setError(res.error);
@@ -1192,11 +1241,13 @@ function TemplateDefine({
     ? "Name the template."
     : !productId
       ? "Pick the product this shoot is of — L4's picker filters on it."
-      : !sample
-        ? "Import one sample photo to draw the geometry on."
-        : phase !== "region"
-          ? "Confirm the crop, then place the print region."
-          : null;
+      : !shotType
+        ? "Pick the shot type — Send matches renders to slots by it."
+        : !sample
+          ? "Import one sample photo to draw the geometry on."
+          : phase !== "region"
+            ? "Confirm the crop, then place the print region."
+            : null;
 
   return (
     <div className="card supporting stack-12">
@@ -1229,6 +1280,15 @@ function TemplateDefine({
             <option value="">pick the garment…</option>
             {products.map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field" style={{ flex: "1 1 180px" }}>
+          <label className="kicker" htmlFor="td-shot-type">SHOT TYPE · HOW SEND MATCHES SLOTS</label>
+          <select id="td-shot-type" className="select" value={shotType} onChange={(e) => setShotType(e.target.value)}>
+            <option value="">pick the shot type…</option>
+            {SHOT_TYPES.filter((t) => t !== "Video" && t !== "Graphic Card").map((t) => (
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </div>

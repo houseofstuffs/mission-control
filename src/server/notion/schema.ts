@@ -250,6 +250,19 @@ export const SCHEMA: DbSpec[] = [
       // starts from it, so "Re-place corners" per colour stops being a
       // mandatory chore and becomes a correction.
       "Print Region Quad (JSON)": { type: "rich_text" },
+      // HOW this shoot renders — same list the L5 slots use, because it's
+      // the join key: Send matches render → slot by shot type. Required at
+      // creation; a template without one silently broke Send for every
+      // colour at once (same failure class as the missing Product).
+      // Import and Re-sync stamp it down onto every variant.
+      "Shot Type": {
+        type: "select",
+        options: [
+          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
+          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
+          "Grid Composite", "Graphic Card", "Video",
+        ],
+      },
       // The cropped sample the geometry was drawn on, preview-sized. Kept
       // as the template's card thumbnail — text-only cards stop being
       // tellable apart around the fourth template.
@@ -738,6 +751,11 @@ export const SCHEMA: DbSpec[] = [
         ],
       },
       Status: { type: "select", options: ["Planned", "Made", "Placed"] },
+      // The COLOUR a slot is for — set on the per-colour colorway slots the
+      // seed derives from Mockup Colours ("colorway — espresso" carries
+      // "Espresso"). Send matches on it: a render only lands in a coloured
+      // slot when the colours agree. Blank = colour-agnostic slot.
+      Colour: { type: "rich_text" },
       // link to the mockup/image file; empty = planned-not-yet-made
       "Asset Ref": { type: "url" },
       "Mockup Template": { type: "relation", relation: "mockup_templates" },

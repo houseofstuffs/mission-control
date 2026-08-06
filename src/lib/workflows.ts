@@ -113,7 +113,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       needs: ["Textured transparent PNG"],
       produces: [
         "Refined artwork (artifacts cut/filled, edges cleaned, texture enhanced)",
-        "PSD master + linked to Gdrive",
+        "Design master + linked to Gdrive",
         "Transparent PNG master + linked to Gdrive",
       ],
       dependsOn: ["C6"],
@@ -123,7 +123,7 @@ export const CREATIVE_WORKFLOW: WorkflowDef = {
       id: "C8",
       label: "validate",
       title: "Validation gate",
-      needs: ["PSD master", "Primary product print specs"],
+      needs: ["Design master", "Primary product print specs"],
       produces: ["Printify listing for primary product", "Verified print mock (bleed + margins)", "Order sample or skip"],
       dependsOn: ["C7"],
       note: "Primary product ONLY. Validate before you multiply.",
@@ -182,7 +182,7 @@ export const LISTING_WORKFLOW: WorkflowDef = {
       // vocabulary the Library and L5 already use.
       label: "generate mockups",
       title: "Generate mockups",
-      needs: ["Printify product", "PSD master", "Mockup templates", "Mockup colours"],
+      needs: ["Printify product", "Design master", "Mockup templates", "Mockup colours"],
       produces: ["Product mockups → image slots", "Branded info graphics (size chart, care, colourways)"],
       dependsOn: ["L1"],
       note: "Mockups are a compositing problem, not a generation problem — hosted PSD rendering in Phase 3.",

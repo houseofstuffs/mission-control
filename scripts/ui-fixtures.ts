@@ -416,6 +416,7 @@ function main() {
   // the state the Add-colour-variants form inherits from
   const mockupShot = rec("mockup_shots", "shot-1", "CC1466 Flat Lay", {
     Name: "CC1466 Flat Lay",
+    "Shot Type": "Flat Lay",
     "Crop Rect (JSON)": JSON.stringify({ x: 0.18, y: 0.12, size: 0.72 }),
     "Crop Set At": "2026-08-01",
     "Print Region Quad (JSON)": JSON.stringify([
@@ -441,6 +442,7 @@ function main() {
   // as "not offered" at L5 and sit unticked in L4's assignment card
   const mockupShot2 = rec("mockup_shots", "shot-2", "CC1466 Model 1", {
     Name: "CC1466 Model 1",
+    "Shot Type": "On Model",
     "Crop Rect (JSON)": JSON.stringify({ x: 0.1, y: 0.1, size: 0.8 }),
     "Crop Set At": "2026-08-01",
     Product: ["product-1"],

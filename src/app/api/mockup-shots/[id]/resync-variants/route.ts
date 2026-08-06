@@ -41,10 +41,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         .map((v) => v.id)
     );
 
+    // the shot's type rides along — Send matches render → slot on the
+    // VARIANT's Shot Type, so this is how a type set (or fixed) at the
+    // template level reaches everything Send looks at
+    const shotType = String(shot.props["Shot Type"] ?? "").trim();
     for (const v of variants) {
       await updateRecord("mockup_templates", v.id, {
         "Print Area Quad (JSON)": region,
         "Blend Mode": DEFAULT_BLEND,
+        ...(shotType ? { "Shot Type": shotType } : {}),
       });
     }
 

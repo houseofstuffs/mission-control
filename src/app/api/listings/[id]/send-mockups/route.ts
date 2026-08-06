@@ -7,9 +7,13 @@ export const maxDuration = 120;
 /**
  * Approved renders → image slots. Matching, in priority order per mockup:
  *   1. a slot whose Mockup Template relation already names this variant
- *   2. an EMPTY slot (no asset) with the same Shot Type, lowest position
- * The slot gets the app's stable file route as its Asset Ref (so it never
- * carries an expiring Notion URL), the variant relation, and status Made.
+ *   2. an EMPTY same-shot-type slot whose Colour equals the render's
+ *      (the per-colour colorway slots — "colorway — espresso" only ever
+ *      takes an Espresso render)
+ *   3. an EMPTY same-shot-type slot with NO colour, lowest position
+ * A coloured slot never accepts a mismatched colour. The slot gets the
+ * app's stable file route as its Asset Ref (so it never carries an
+ * expiring Notion URL), the variant relation, and status Made.
  * Unmatched renders are reported, never silently dropped.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -42,29 +46,43 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const taken = new Set<string>();
+    const norm = (c: string) => c.trim().toLowerCase();
     const results: Array<{ name: string; detail: string; ok: boolean }> = [];
     for (const g of approved) {
       const variantId = ((g.props["Variant"] as string[] | null) ?? [])[0] ?? "";
       const variant = variantId ? cachedRecord(variantId) : null;
       const shotType = String(variant?.props["Shot Type"] ?? "");
+      const colour = norm(String(g.props["Colour"] ?? ""));
       const name = g.title || "render";
+
+      const open = (s: (typeof slots)[number]) =>
+        !taken.has(s.id) &&
+        !String(s.props["Asset Ref"] ?? "").trim() &&
+        !String(s.props["Product Link Role"] ?? "").trim() &&
+        shotType !== "" &&
+        String(s.props["Shot Type"] ?? "") === shotType;
 
       const byRelation = slots.find(
         (s) =>
           !taken.has(s.id) &&
           ((s.props["Mockup Template"] as string[] | null) ?? []).includes(variantId)
       );
-      const byShotType = slots.find(
-        (s) =>
-          !taken.has(s.id) &&
-          !String(s.props["Asset Ref"] ?? "").trim() &&
-          !String(s.props["Product Link Role"] ?? "").trim() &&
-          shotType !== "" &&
-          String(s.props["Shot Type"] ?? "") === shotType
-      );
-      const slot = byRelation ?? byShotType;
+      // colour-carrying slots first, and ONLY for their own colour — a
+      // "colorway — espresso" slot must never swallow the Black render
+      // that happened to arrive first
+      const byColour = colour
+        ? slots.find((s) => open(s) && norm(String(s.props["Colour"] ?? "")) === colour)
+        : undefined;
+      const byShotType = slots.find((s) => open(s) && !String(s.props["Colour"] ?? "").trim());
+      const slot = byRelation ?? byColour ?? byShotType;
       if (!slot) {
-        results.push({ name, detail: `no matching slot (${shotType || "no shot type"})`, ok: false });
+        results.push({
+          name,
+          detail: shotType
+            ? `no open ${shotType} slot${colour ? ` for ${colour}` : ""}`
+            : "the variant has no shot type — set it on the template (Library), Re-sync, and send again",
+          ok: false,
+        });
         continue;
       }
       taken.add(slot.id);

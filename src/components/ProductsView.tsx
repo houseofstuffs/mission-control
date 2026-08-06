@@ -274,24 +274,18 @@ function ProductCard({
           listing that uses this product */}
       <div className="stack-8">
         <GraphicLinkRow
-          productId={p.id}
-          field="highlights"
           label="Highlights & sizing"
           value={p.highlightsSizingGraphicLink}
           busy={busy}
           onSave={(v) => onGraphicLink("highlightsSizingGraphicLink", v)}
         />
         <GraphicLinkRow
-          productId={p.id}
-          field="care"
           label="Care & policies"
           value={p.carePoliciesGraphicLink}
           busy={busy}
           onSave={(v) => onGraphicLink("carePoliciesGraphicLink", v)}
         />
         <GraphicLinkRow
-          productId={p.id}
-          field="colorways"
           label="Colorways"
           value={p.colorwaysGraphicLink}
           busy={busy}
@@ -365,68 +359,31 @@ function ProductCard({
 }
 
 function GraphicLinkRow({
-  productId,
-  field,
   label,
   value,
   busy,
   onSave,
 }: {
-  productId: string;
-  /** the graphic-thumb route's field key */
-  field: "highlights" | "care" | "colorways";
   label: string;
   value: string;
   busy: boolean;
   onSave: (value: string) => void;
 }) {
-  // filled rows collapse to asset-first: thumbnail + ✓ pill, no raw URL —
-  // the link's job is done once it's saved, and a long Drive URL neither
-  // identifies the graphic nor survives at card width. ✎ reopens the field.
+  // filled rows collapse to the ✓ pill (it opens the full image — the
+  // real inspection path) and a bare, ALWAYS-VISIBLE pencil. No raw URL,
+  // no thumbnail (40px of a size chart identifies nothing), no hover-only
+  // controls — pens and fingers don't hover.
   const [editing, setEditing] = useState(false);
-  const [thumbBroken, setThumbBroken] = useState(false);
 
   if (value && !editing) {
     return (
-      <div className="row-gap-8 hover-scope" style={{ alignItems: "center" }}>
-        <a
-          href={value}
-          target="_blank"
-          rel="noreferrer"
-          title={`Open the ${label.toLowerCase()} graphic`}
-          style={{
-            width: 40,
-            height: 40,
-            flex: "none",
-            borderRadius: 8,
-            overflow: "hidden",
-            background: "var(--surface-sunk, #f4efe2)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            border: "1px solid var(--border-soft, #e7e2d6)",
-          }}
-        >
-          {thumbBroken ? (
-            <span aria-hidden style={{ fontSize: 15 }}>↗</span>
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={`/api/products/${productId}/graphic-thumb?field=${field}&v=${encodeURIComponent(value)}`}
-              alt={`${label} graphic`}
-              loading="lazy"
-              onError={() => setThumbBroken(true)}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
-          )}
-        </a>
-        <a href={value} target="_blank" rel="noreferrer" className="chip done" style={{ fontSize: 11, textDecoration: "none" }}>
+      <div className="row-gap-8" style={{ alignItems: "center" }}>
+        <a href={value} target="_blank" rel="noreferrer" className="chip done" style={{ fontSize: 11, textDecoration: "none" }} title={`Open the ${label.toLowerCase()} graphic`}>
           {label} ✓
         </a>
         <button
           type="button"
-          className="btn btn-tertiary hover-reveal"
-          style={{ fontSize: 11, padding: "2px 8px" }}
+          className="bare-pencil"
           title={`Edit or replace the ${label.toLowerCase()} link`}
           disabled={busy}
           onClick={() => setEditing(true)}

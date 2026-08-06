@@ -52,6 +52,7 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[], slots: SimpleRecor
     variantCount: variants.length,
     listingCount: listingIds.size,
     productId: (((s.props["Product"] as string[] | null) ?? [])[0]) ?? "",
+    shotType: String(s.props["Shot Type"] ?? ""),
     importJob: (() => {
       const job = jobStatus(s.id);
       return job

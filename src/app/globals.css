@@ -921,15 +921,64 @@ a:hover { color: var(--candy); }
 .idea-card .title { font-family: var(--font-display); font-weight: 700; font-size: 14.5px; color: var(--text-primary); }
 /* controls that appear on hover — and on keyboard focus, which hover-only
    reveals always forget */
-.idea-card .hover-reveal { opacity: 0; transition: opacity 0.12s ease; }
+/* "Hover-reveal" controls are QUIET, never HIDDEN: the operator works a
+   touch screen with a pen, where hover doesn't exist — an opacity-0
+   control is an invisible one. Rest state is dimmed; hover/focus is
+   emphasis, not existence. */
+.idea-card .hover-reveal { opacity: 0.55; transition: opacity 0.12s ease; }
 .idea-card:hover .hover-reveal,
 .idea-card:focus-within .hover-reveal { opacity: 1; }
 
-/* the same reveal pattern for rows OUTSIDE idea-cards (e.g. the Products
-   graphic strips) — scope it to the row itself so only ITS control shows */
-.hover-scope .hover-reveal { opacity: 0; transition: opacity 0.12s ease; }
+/* the same pattern for rows OUTSIDE idea-cards — scoped so only the
+   row's own control brightens */
+.hover-scope .hover-reveal { opacity: 0.55; transition: opacity 0.12s ease; }
 .hover-scope:hover .hover-reveal,
 .hover-scope:focus-within .hover-reveal { opacity: 1; }
+
+/* the L5 drag handle — pen/finger sized (no hover required), and
+   touch-action none so the browser doesn't turn the drag into a scroll */
+.l5-grip {
+  flex: 0 0 auto;
+  width: 30px;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: 6px;
+}
+.l5-grip:hover { opacity: 1; background: var(--surface-sunk, #f4efe2); }
+.l5-grip:active { cursor: grabbing; opacity: 1; }
+
+/* a chip that ACTS — white fill + blue stroke so it can't be mistaken
+   for the read-only status chips beside it; hover/focus deepen */
+.chip-link {
+  background: #fff;
+  border-color: var(--blueberry, #1f4897);
+  color: var(--blueberry, #1f4897);
+  cursor: pointer;
+}
+.chip-link:hover,
+.chip-link:focus-visible { background: var(--blueberry, #1f4897); color: #fff; }
+
+/* bare pencil — the Designs-card pattern: plain glyph, no box, quiet
+   until hovered/focused, but ALWAYS visible (pens and fingers don't hover) */
+.bare-pencil {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  opacity: 0.55;
+  cursor: pointer;
+}
+.bare-pencil:hover,
+.bare-pencil:focus-visible { opacity: 1; }
 .idea-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .idea-actions .btn { font-size: 12px; padding: 6px 12px; }
 

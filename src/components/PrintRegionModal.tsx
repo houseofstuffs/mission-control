@@ -106,8 +106,25 @@ export function PrintRegionModal({
                 {variantCount === 1 ? "its one variant" : `all ${variantCount} variants`} at once.
               </span>
               <div style={{ width: "min(100%, 56vh)", margin: "0 auto" }}>
-                <QuadEditor src={sampleUrl} quad={quad} onChange={setQuad} />
+                {/* same centre guides as the crop tool — centring by eye
+                    was the whole complaint */}
+                <QuadEditor src={sampleUrl} quad={quad} onChange={setQuad} centerGuides />
               </div>
+              {(() => {
+                const cx = quad.reduce((a, p) => a + p.x, 0) / 4;
+                const cy = quad.reduce((a, p) => a + p.y, 0) / 4;
+                const centred = Math.abs(cx - 0.5) < 0.005 && Math.abs(cy - 0.5) < 0.005;
+                return (
+                  <span
+                    className="hint"
+                    style={{ textAlign: "center", color: centred ? "var(--status-done, #3e7a4e)" : undefined }}
+                  >
+                    {centred
+                      ? "✓ centred on the canvas"
+                      : `region centre ${cx < 0.5 ? "←" : "→"} ${Math.abs((cx - 0.5) * 100).toFixed(1)}% · ${cy < 0.5 ? "↑" : "↓"} ${Math.abs((cy - 0.5) * 100).toFixed(1)}% off centre`}
+                  </span>
+                );
+              })()}
             </>
           ) : (
             <div className="callout blocked">

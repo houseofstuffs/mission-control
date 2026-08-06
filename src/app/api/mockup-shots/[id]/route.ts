@@ -77,6 +77,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (body.driveFolderLink !== undefined) {
       values["Drive Folder Link"] = String(body.driveFolderLink).trim() || null;
     }
+    // shot type edits reach existing variants via Re-sync — the receipt
+    // tells the operator to run it
+    if (body.shotType !== undefined) {
+      const st = String(body.shotType).trim();
+      if (!st) return NextResponse.json({ error: "A template needs a shot type — Send matches on it." }, { status: 400 });
+      values["Shot Type"] = st;
+    }
     if (body.framingFlagged !== undefined) values["Framing Flagged"] = Boolean(body.framingFlagged);
     if (body.framingNotes !== undefined) values["Framing Notes"] = String(body.framingNotes);
 

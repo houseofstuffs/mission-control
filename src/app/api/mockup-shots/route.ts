@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cachedRecord, createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { parseQuad } from "@/config/mockups";
+import { SHOT_TYPES } from "@/config/images";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -62,6 +63,17 @@ export async function POST(req: Request) {
       );
     }
     values["Product"] = [product.id];
+    // HOW the shoot renders — REQUIRED for the same reason as Product:
+    // Send matches render → slot by shot type, and a template without one
+    // silently failed every colour at once ("no matching slot").
+    const shotType = str("shotType");
+    if (!(SHOT_TYPES as readonly string[]).includes(shotType)) {
+      return NextResponse.json(
+        { error: "Pick the shot type — Send matches renders to slots by it." },
+        { status: 400 }
+      );
+    }
+    values["Shot Type"] = shotType;
 
     const sample = form.get("sampleImage");
     if (sample && typeof sample !== "string" && sample.size > 0) {

@@ -113,7 +113,7 @@ const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 
 const READY_LABEL: Array<[keyof MockupsData["ready"], string]> = [
   ["printifyProduct", "Printify product"],
-  ["psdMaster", "PSD master"],
+  ["psdMaster", "Design master"],
   ["colours", "Mockup colours"],
 ];
 
@@ -276,28 +276,77 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [cropTile, setCropTile] = useState<MockupTile | null>(null);
   const [cropNote, setCropNote] = useState<string | null>(null);
 
-  // ---- the colour grid: approved tiles → one square, into slot 12 ----
+  // ---- the colour grid: pick tiles → build → SEE it → then the slot ----
   const [gridLayout, setGridLayout] = useState("2x2");
+  const [gridTemplate, setGridTemplate] = useState<string>("");
+  const [gridPicked, setGridPicked] = useState<string[]>([]); // generatedIds, in cell order
   const [gridBusy, setGridBusy] = useState(false);
   const [gridNote, setGridNote] = useState<string | null>(null);
+  const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cells: string[]; hasGridSlot: boolean } | null>(null);
+
+  const gridCells = { "2x2": 4, "3x1": 3, "2x3": 6, "3x2": 6, "3x3": 9 }[gridLayout] ?? 4;
+  // one template across N colours is the point — candidates are approved
+  // tiles of the chosen template, toggled in and out in cell order
+  const gridTemplates = [...new Map(
+    data.tiles.filter((t) => t.generatedId && verdictOf(t) === "approved").map((t) => [t.templateId, t.templateName])
+  ).entries()];
+  const gridCandidates = data.tiles.filter(
+    (t) => t.generatedId && verdictOf(t) === "approved" && (!gridTemplate || t.templateId === gridTemplate)
+  );
+
+  function toggleGridTile(generatedId: string) {
+    setGridPicked((cur) =>
+      cur.includes(generatedId) ? cur.filter((x) => x !== generatedId) : [...cur, generatedId]
+    );
+  }
 
   async function buildGrid() {
     setGridBusy(true);
     setGridNote(null);
     setGenError(null);
-    const res = await apiJson<{ used?: number; layout?: string; slot?: { position: number; label: string } }>(
+    const res = await apiJson<{ recordId?: string; url?: string; layout?: string; cells?: string[]; hasGridSlot?: boolean }>(
       `/api/listings/${data.listingId}/grid-composite`,
       "POST",
-      { layout: gridLayout },
+      { layout: gridLayout, generatedIds: gridPicked },
       180_000
     );
     if (!res.ok) setGenError(res.error);
     else {
+      setGridStaged({
+        recordId: res.data.recordId!,
+        url: res.data.url!,
+        layout: res.data.layout ?? gridLayout,
+        cells: res.data.cells ?? [],
+        hasGridSlot: res.data.hasGridSlot ?? true,
+      });
+    }
+    setGridBusy(false);
+  }
+
+  async function assignGrid() {
+    if (!gridStaged) return;
+    setGridBusy(true);
+    const res = await apiJson<{ slot?: { position: number; label: string } }>(
+      `/api/listings/${data.listingId}/grid-composite`,
+      "POST",
+      { assignRecordId: gridStaged.recordId }
+    );
+    if (!res.ok) setGenError(res.error);
+    else {
       setGridNote(
-        `✓ ${res.data.layout} grid from ${res.data.used} approved renders → slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
+        `✓ grid placed — ${gridStaged.layout} · ${gridStaged.cells.join(" → ")} · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
       );
+      setGridStaged(null);
       router.refresh();
     }
+    setGridBusy(false);
+  }
+
+  async function discardGrid() {
+    if (!gridStaged) return;
+    setGridBusy(true);
+    await apiJson(`/api/listings/${data.listingId}/grid-composite`, "POST", { discardRecordId: gridStaged.recordId });
+    setGridStaged(null);
     setGridBusy(false);
   }
 
@@ -386,7 +435,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   const blockers = [
     !data.ready.printifyProduct ? "no Printify product" : null,
-    !data.ready.psdMaster ? "no PSD master" : null,
+    !data.ready.psdMaster ? "no design master" : null,
     data.allTemplates.length > 0 && data.shortlist.length === 0
       ? "no templates assigned to this listing (assign above)"
       : null,
@@ -417,28 +466,38 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
             {READY_LABEL.map(([field, label]) => {
               const v = data.ready[field];
               const ok = typeof v === "number" ? v > 0 : Array.isArray(v) ? v.length > 0 : Boolean(v);
-              // the PSD master chip IS the way into the artwork editor —
+              // the design-master chip IS the way into the artwork editor —
               // swapping the master is a decision made while looking at
               // this grid, so the control lives on the chip, not at C7
               const opensArt = field === "psdMaster";
+              if (opensArt) {
+                // an ACTION chip must not dress like its read-only
+                // neighbours — white fill, blue stroke, and the word
+                // "edit" instead of a glyph that renders unevenly
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    className="chip chip-link"
+                    style={{ fontSize: 11 }}
+                    title="Edit the design master / per-colour artwork"
+                    onClick={() => setArtOpen(true)}
+                  >
+                    {ok ? "✓ " : "⚠ "}
+                    {label} · edit
+                  </button>
+                );
+              }
               return (
                 <span
                   key={label}
                   className={`chip ${ok ? "done" : "stale"}`}
-                  style={{ fontSize: 11, cursor: opensArt ? "pointer" : undefined }}
-                  title={
-                    field === "colours" && ok
-                      ? data.ready.colours.join(", ")
-                      : opensArt
-                        ? "Click to edit the design master / per-colour artwork"
-                        : undefined
-                  }
-                  onClick={opensArt ? () => setArtOpen(true) : undefined}
+                  style={{ fontSize: 11 }}
+                  title={field === "colours" && ok ? data.ready.colours.join(", ") : undefined}
                 >
                   {ok ? "✓ " : ""}
                   {label}
                   {field === "colours" ? ` · ${data.ready.colours.length}` : ""}
-                  {opensArt ? " ✎" : ""}
                 </span>
               );
             })}
@@ -522,6 +581,15 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
             ) : (
               <span className="body-sm">
                 ✓ Run complete — {job.rendered} of {job.total} rendered.
+                {job.total < data.tiles.length ? (
+                  // "3 of 3" with 6 tiles on screen reads like a loss — say
+                  // what the run actually targeted
+                  <span className="hint">
+                    {" "}
+                    (this run targeted {job.total} of the plan&apos;s {data.tiles.length} tiles — only
+                    missing, flagged or selected ones re-render)
+                  </span>
+                ) : null}
                 {job.results.some((r) => !r.ok) ? " Failures listed below by tile." : ""}
               </span>
             )}
@@ -959,50 +1027,124 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           </div>
         ) : null}
 
-        {/* the colour grid, assembled here rather than in Canva: renders
-            are already square and consistent, so tiling them is a resize
-            and a place. Rebuilds replace the slot's image. */}
-        <div
-          className="row-gap-12"
-          style={{
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            alignItems: "center",
-            borderTop: "1px dashed var(--border-soft, #e7e0ce)",
-            paddingTop: 10,
-          }}
-        >
-          <span className="hint" style={{ flex: "1 1 240px" }}>
-            Build the <strong>colour grid</strong> for the Grid Composite slot from approved renders —
-            no Canva round-trip. Approval order fills the cells.
-          </span>
-          <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              className="select input-compact"
-              style={{ width: "auto", fontSize: 12 }}
-              aria-label="Grid layout"
-              value={gridLayout}
-              onChange={(e) => setGridLayout(e.target.value)}
-            >
-              {["2x2", "3x1", "2x3", "3x2", "3x3"].map((l) => (
-                <option key={l} value={l}>{l.replace("x", " × ")}</option>
-              ))}
-            </select>
-            <button
-              className="btn btn-tertiary"
-              style={{ fontSize: 12 }}
-              disabled={gridBusy || approved.length === 0}
-              title={approved.length === 0 ? "Approve some renders first" : "Tile approved renders into one square image"}
-              onClick={buildGrid}
-            >
-              <Spinner active={gridBusy} />
-              Build grid from approved
-            </button>
-          </span>
+        {/* the colour grid, assembled here rather than in Canva: pick ONE
+            template's approved renders in cell order, build, LOOK at it,
+            then send it to the Grid Composite slot — never sight-unseen */}
+        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+          <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+            <span className="hint" style={{ flex: "1 1 240px" }}>
+              Build the <strong>colour grid</strong> for the Grid Composite slot — one template across
+              its colours. Tap tiles below in the order you want the cells filled.
+            </span>
+            <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                className="select input-compact"
+                style={{ width: "auto", fontSize: 12 }}
+                aria-label="Grid source template"
+                value={gridTemplate}
+                onChange={(e) => {
+                  setGridTemplate(e.target.value);
+                  setGridPicked([]);
+                }}
+              >
+                <option value="">all templates…</option>
+                {gridTemplates.map(([tid, tname]) => (
+                  <option key={tid} value={tid}>{tname}</option>
+                ))}
+              </select>
+              <select
+                className="select input-compact"
+                style={{ width: "auto", fontSize: 12 }}
+                aria-label="Grid layout"
+                value={gridLayout}
+                onChange={(e) => setGridLayout(e.target.value)}
+              >
+                {["2x2", "3x1", "2x3", "3x2", "3x3"].map((l) => (
+                  <option key={l} value={l}>{l.replace("x", " × ")}</option>
+                ))}
+              </select>
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12 }}
+                disabled={gridBusy || gridPicked.length !== gridCells}
+                title={
+                  gridPicked.length !== gridCells
+                    ? `Pick exactly ${gridCells} tiles for ${gridLayout.replace("x", " × ")} — ${gridPicked.length} picked`
+                    : "Build the grid — nothing is placed until you confirm"
+                }
+                onClick={buildGrid}
+              >
+                <Spinner active={gridBusy && !gridStaged} />
+                Build {gridLayout.replace("x", " × ")} · {gridPicked.length}/{gridCells}
+              </button>
+            </span>
+          </div>
+          {gridCandidates.length > 0 ? (
+            <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+              {gridCandidates.map((t) => {
+                const order = gridPicked.indexOf(t.generatedId!);
+                return (
+                  <button
+                    key={t.generatedId}
+                    type="button"
+                    className={`chip ${order >= 0 ? "done" : "neutral"}`}
+                    style={{ cursor: "pointer", fontSize: 11 }}
+                    title={`${t.templateName} — tap to ${order >= 0 ? "remove" : "add"}`}
+                    onClick={() => toggleGridTile(t.generatedId!)}
+                  >
+                    {order >= 0 ? `${order + 1} · ` : ""}
+                    {t.colour}
+                    {!gridTemplate ? ` (${t.templateName})` : ""}
+                  </button>
+                );
+              })}
+              {gridPicked.length > 0 ? (
+                <span className="hint">
+                  cells: {gridPicked.map((gid) => gridCandidates.find((t) => t.generatedId === gid)?.colour ?? "?").join(" → ")}
+                </span>
+              ) : null}
+            </div>
+          ) : (
+            <span className="hint">No approved renders yet — approve some tiles above first.</span>
+          )}
+          {gridStaged ? (
+            <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+              <a href={gridStaged.url} target="_blank" rel="noreferrer" title="Open full size">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={gridStaged.url}
+                  alt="Built grid composite"
+                  style={{ width: 220, borderRadius: 10, border: "1px solid var(--border-soft, #e7e2d6)" }}
+                />
+              </a>
+              <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
+                <span className="body-sm">
+                  <strong>{gridStaged.layout}</strong> · {gridStaged.cells.join(" → ")}
+                </span>
+                {!gridStaged.hasGridSlot ? (
+                  <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                    ⚠ no Grid Composite slot on this listing — seed or add one at L5 before placing
+                  </span>
+                ) : null}
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={gridBusy || !gridStaged.hasGridSlot} onClick={assignGrid}>
+                    <Spinner active={gridBusy} />
+                    Send to Grid Composite slot
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={buildGrid}>
+                    Rebuild
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={discardGrid}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {gridNote ? (
+            <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
+          ) : null}
         </div>
-        {gridNote ? (
-          <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
-        ) : null}
       </div>
 
       {cropTile ? (

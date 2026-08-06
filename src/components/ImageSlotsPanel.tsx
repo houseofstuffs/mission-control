@@ -248,6 +248,84 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     setBusy(null);
   }
 
+  // ---- drag-to-reorder: pointer-based (pen and finger, no hover), the
+  // grip is the handle so row-click still expands. Position renumbers on
+  // drop; dropping among another bucket's rows re-buckets too. The ⋯
+  // menu's Move up/down stays as the keyboard path.
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
+  const dragDrop = useRef<{ beforeId: string | null; bucket: string } | null>(null);
+  const displayedOrder = () => BUCKETS.flatMap((b) => data.slots.filter((s) => s.bucket === b));
+
+  function beginDrag(e: React.PointerEvent, slotId: string) {
+    if (busy) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setDragId(slotId);
+    dragDrop.current = null;
+  }
+  function moveDrag(e: React.PointerEvent) {
+    if (!dragId) return;
+    const y = e.clientY;
+    const rows = displayedOrder().filter((s) => s.id !== dragId && rowRefs.current.has(s.id));
+    let beforeId: string | null = null;
+    let bucket = rows.length ? rows[rows.length - 1].bucket : String(BUCKETS[0]);
+    for (const s of rows) {
+      const r = rowRefs.current.get(s.id)!.getBoundingClientRect();
+      if (y < r.top + r.height / 2) {
+        beforeId = s.id;
+        bucket = s.bucket;
+        break;
+      }
+    }
+    dragDrop.current = { beforeId, bucket };
+    setDropBeforeId(beforeId);
+  }
+  async function endDrag() {
+    const drop = dragDrop.current;
+    const dragged = dragId;
+    setDragId(null);
+    setDropBeforeId(null);
+    dragDrop.current = null;
+    if (!drop || !dragged) return;
+    const ids = displayedOrder().map((s) => s.id).filter((x) => x !== dragged);
+    const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
+    ids.splice(idx, 0, dragged);
+    const draggedSlot = data.slots.find((s) => s.id === dragged);
+    const bucketChange =
+      draggedSlot && drop.bucket !== draggedSlot.bucket ? { slotId: dragged, bucket: drop.bucket } : undefined;
+    if (!bucketChange && ids.join() === displayedOrder().map((s) => s.id).join()) return; // dropped where it was
+    await call("reorder", `/api/listings/${data.listingId}/slots-reorder`, "POST", {
+      orderedIds: ids,
+      bucketChange,
+    });
+  }
+
+  // ---- colorway slots ↔ the listing's current mockup colours ----
+  const [colorwayNote, setColorwayNote] = useState<string | null>(null);
+  async function refreshColorways() {
+    setBusy("colorways");
+    setError(null);
+    setColorwayNote(null);
+    const res = await apiJson<{ added: number; migrated: number; already: number; totalSlots: number; overCap: boolean }>(
+      `/api/listings/${data.listingId}/colorway-slots`,
+      "POST",
+      {}
+    );
+    if (!res.ok) setError(res.error);
+    else {
+      const d = res.data;
+      setColorwayNote(
+        `✓ colorway slots — ${d.already} already right · ${d.migrated} repurposed · ${d.added} added` +
+          (d.overCap ? ` · ⚠ ${d.totalSlots} slots exceed Etsy's ${MAX_IMAGES} — delete what you don't need` : "")
+      );
+      router.refresh();
+    }
+    setBusy(null);
+  }
+
   const patch = (id: string, body: Record<string, unknown>) =>
     call(id, `/api/image-slots/${id}`, "PATCH", body);
 
@@ -404,14 +482,30 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                 <span>· aim for {MIN_RECOMMENDED_IMAGES}+ filled (cap {MAX_IMAGES})</span>
               ) : null}
             </span>
-            <button
-              className={`btn ${onlyAttention ? "btn-secondary" : "btn-tertiary"}`}
-              style={{ fontSize: 12, padding: "4px 12px" }}
-              onClick={() => setOnlyAttention((v) => !v)}
-            >
-              {onlyAttention ? "Show all" : `Needs attention · ${attention.length}`}
-            </button>
+            <span className="row-gap-8" style={{ flexWrap: "wrap" }}>
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                disabled={busy !== null}
+                title="One colour-carrying slot per mockup colour — repurposes empty legacy colorway slots, never touches filled ones"
+                onClick={refreshColorways}
+              >
+                ↻ Colorway slots
+              </button>
+              <button
+                className={`btn ${onlyAttention ? "btn-secondary" : "btn-tertiary"}`}
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={() => setOnlyAttention((v) => !v)}
+              >
+                {onlyAttention ? "Show all" : `Needs attention · ${attention.length}`}
+              </button>
+            </span>
           </div>
+          {colorwayNote ? (
+            <span className="hint" style={{ color: colorwayNote.includes("⚠") ? "var(--status-stale, #b8792a)" : "var(--status-done, #3e7a4e)" }}>
+              {colorwayNote}
+            </span>
+          ) : null}
 
           <div ref={listRef} className="stack-12" style={{ gap: 10 }}>
             {BUCKETS.map((b) => {
@@ -451,13 +545,30 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                         return (
                           <div
                             key={s.id}
+                            ref={(el) => {
+                              if (el) rowRefs.current.set(s.id, el);
+                              else rowRefs.current.delete(s.id);
+                            }}
                             className={`l5-slot${isGraphic ? " graphic" : ""}`}
                             style={{
                               borderLeftColor: isGraphic ? undefined : BUCKET_ACCENT[b],
                               cursor: "pointer",
+                              opacity: dragId === s.id ? 0.45 : undefined,
+                              boxShadow: dropBeforeId === s.id ? "0 -3px 0 0 var(--blueberry, #1f4897)" : undefined,
                             }}
                             onClick={() => setExpandedId(open ? null : s.id)}
                           >
+                            <span
+                              className="l5-grip"
+                              title="Drag to reorder — works across buckets"
+                              onClick={(e) => e.stopPropagation()}
+                              onPointerDown={(e) => beginDrag(e, s.id)}
+                              onPointerMove={moveDrag}
+                              onPointerUp={endDrag}
+                              onPointerCancel={endDrag}
+                            >
+                              ⠿
+                            </span>
                             <span className="ord">{s.position}</span>
                             <div className="mid">
                               <div className="nm">

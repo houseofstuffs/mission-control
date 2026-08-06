@@ -41,13 +41,32 @@ export function compatForListing(listing: SimpleRecord): GarmentCompatibility {
   return "Any";
 }
 
+/** the most colorway slots a seed will mint — past this, colours share */
+export const MAX_COLORWAY_SLOTS = 6;
+
+/** The listing's mockup colours — the SAME set the generate plan uses. */
+export function listingColours(listing: SimpleRecord | undefined | null): string[] {
+  const parse = (raw: unknown): string[] => {
+    try {
+      const p = JSON.parse(String(raw ?? "[]"));
+      return Array.isArray(p) ? p.map(String).map((c) => c.trim()).filter(Boolean) : [];
+    } catch {
+      return [];
+    }
+  };
+  const mockup = parse(listing?.props["Mockup Colors (JSON)"]);
+  return mockup.length > 0 ? mockup : parse(listing?.props["Colorways (JSON)"]);
+}
+
 /**
  * Seed the default allocation. Advisory, not locked — every slot editable.
  *
- * Colourway slots are the one part that isn't fixed: a design that only works
- * on dark garments has fewer colourways worth showing, so it gets fewer slots.
- * The freed slots are left EMPTY — never backfilled with another role. Fewer,
- * honest slots beat a padded plan.
+ * Colourway slots are COLOUR-EXPLICIT when the listing already knows its
+ * mockup colours: one slot per colour ("colorway — espresso"), each
+ * carrying the colour so Send can match a render to ITS slot instead of
+ * any generic one. Capped at MAX_COLORWAY_SLOTS. When no colours are known
+ * yet, the old compatibility-based count stands in, and the refresh action
+ * upgrades the plan once colours land at L1.
  */
 export async function seedSlots(
   listingId: string,
@@ -57,11 +76,13 @@ export async function seedSlots(
   product?: SimpleRecord | null
 ): Promise<number> {
   const base: SeedSlot[] = multiVariant ? MULTI_SEED : SINGLE_SEED;
-  const allowed = COLORWAY_SLOTS[compat] ?? COLORWAY_SLOTS.Any;
+  const listing = cachedRecords("etsy_listings").find((l) => l.id === listingId);
+  const colours = listingColours(listing).slice(0, MAX_COLORWAY_SLOTS);
+  const allowed = colours.length > 0 ? colours.length : (COLORWAY_SLOTS[compat] ?? COLORWAY_SLOTS.Any);
   const family = compat === "Dark only" ? "dark" : compat === "Light only" ? "light" : null;
 
   let colorwaysKept = 0;
-  const seed: SeedSlot[] = [];
+  const seed: Array<SeedSlot & { colour?: string }> = [];
   for (const s of base) {
     // Exact label, and never a Product-linked slot. A prefix test here
     // ("colorway") also swallowed the "colorways" GRAPHIC CARD at the end
@@ -70,11 +91,30 @@ export async function seedSlots(
     // dropped from every listing.
     if (!s.productLink && s.label === "colorway") {
       if (colorwaysKept >= allowed) continue; // freed — stays empty
+      const colour = colours[colorwaysKept];
       colorwaysKept++;
-      seed.push({ ...s, label: family ? `colorway — ${family}` : s.label });
+      seed.push(
+        colour
+          ? { ...s, label: `colorway — ${colour.toLowerCase()}`, colour }
+          : { ...s, label: family ? `colorway — ${family}` : s.label }
+      );
     } else {
       seed.push(s);
     }
+  }
+  // colours beyond the base plan's colorway block still get their slot,
+  // up to the cap — appended right after the last colorway position
+  while (colorwaysKept < colours.length) {
+    const colour = colours[colorwaysKept];
+    const lastIdx = seed.map((s) => s.label.startsWith("colorway")).lastIndexOf(true);
+    seed.splice(lastIdx + 1, 0, {
+      position: 0,
+      label: `colorway — ${colour.toLowerCase()}`,
+      bucket: "Sell Design",
+      shotType: "Flat Lay",
+      colour,
+    });
+    colorwaysKept++;
   }
 
   // positions stay contiguous after dropping colourways — a plan with holes
@@ -90,6 +130,7 @@ export async function seedSlots(
       "Shot Type": s.shotType,
       Status: "Planned",
     };
+    if (s.colour) values["Colour"] = s.colour;
     if (s.productLink) {
       values["Product Link Role"] = s.productLink;
       const link = product ? String(product.props[PRODUCT_LINK_FIELD[s.productLink]] ?? "").trim() : "";
@@ -101,6 +142,67 @@ export async function seedSlots(
     await createRecord("image_slots", values);
   }
   return seed.length;
+}
+
+/**
+ * Brings the colorway slots in line with the listing's CURRENT mockup
+ * colours — for colours added (or renamed) at L1 after the plan was
+ * seeded. Empty legacy colorway slots ("colorway — dark", colour-less)
+ * are repurposed first; missing colours append new slots after that.
+ * A slot holding an asset is never renamed, never deleted — the operator
+ * deletes what they don't need.
+ */
+export async function refreshColorwaySlots(listingId: string): Promise<{
+  added: number;
+  migrated: number;
+  already: number;
+  totalSlots: number;
+  overCap: boolean;
+}> {
+  const listing = cachedRecords("etsy_listings").find((l) => l.id === listingId);
+  const wanted = listingColours(listing).slice(0, MAX_COLORWAY_SLOTS);
+  const norm = (c: string) => c.trim().toLowerCase();
+  const slots = slotsForListing(listingId);
+
+  const isColorway = (s: SimpleRecord) =>
+    !String(s.props["Product Link Role"] ?? "").trim() &&
+    (String(s.props["Colour"] ?? "").trim() !== "" || (s.title || "").toLowerCase().startsWith("colorway"));
+  const colorways = slots.filter(isColorway);
+  const have = new Set(colorways.map((s) => norm(String(s.props["Colour"] ?? ""))).filter(Boolean));
+
+  const missing = wanted.filter((c) => !have.has(norm(c)));
+  const already = wanted.length - missing.length;
+
+  // repurpose the empty colour-less ones first — the legacy "colorway —
+  // dark" pair becomes real colours instead of clutter
+  const reusable = colorways.filter((s) => !String(s.props["Colour"] ?? "").trim() && !isFilled(s));
+  let migrated = 0;
+  let added = 0;
+  let position = Math.max(0, ...slots.map((s) => Number(s.props["Position"]) || 0));
+  for (const colour of missing) {
+    const reuse = reusable[migrated];
+    if (reuse) {
+      await updateRecord("image_slots", reuse.id, {
+        Name: `colorway — ${colour.toLowerCase()}`,
+        Colour: colour,
+      });
+      migrated++;
+    } else {
+      position++;
+      await createRecord("image_slots", {
+        Name: `colorway — ${colour.toLowerCase()}`,
+        Listing: [listingId],
+        Position: position,
+        Bucket: "Sell Design",
+        "Shot Type": "Flat Lay",
+        Status: "Planned",
+        Colour: colour,
+      });
+      added++;
+    }
+  }
+  const totalSlots = slots.length + added;
+  return { added, migrated, already, totalSlots, overCap: totalSlots > 20 };
 }
 
 /**

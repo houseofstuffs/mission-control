@@ -20,7 +20,7 @@
  */
 import sharp from "sharp";
 import { getMeta, setMeta } from "@/server/cache/db";
-import { cachedRecords, createRecord } from "@/server/notion/store";
+import { cachedRecord, cachedRecords, createRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { getValidAccessToken } from "@/server/drive/connection";
 import { fetchFileBytes, ReconnectError } from "@/server/drive/client";
@@ -216,11 +216,16 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
         { type: "image/webp" }
       );
       const up = await uploadFileToNotion(upload);
+      // the shot's CURRENT type, read per file so a mid-run edit still
+      // lands — Send matches render → slot on this, so a variant without
+      // it is a variant Send can't place
+      const shotType = String(cachedRecord(args.shotId)?.props["Shot Type"] ?? "").trim();
       const values: Record<string, SimpleValue> = {
         // the ACTUAL px produced — a name that overstates resolution is
         // worse than no name
         Name: `${args.templateName} - ${f.colour} - ${target}`,
         "Pipeline Type": "Simple Placement",
+        ...(shotType ? { "Shot Type": shotType } : {}),
         "Blend Mode": DEFAULT_BLEND,
         Fit: DEFAULT_FIT,
         "Garment Color": f.colour,

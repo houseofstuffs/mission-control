@@ -86,7 +86,12 @@ export async function fetchMaster(link: string): Promise<Buffer> {
     const { bytes } = await fetchFileBytes(fileId, token);
     return Buffer.from(bytes);
   }
-  const res = await fetch(link, { cache: "no-store" });
+  let res: Response;
+  try {
+    res = await fetch(link, { cache: "no-store" });
+  } catch (err) {
+    throw new Error(`Couldn't fetch the design master (network: ${(err as Error).message}) — check the link on the design.`);
+  }
   if (!res.ok) {
     throw new Error(
       fileId
@@ -112,7 +117,15 @@ class LayerExpiredError extends Error {}
 
 async function fetchLayer(url: string | null, label: string): Promise<Buffer | null> {
   if (!url) return null;
-  const res = await fetch(url);
+  // a network-level failure throws a bare "fetch failed" — name the file
+  // and the step, the way the import errors do, or the operator is left
+  // guessing WHICH fetch died
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    throw new LayerExpiredError(`Couldn't fetch the ${label} (network: ${(err as Error).message}).`);
+  }
   if (!res.ok) throw new LayerExpiredError(`Couldn't fetch the ${label} (${res.status}).`);
   return Buffer.from(await res.arrayBuffer());
 }
@@ -263,7 +276,12 @@ async function runJob(rec: SimpleRecord, tiles: PlanTile[], job: GenerateJobStat
 
       const webp = await encodeUnderBudget(png);
       const file = new File([new Uint8Array(webp)], `${tile.variantName} - render.webp`, { type: "image/webp" });
-      const up = await uploadFileToNotion(file);
+      let up: Awaited<ReturnType<typeof uploadFileToNotion>>;
+      try {
+        up = await uploadFileToNotion(file);
+      } catch (err) {
+        throw new Error(`render finished but the Notion upload failed — ${(err as Error).message}; Generate again retries just the missing tiles`);
+      }
 
       // one record per listing × variant — regenerate REPLACES the image
       const existing = cachedRecords("generated_mockups").find(

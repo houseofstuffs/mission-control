@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { cachedRecord, cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
+import { archiveRecord, cachedRecord, cachedRecords, createRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { UPLOAD_BUDGET_BYTES } from "@/config/mockups";
 
@@ -29,14 +29,21 @@ async function encodeUnderBudget(png: Buffer): Promise<Buffer> {
 }
 
 /**
- * Tiles approved renders into ONE square image and drops it in the Grid
- * Composite slot — the colour-grid assembly that otherwise means a
- * round-trip through Canva. Renders are already square and already
- * consistent, so this is a resize-and-place, not a design tool: the
- * operator picks the layout and the order is the review grid's order.
+ * Tiles approved renders into ONE square image — the colour-grid assembly
+ * that otherwise means a round-trip through Canva. Renders are already
+ * square and already consistent, so this is a resize-and-place, not a
+ * design tool.
  *
- * Body: { layout: "2x2", generatedIds?: string[] } — ids default to every
- * approved render, trimmed to the layout's cell count.
+ * Two-phase on purpose: building STAGES the composite (a Variant-less
+ * generated_mockups record, previewable on L4 through the stable file
+ * route) and only an explicit confirm writes the Grid Composite slot —
+ * the first version wrote slot 12 sight-unseen and the operator met the
+ * result on a different page.
+ *
+ * Bodies:
+ *   { layout, generatedIds }  — build & stage; ids in CELL ORDER
+ *   { assignRecordId }        — staged composite → the Grid Composite slot
+ *   { discardRecordId }       — archive a staged composite
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -46,6 +53,49 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       return NextResponse.json({ error: "Listing not found — refresh first." }, { status: 404 });
     }
     const body = await req.json().catch(() => ({}));
+
+    const gridSlot = () =>
+      cachedRecords("image_slots")
+        .filter(
+          (s) =>
+            ((s.props["Listing"] as string[] | null) ?? []).includes(id) &&
+            String(s.props["Shot Type"] ?? "") === "Grid Composite"
+        )
+        .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))[0];
+
+    // ---- confirm: staged composite → the slot ----
+    if (body.assignRecordId) {
+      const rec = cachedRecord(String(body.assignRecordId));
+      if (!rec || rec.dbKey !== "generated_mockups") {
+        return NextResponse.json({ error: "That composite is gone — rebuild it." }, { status: 404 });
+      }
+      const slot = gridSlot();
+      if (!slot) {
+        return NextResponse.json(
+          { error: "This listing has no Grid Composite slot — seed the slot plan at L5 first." },
+          { status: 400 }
+        );
+      }
+      await updateRecord("image_slots", slot.id, {
+        "Asset Ref": `/api/generated-mockups/${rec.id}/file`,
+        Status: "Made",
+      });
+      await updateRecord("generated_mockups", rec.id, { "Sent To Slot": [slot.id] });
+      return NextResponse.json({
+        ok: true,
+        slot: { position: Number(slot.props["Position"]) || 0, label: slot.title },
+      });
+    }
+
+    // ---- discard a staged composite ----
+    if (body.discardRecordId) {
+      const rec = cachedRecord(String(body.discardRecordId));
+      if (rec && rec.dbKey === "generated_mockups") {
+        await archiveRecord("generated_mockups", rec.id);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const layout = LAYOUTS[String(body.layout ?? "2x2")];
     if (!layout) {
       return NextResponse.json(
@@ -131,27 +181,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const file = new File([new Uint8Array(webp)], `${name}.webp`, { type: "image/webp" });
     const up = await uploadFileToNotion(file);
 
-    // the Grid Composite slot: lowest-position one, filled or not — this
-    // action's whole purpose is to fill it, so replacing is intended
-    const slot = cachedRecords("image_slots")
-      .filter(
-        (s) =>
-          ((s.props["Listing"] as string[] | null) ?? []).includes(id) &&
-          String(s.props["Shot Type"] ?? "") === "Grid Composite"
-      )
-      .sort((a, b) => (Number(a.props["Position"]) || 0) - (Number(b.props["Position"]) || 0))[0];
-    if (!slot) {
-      return NextResponse.json(
-        { error: "This listing has no Grid Composite slot — seed the slot plan at L5 first." },
-        { status: 400 }
-      );
-    }
-
     // The composite lives as a generated_mockups record with NO Variant —
     // that's what makes it a composite rather than a tile: the plan can't
     // match it, so it never appears in the review grid or the send queue,
     // while it still gets the stable file route (expiring URLs re-minted)
     // and the download button for free. Rebuilds replace it in place.
+    // STAGED only — the slot is written by the assign call, after the
+    // operator has actually seen the thing.
     const existing = cachedRecords("generated_mockups").find(
       (g) =>
         ((g.props["Listing"] as string[] | null) ?? []).includes(id) &&
@@ -165,23 +201,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       Image: [{ name: file.name, uploadId: up.id }],
       "Generated At": new Date().toISOString().slice(0, 10),
       Verdict: "Approved",
-      "Sent To Slot": [slot.id],
     };
     const record = existing
       ? await updateRecord("generated_mockups", existing.id, values)
       : await createRecord("generated_mockups", values);
 
-    await updateRecord("image_slots", slot.id, {
-      "Asset Ref": `/api/generated-mockups/${record.id}/file`,
-      Status: "Made",
-    });
-
     return NextResponse.json({
       ok: true,
+      recordId: record.id,
+      url: `/api/generated-mockups/${record.id}/file?v=${encodeURIComponent(record.lastEdited)}`,
       used: used.length,
       layout: `${layout.cols}×${layout.rows}`,
-      slot: { position: Number(slot.props["Position"]) || 0, label: slot.title },
-      colours: used.map((g) => String(g.props["Colour"] ?? "")).filter(Boolean),
+      cells: used.map((g) => String(g.props["Colour"] ?? "") || (g.title || "render")),
+      hasGridSlot: Boolean(gridSlot()),
     });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

@@ -30,6 +30,11 @@ export interface SlotRow {
   /** the colour this slot is FOR (per-colour colorway slots); "" = any */
   colour: string;
   templateId: string | null;
+  /** when the asset is one of our renders: the variant that MADE it —
+   *  disagreement with templateId is a crossed pair, shown not hidden */
+  assetVariantId: string | null;
+  assetVariantName: string | null;
+  assetShotType: string | null;
   /** set only on slots seeded to pull from a Product-level reusable graphic */
   productLinkRole: string | null;
   /** "product" = current asset still matches the Product's link; "custom" = hand-replaced; null = not a Product-linked slot */
@@ -221,9 +226,19 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** one row open at a time — the point is to not have fourteen sets of controls mounted */
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  /** which slot's asset link is being hand-edited (internal paths show as thumbnails otherwise) */
+  // Rows expand INDEPENDENTLY — comparing three lifestyle slots side by
+  // side is the actual workflow, and the old one-at-a-time accordion
+  // also ate label edits: collapsing on click-away unmounted the focused
+  // input before its blur could save.
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) =>
+    setExpandedIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  /** which slot's asset link is being hand-edited (internal paths show as open/replace otherwise) */
   const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
   /** buckets collapsed BY the operator — open by default, comp behaviour */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -231,16 +246,55 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   const [onlyAttention, setOnlyAttention] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // collapse on click-away, so an open row can't quietly stay open behind
-  // whatever you scrolled to next
+  // on-device pointer diagnostics: add ?pointerdebug to the URL and every
+  // pointer event on the grips (plus drag lifecycle) prints to an
+  // on-screen log — for the touch-screen drag bug no simulator reproduces
+  const [pointerLog, setPointerLog] = useState<string[]>([]);
+  // client-only flag set post-mount — reading location during render made
+  // the server and client disagree (hydration error, overlay never showed)
+  const [debugPointer, setDebugPointer] = useState(false);
   useEffect(() => {
-    if (!expandedId) return;
-    function away(e: PointerEvent) {
-      if (!listRef.current?.contains(e.target as Node)) setExpandedId(null);
-    }
-    document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
-  }, [expandedId]);
+    setDebugPointer(new URLSearchParams(window.location.search).has("pointerdebug"));
+  }, []);
+  const logPointer = (line: string) => {
+    if (!debugPointer) return;
+    setPointerLog((cur) => [...cur.slice(-13), `${new Date().toISOString().slice(14, 23)} ${line}`]);
+  };
+  useEffect(() => {
+    if (!debugPointer) return;
+    let moves = 0;
+    const where = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return "?";
+      if (t.closest?.(".l5-grip")) return "GRIP";
+      if (t.closest?.(".l5-slot")) return "row";
+      return t.tagName?.toLowerCase() ?? "?";
+    };
+    const down = (e: PointerEvent) => {
+      moves = 0;
+      logPointer(`↓ pointerdown ${e.pointerType} btn=${e.buttons} on ${where(e)}`);
+    };
+    const move = (e: PointerEvent) => {
+      moves++;
+      if (moves % 10 === 1) logPointer(`… move ${e.pointerType} y=${Math.round(e.clientY)} drag=${dragIdRef.current ? "on" : "off"}`);
+    };
+    const up = (e: PointerEvent) => logPointer(`↑ pointerup ${e.pointerType} after ${moves} moves`);
+    const cancel = (e: PointerEvent) => logPointer(`✕ POINTERCANCEL ${e.pointerType} after ${moves} moves — the browser took the gesture`);
+    const ts = (e: TouchEvent) => logPointer(`touchstart on ${where(e)}`);
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointermove", move, true);
+    document.addEventListener("pointerup", up, true);
+    document.addEventListener("pointercancel", cancel, true);
+    document.addEventListener("touchstart", ts, true);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointermove", move, true);
+      document.removeEventListener("pointerup", up, true);
+      document.removeEventListener("pointercancel", cancel, true);
+      document.removeEventListener("touchstart", ts, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debugPointer]);
 
   async function call(label: string, url: string, method: string, body?: unknown) {
     setBusy(label);
@@ -262,12 +316,15 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   const dragDrop = useRef<{ beforeId: string | null; bucket: string } | null>(null);
   const displayedOrder = () => BUCKETS.flatMap((b) => data.slots.filter((s) => s.bucket === b));
 
+  const dragIdRef = useRef<string | null>(null); // mirror for the debug listeners
   function beginDrag(e: React.PointerEvent, slotId: string) {
     if (busy) return;
     e.preventDefault();
     e.stopPropagation();
+    dragIdRef.current = slotId;
     setDragId(slotId);
     dragDrop.current = null;
+    logPointer(`beginDrag ok · ${e.pointerType} btn=${e.buttons}`);
   }
   // WINDOW-level listeners for the drag itself — the same pattern as the
   // quad editor, which is proven on the operator's pen. The first version
@@ -296,9 +353,11 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     async function up() {
       const drop = dragDrop.current;
       const dragged = dragId;
+      dragIdRef.current = null;
       setDragId(null);
       setDropBeforeId(null);
       dragDrop.current = null;
+      logPointer(drop ? `drop → before ${drop.beforeId ?? "END"}` : "up with NO move recorded");
       if (!drop || !dragged) return;
       const ids = displayedOrder().map((s) => s.id).filter((x) => x !== dragged);
       const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
@@ -519,6 +578,15 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
               >
                 {onlyAttention ? "Show all" : `Needs attention · ${attention.length}`}
               </button>
+              {expandedIds.size > 1 ? (
+                <button
+                  className="btn btn-tertiary"
+                  style={{ fontSize: 12, padding: "4px 12px" }}
+                  onClick={() => setExpandedIds(new Set())}
+                >
+                  Collapse all · {expandedIds.size}
+                </button>
+              ) : null}
             </span>
           </div>
           {colorwayNote ? (
@@ -559,7 +627,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                   </button>
                   {!isCollapsed
                     ? visible.map((s) => {
-                        const open = expandedId === s.id;
+                        const open = expandedIds.has(s.id);
                         const i = data.slots.findIndex((x) => x.id === s.id);
                         const isGraphic = Boolean(s.productLinkRole);
                         return (
@@ -576,7 +644,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                               opacity: dragId === s.id ? 0.45 : undefined,
                               boxShadow: dropBeforeId === s.id ? "0 -3px 0 0 var(--blueberry, #1f4897)" : undefined,
                             }}
-                            onClick={() => setExpandedId(open ? null : s.id)}
+                            onClick={() => toggleExpanded(s.id)}
                           >
                             <span
                               className="l5-grip"
@@ -603,6 +671,11 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                     onBlur={(e) => {
                                       if (e.target.value !== s.label) patch(s.id, { label: e.target.value });
                                     }}
+                                    onKeyDown={(e) => {
+                                      // Enter commits — blur fires the save; rows no longer
+                                      // collapse from under a focused input either
+                                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                    }}
                                   />
                                 ) : (
                                   s.label
@@ -626,9 +699,20 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   <>
                                     <span className="l5-tag">{s.shotType || "no shot type"}</span>
                                     {!s.templateId ? <span className="l5-tag">no template</span> : null}
-                                    <span className={`l5-asset${s.assetRef ? " has" : ""}`} title={s.assetRef || undefined}>
+                                    <span className={`l5-asset${s.assetRef ? " has" : ""}`}>
                                       {s.assetRef ? "✓ asset linked" : "no asset yet"}
                                     </span>
+                                    {s.assetRef ? (
+                                      <a
+                                        className="body-sm"
+                                        href={s.assetRef}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        open ↗
+                                      </a>
+                                    ) : null}
                                   </>
                                 )}
                               </div>
@@ -638,16 +722,23 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   style={{ flexWrap: "wrap", alignItems: "center", marginTop: 8 }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  <select
-                                    className="select input-compact"
-                                    style={{ width: 150 }}
-                                    value={s.shotType}
-                                    disabled={busy !== null}
-                                    onChange={(e) => patch(s.id, { shotType: e.target.value })}
-                                  >
-                                    <option value="">Shot type…</option>
-                                    {SHOT_TYPES.map((t) => <option key={t}>{t}</option>)}
-                                  </select>
+                                  {!s.colour ? (
+                                    <select
+                                      className="select input-compact"
+                                      style={{ width: 150 }}
+                                      value={s.shotType}
+                                      disabled={busy !== null}
+                                      onChange={(e) => patch(s.id, { shotType: e.target.value })}
+                                    >
+                                      <option value="">Shot type…</option>
+                                      {SHOT_TYPES.map((t) => <option key={t}>{t}</option>)}
+                                    </select>
+                                  ) : null}
+                                  {s.colour ? (
+                                    <span className="chip neutral" style={{ fontSize: 10 }} title="This slot's own colour — the shot picker auto-selects this colour's variant">
+                                      {s.colour}
+                                    </span>
+                                  ) : null}
                                   {s.colour ? (
                                     // a coloured slot decides the COLOUR itself — the
                                     // operator picks the SHOT, and the matching-colour
@@ -695,25 +786,15 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                     </select>
                                   )}
                                   {s.assetRef.startsWith("/api/") && editingAssetId !== s.id ? (
-                                    // an internal file-route path is plumbing, not information —
-                                    // show the ASSET: thumbnail, open link, and a replace toggle
+                                    // an internal path is plumbing, and a 44px thumbnail
+                                    // judges nothing — the carousel preview is where images
+                                    // get looked at. Quiet links only.
                                     <span className="row-gap-8" style={{ alignItems: "center" }}>
-                                      <a href={s.assetRef} target="_blank" rel="noreferrer" title="Open the placed asset full size">
-                                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                                        <img
-                                          src={s.assetRef}
-                                          alt={s.label}
-                                          loading="lazy"
-                                          style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 8, border: "1px solid var(--border-soft, #e7e2d6)", display: "block" }}
-                                        />
-                                      </a>
-                                      <a className="body-sm" href={s.assetRef} target="_blank" rel="noreferrer">
-                                        open ↗
-                                      </a>
                                       <button
                                         type="button"
-                                        className="btn btn-tertiary"
-                                        style={{ fontSize: 11, padding: "2px 8px" }}
+                                        className="bare-pencil"
+                                        style={{ fontSize: 11 }}
+                                        title="Replace the asset link by hand"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setEditingAssetId(s.id);
@@ -753,6 +834,28 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   </select>
                                 </div>
                               ) : null}
+                              {open && s.assetVariantId && s.templateId !== s.assetVariantId ? (
+                                // the Note-13 class of bug, made VISIBLE: the placed
+                                // image and the slot's variant relation disagree
+                                <div className="callout stale" style={{ fontSize: 12, marginTop: 8 }} onClick={(e) => e.stopPropagation()}>
+                                  crossed pair — the placed asset is{" "}
+                                  <strong>{s.assetVariantName ?? "one of our renders"}</strong>
+                                  {s.assetShotType ? ` (${s.assetShotType})` : ""}, but the slot&apos;s variant is set to{" "}
+                                  {s.templateId
+                                    ? offered.find((t) => t.id === s.templateId)?.name ?? "a different variant"
+                                    : "nothing"}
+                                  .{" "}
+                                  <button
+                                    className="btn btn-tertiary"
+                                    style={{ fontSize: 11, padding: "2px 8px" }}
+                                    disabled={busy !== null}
+                                    title="Sets the variant (and shot type) to match what's actually placed"
+                                    onClick={() => patch(s.id, { mockupTemplateId: s.assetVariantId })}
+                                  >
+                                    align variant to asset
+                                  </button>
+                                </div>
+                              ) : null}
                             </div>
                             <div className="l5-right" onClick={(e) => e.stopPropagation()}>
                               <StatusPill
@@ -790,7 +893,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
             {data.slots
               .filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket))
               .map((s) => (
-                <div key={s.id} className="l5-slot" onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}>
+                <div key={s.id} className="l5-slot" onClick={() => toggleExpanded(s.id)}>
                   <span className="ord">{s.position}</span>
                   <div className="mid">
                     <div className="nm">{s.label}</div>
@@ -868,6 +971,35 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
           ) : null}
         </>
       )}
+      {debugPointer ? (
+        // ?pointerdebug — screengrab this while attempting a drag; it
+        // shows exactly which pointer events the device delivers and
+        // where the drag lifecycle stops
+        <div
+          style={{
+            position: "fixed",
+            right: 10,
+            bottom: 10,
+            zIndex: 200,
+            width: 340,
+            maxHeight: "45vh",
+            overflow: "hidden",
+            background: "rgba(20, 24, 31, 0.92)",
+            color: "#c9f0d0",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: 10.5,
+            lineHeight: 1.5,
+            borderRadius: 10,
+            padding: "8px 10px",
+            pointerEvents: "none",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          <strong style={{ color: "#fff" }}>pointer debug — try a grip drag, then screengrab</strong>
+          {"\n"}
+          {pointerLog.length ? pointerLog.join("\n") : "waiting for pointer events…"}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -148,6 +148,14 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
           : assetRef
             ? "custom"
             : null;
+      // when the asset is one of OUR renders, resolve which VARIANT made
+      // it — the mismatch detector compares this against the slot's own
+      // relation, so a crossed pair shows itself instead of hiding until
+      // a thumbnail looks off
+      const genMatch = assetRef.match(/^\/api\/generated-mockups\/([^/]+)\/file/);
+      const gen = genMatch ? cachedRecord(genMatch[1]) : null;
+      const assetVariantId = gen ? (((gen.props["Variant"] as string[] | null) ?? [])[0] ?? null) : null;
+      const assetVariant = assetVariantId ? cachedRecord(assetVariantId) : null;
       return {
         id: s.id,
         position: Number(s.props["Position"]) || 0,
@@ -158,6 +166,9 @@ function slotsData(rec: NonNullable<ReturnType<typeof cachedRecord>>, compatibil
         assetRef,
         colour: String(s.props["Colour"] ?? "").trim(),
         templateId: ((s.props["Mockup Template"] as string[] | null) ?? [])[0] ?? null,
+        assetVariantId,
+        assetVariantName: assetVariant?.title ?? null,
+        assetShotType: assetVariant ? String(assetVariant.props["Shot Type"] ?? "") : null,
         productLinkRole: role || null,
         provenance,
       };

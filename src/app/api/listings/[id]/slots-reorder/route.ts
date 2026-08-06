@@ -27,8 +27,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const slots = slotsForListing(id);
     const byId = new Map(slots.map((s) => [s.id, s]));
     if (orderedIds.length !== slots.length || orderedIds.some((sid) => !byId.has(sid))) {
+      // name the diff — "doesn't match" cost three debugging rounds when
+      // the real story was one stray slot the client never sent
+      const sent = new Set(orderedIds);
+      const missing = slots.filter((s) => !sent.has(s.id)).map((s) => `"${s.title || s.id}"`);
+      const unknown = orderedIds.filter((sid) => !byId.has(sid));
+      const parts = [
+        `client sent ${orderedIds.length} slots, the listing has ${slots.length}`,
+        ...(missing.length ? [`missing: ${missing.join(", ")}`] : []),
+        ...(unknown.length ? [`${unknown.length} sent id(s) aren't this listing's`] : []),
+      ];
       return NextResponse.json(
-        { error: "The order list doesn't match this listing's slots — refresh and retry." },
+        { error: `The order list doesn't match this listing's slots (${parts.join("; ")}) — refresh and retry.` },
         { status: 409 }
       );
     }

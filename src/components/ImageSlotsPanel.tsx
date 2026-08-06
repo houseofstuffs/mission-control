@@ -342,7 +342,17 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropBeforeId, setDropBeforeId] = useState<string | null>(null);
   const dragDrop = useRef<{ beforeId: string | null; bucket: string } | null>(null);
-  const displayedOrder = () => BUCKETS.flatMap((b) => data.slots.filter((s) => s.bucket === b));
+  /** every drop reports its fate on the moved row — success, or the named error */
+  const [dropNote, setDropNote] = useState<{ slotId: string; ok: boolean; text: string } | null>(null);
+  // EVERY slot, in render order — including the stray-bucket rows at the
+  // end. Leaving those out sent the server a shorter list than the
+  // listing owns, so every reorder 409'd ("order list doesn't match")
+  // with the error callout scrolled far above the drop. One stray slot
+  // = drag silently dead across the whole panel.
+  const displayedOrder = () => [
+    ...BUCKETS.flatMap((b) => data.slots.filter((s) => s.bucket === b)),
+    ...data.slots.filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket)),
+  ];
 
   const dragIdRef = useRef<string | null>(null); // mirror for the debug listeners
   function beginDrag(e: React.PointerEvent, slotId: string) {
@@ -352,6 +362,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     dragIdRef.current = slotId;
     setDragId(slotId);
     dragDrop.current = null;
+    setDropNote(null);
     logPointer(`beginDrag ok · ${e.pointerType} btn=${e.buttons}`);
   }
   // WINDOW-level listeners for the drag itself — the same pattern as the
@@ -362,6 +373,10 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   useEffect(() => {
     if (!dragId) return;
     function move(e: PointerEvent) {
+      // the operator's device emits synthetic MOUSE events after pen
+      // input — once the drop has been taken, ignore stragglers so they
+      // can't repaint a stale drop indicator
+      if (!dragIdRef.current) return;
       const y = e.clientY;
       const rows = displayedOrder().filter((s) => s.id !== dragId && rowRefs.current.has(s.id));
       let beforeId: string | null = null;
@@ -391,13 +406,41 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
       const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
       ids.splice(idx, 0, dragged);
       const draggedSlot = data.slots.find((s) => s.id === dragged);
+      // never re-bucket INTO an unknown bucket — dropping below the stray
+      // section reorders only
       const bucketChange =
-        draggedSlot && drop.bucket !== draggedSlot.bucket ? { slotId: dragged, bucket: drop.bucket } : undefined;
-      if (!bucketChange && ids.join() === displayedOrder().map((s) => s.id).join()) return; // dropped where it was
-      await call("reorder", `/api/listings/${data.listingId}/slots-reorder`, "POST", {
+        draggedSlot && drop.bucket !== draggedSlot.bucket && (BUCKETS as readonly string[]).includes(drop.bucket)
+          ? { slotId: dragged, bucket: drop.bucket }
+          : undefined;
+      if (!bucketChange && ids.join() === displayedOrder().map((s) => s.id).join()) {
+        // even "nothing to do" says so — silence here cost three rounds
+        setDropNote({ slotId: dragged, ok: true, text: "dropped where it was — nothing changed" });
+        return;
+      }
+      // direct call, not call(): the row needs the OUTCOME, not just a
+      // refresh — reorder's error also lands here, where the pen is,
+      // instead of only in the callout scrolled off the top
+      setBusy("reorder");
+      setError(null);
+      const res = await apiJson<{ writes?: number }>(`/api/listings/${data.listingId}/slots-reorder`, "POST", {
         orderedIds: ids,
         bucketChange,
       });
+      if (!res.ok) {
+        setError(res.error);
+        setDropNote({ slotId: dragged, ok: false, text: `reorder failed — ${res.error}` });
+        logPointer(`reorder FAILED: ${res.error}`);
+      } else {
+        const pos = ids.indexOf(dragged) + 1;
+        setDropNote({
+          slotId: dragged,
+          ok: true,
+          text: `reordered — now position ${pos}${bucketChange ? ` · ${bucketChange.bucket}` : ""} (${res.data.writes ?? 0} ${res.data.writes === 1 ? "write" : "writes"})`,
+        });
+        logPointer(`reorder ok — position ${pos}, ${res.data.writes ?? 0} writes`);
+        router.refresh();
+      }
+      setBusy(null);
     }
     window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
@@ -785,6 +828,14 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   </>
                                 )}
                               </div>
+                              {dropNote?.slotId === s.id ? (
+                                <div
+                                  className="body-sm"
+                                  style={{ marginTop: 4, fontWeight: 600, color: dropNote.ok ? "#2e6b2e" : "#a03535" }}
+                                >
+                                  {dropNote.ok ? "✓" : "✕"} {dropNote.text}
+                                </div>
+                              ) : null}
                               {open ? (
                                 <div
                                   className="row-gap-8"
@@ -947,17 +998,49 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                 </section>
               );
             })}
-            {/* slots in a bucket the config doesn't know — never drop rows silently */}
+            {/* slots in a bucket the config doesn't know — never drop rows
+                silently. Full drag citizens: they count in the reorder list
+                (leaving them out made EVERY drag 409) and dragging one into
+                a bucket re-buckets it — the repair path for exactly the
+                data that broke the drag. */}
             {data.slots
               .filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket))
               .map((s) => (
-                <div key={s.id} className="l5-slot" onClick={() => toggleExpanded(s.id)}>
+                <div
+                  key={s.id}
+                  ref={(el) => {
+                    if (el) rowRefs.current.set(s.id, el);
+                    else rowRefs.current.delete(s.id);
+                  }}
+                  className="l5-slot"
+                  style={{
+                    opacity: dragId === s.id ? 0.45 : undefined,
+                    boxShadow: dropBeforeId === s.id ? "0 -3px 0 0 var(--blueberry, #1f4897)" : undefined,
+                  }}
+                  onClick={() => toggleExpanded(s.id)}
+                >
+                  <span
+                    className="l5-grip"
+                    title="Drag into a bucket to re-home this slot"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => beginDrag(e, s.id)}
+                  >
+                    ⠿
+                  </span>
                   <span className="ord">{s.position}</span>
                   <div className="mid">
                     <div className="nm">{s.label}</div>
                     <div className="meta">
                       <span className="l5-tag">{s.bucket || "no bucket"}</span>
                     </div>
+                    {dropNote?.slotId === s.id ? (
+                      <div
+                        className="body-sm"
+                        style={{ marginTop: 4, fontWeight: 600, color: dropNote.ok ? "#2e6b2e" : "#a03535" }}
+                      >
+                        {dropNote.ok ? "✓" : "✕"} {dropNote.text}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="l5-right" onClick={(e) => e.stopPropagation()}>
                     <StatusPill status={s.status} disabled={busy !== null} onPick={(st) => patch(s.id, { status: st })} />

@@ -200,6 +200,34 @@ export const UPLOAD_BUDGET_BYTES = Math.floor(4.8 * 1024 * 1024);
 /** A fresh shot crop starts centred, sized to whatever fits — the guard corrects it if it's infeasible. */
 export const DEFAULT_CROP_RECT = { x: 0.15, y: 0.15, size: 0.7 };
 
+/* ---------- colour-grid composite tunables ---------- */
+
+/**
+ * How a render meets its grid cell — the crop-tightness dial:
+ *   Fit        — the whole square render scaled into the cell, nothing
+ *                shaved. Cells sit in a centred band on the background.
+ *   Tall crop  — cells ~1.5× taller than wide; crops in for a closer
+ *                look but keeps the garment whole. (Single-row layouts
+ *                only get taller cells — multi-row layouts have no
+ *                headroom, so Tall degenerates toward Fit there.)
+ *   Full bleed — edge-to-edge cover crop, no gutters (the original).
+ * Default is Fit: the 3×1 cover-crop shaved real garments in testing.
+ */
+export const GRID_CELL_MODES = ["fit", "tall", "cover"] as const;
+export type GridCellMode = (typeof GRID_CELL_MODES)[number];
+export const DEFAULT_GRID_CELL_MODE: GridCellMode = "fit";
+
+/**
+ * Background behind Fit/Tall grids — the operator's cream, matching the
+ * shop's graphic cards so the gallery reads as one system. A setting on
+ * purpose: rebrand means changing it HERE, not hunting a hard-code.
+ */
+export const GRID_BACKGROUND = "#FBF6EC";
+
+/** Gutter between cells / margin around the grid, in px at the 2000px output. */
+export const GRID_GUTTER = 28;
+export const GRID_MARGIN = 60;
+
 /* ---------- render tunables ---------- */
 
 /** Long edge the render works at — Etsy wants ~2000px; bigger is wasted work. */

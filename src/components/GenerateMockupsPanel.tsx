@@ -18,7 +18,7 @@ import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { CropAdjustModal } from "./CropAdjustModal";
 import { PlacementModal } from "./PlacementModal";
-import type { PlacementMap, Quad } from "@/config/mockups";
+import { DEFAULT_GRID_CELL_MODE, type GridCellMode, type PlacementMap, type Quad } from "@/config/mockups";
 
 export interface MockupTile {
   /** the variant behind this tile — the unique key; templateId is the GROUP */
@@ -289,6 +289,8 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
 
   // ---- the colour grid: pick tiles → build → SEE it → then the slot ----
   const [gridLayout, setGridLayout] = useState("2x2");
+  /** the crop-tightness dial — Fit (default, nothing shaved) / Tall / Full bleed */
+  const [gridCellMode, setGridCellMode] = useState<GridCellMode>(DEFAULT_GRID_CELL_MODE);
   const [gridTemplate, setGridTemplate] = useState<string>("");
   const [gridPicked, setGridPicked] = useState<string[]>([]); // generatedIds, in cell order
   const [gridBusy, setGridBusy] = useState(false);
@@ -297,7 +299,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   // routed them to the Generate card's error box, where a failed BUILD
   // read as a failed RUN and the build itself looked like a silent no-op
   const [gridError, setGridError] = useState<string | null>(null);
-  const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cells: string[]; hasGridSlot: boolean } | null>(null);
+  const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cellMode: string; cells: string[]; hasGridSlot: boolean } | null>(null);
 
   const gridCells = { "2x2": 4, "3x1": 3, "2x3": 6, "3x2": 6, "3x3": 9 }[gridLayout] ?? 4;
 
@@ -311,10 +313,10 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setGridBusy(true);
     setGridNote(null);
     setGridError(null);
-    const res = await apiJson<{ recordId?: string; url?: string; layout?: string; cells?: string[]; hasGridSlot?: boolean }>(
+    const res = await apiJson<{ recordId?: string; url?: string; layout?: string; cellMode?: string; cells?: string[]; hasGridSlot?: boolean }>(
       `/api/listings/${data.listingId}/grid-composite`,
       "POST",
-      { layout: gridLayout, generatedIds: gridPicked },
+      { layout: gridLayout, cellMode: gridCellMode, generatedIds: gridPicked },
       180_000
     );
     if (!res.ok) setGridError(res.error);
@@ -323,6 +325,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         recordId: res.data.recordId!,
         url: res.data.url!,
         layout: res.data.layout ?? gridLayout,
+        cellMode: res.data.cellMode ?? gridCellMode,
         cells: res.data.cells ?? [],
         hasGridSlot: res.data.hasGridSlot ?? true,
       });
@@ -1149,6 +1152,18 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                   <option key={l} value={l}>{l.replace("x", " × ")}</option>
                 ))}
               </select>
+              <select
+                className="select input-compact"
+                style={{ width: "auto", fontSize: 12 }}
+                aria-label="Cell crop tightness"
+                title="How each render meets its cell — Fit never shaves an edge; Tall crops closer but keeps the garment whole; Full bleed is the edge-to-edge cover crop"
+                value={gridCellMode}
+                onChange={(e) => setGridCellMode(e.target.value as GridCellMode)}
+              >
+                <option value="fit">Fit — whole render</option>
+                <option value="tall">Tall crop — 1.5×</option>
+                <option value="cover">Full bleed</option>
+              </select>
               <button
                 className="btn btn-tertiary"
                 style={{ fontSize: 12 }}
@@ -1205,7 +1220,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </a>
               <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
                 <span className="body-sm">
-                  <strong>{gridStaged.layout}</strong> · {gridStaged.cells.join(" → ")}
+                  <strong>{gridStaged.layout}</strong> · {gridStaged.cellMode === "fit" ? "fit" : gridStaged.cellMode === "tall" ? "tall crop" : "full bleed"} · {gridStaged.cells.join(" → ")}
                 </span>
                 {!gridStaged.hasGridSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>

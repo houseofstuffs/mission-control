@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { archiveRecord, cachedRecord, cachedRecords, createRecord, refreshRecord, updateRecord } from "@/server/notion/store";
 import { uploadFileToNotion } from "@/server/notion/upload";
-import { UPLOAD_BUDGET_BYTES } from "@/config/mockups";
+import {
+  UPLOAD_BUDGET_BYTES,
+  GRID_CELL_MODES,
+  DEFAULT_GRID_CELL_MODE,
+  GRID_BACKGROUND,
+  GRID_GUTTER,
+  GRID_MARGIN,
+  type GridCellMode,
+} from "@/config/mockups";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -17,8 +25,14 @@ const LAYOUTS: Record<string, { cols: number; rows: number }> = {
 };
 
 /** output edge — same ballpark as a render, comfortably over Etsy's 2000px */
-// edge-to-edge, no gutter: a colour grid reads as one image, not a contact sheet
 const EDGE = 2000;
+
+/** "#FBF6EC" → sharp's background object */
+function hexRgb(hex: string): { r: number; g: number; b: number; alpha: number } {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  const n = m ? parseInt(m[1], 16) : 0xffffff;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, alpha: 1 };
+}
 
 async function encodeUnderBudget(png: Buffer): Promise<Buffer> {
   for (const quality of [92, 86, 78, 70, 62]) {
@@ -103,6 +117,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         { status: 400 }
       );
     }
+    const cellMode: GridCellMode = (GRID_CELL_MODES as readonly string[]).includes(String(body.cellMode))
+      ? (String(body.cellMode) as GridCellMode)
+      : DEFAULT_GRID_CELL_MODE;
     const cells = layout.cols * layout.rows;
 
     const approvedAll = cachedRecords("generated_mockups").filter(
@@ -173,28 +190,62 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
     }
 
-    // Cell geometry. Cells are derived from EXACT edge boundaries rather
-    // than a floored cell size: 2000/3 floored to 666 leaves a 2px seam
-    // and a non-square canvas (a 3×1 came out 1998×2000 in testing).
-    // Boundary maths gives every layout a true square with no gap.
-    const edgeAt = (i: number, n: number) => Math.round((EDGE * i) / n);
+    // Cell geometry, per the crop-tightness dial.
     const composites = [];
-    for (let i = 0; i < used.length; i++) {
-      const col = i % layout.cols;
-      const row = Math.floor(i / layout.cols);
-      const left = edgeAt(col, layout.cols);
-      const top = edgeAt(row, layout.rows);
-      const resized = await sharp(tiles[i])
-        .resize(edgeAt(col + 1, layout.cols) - left, edgeAt(row + 1, layout.rows) - top, {
-          fit: "cover",
-          position: "centre",
-        })
-        .png()
-        .toBuffer();
-      composites.push({ input: resized, left, top });
+    let background = { r: 255, g: 255, b: 255, alpha: 1 };
+    if (cellMode === "cover") {
+      // Full bleed — the original: edge-to-edge cover crop, no gutters.
+      // Cells derive from EXACT edge boundaries rather than a floored
+      // cell size: 2000/3 floored to 666 leaves a 2px seam and a
+      // non-square canvas (a 3×1 came out 1998×2000 in testing).
+      const edgeAt = (i: number, n: number) => Math.round((EDGE * i) / n);
+      for (let i = 0; i < used.length; i++) {
+        const col = i % layout.cols;
+        const row = Math.floor(i / layout.cols);
+        const left = edgeAt(col, layout.cols);
+        const top = edgeAt(row, layout.rows);
+        const resized = await sharp(tiles[i])
+          .resize(edgeAt(col + 1, layout.cols) - left, edgeAt(row + 1, layout.rows) - top, {
+            fit: "cover",
+            position: "centre",
+          })
+          .png()
+          .toBuffer();
+        composites.push({ input: resized, left, top });
+      }
+    } else {
+      // Fit / Tall — cells on the cream background, gutters between,
+      // margin around, the whole band centred in the square canvas.
+      // Fit keeps the entire square render (nothing shaved); Tall crops
+      // to cells ~1.5× taller than wide where the layout has headroom —
+      // multi-row layouts don't, so Tall clamps toward square there.
+      background = hexRgb(GRID_BACKGROUND);
+      const availW = EDGE - 2 * GRID_MARGIN - (layout.cols - 1) * GRID_GUTTER;
+      const availH = EDGE - 2 * GRID_MARGIN - (layout.rows - 1) * GRID_GUTTER;
+      const colW = Math.floor(availW / layout.cols);
+      const rowH = Math.floor(availH / layout.rows);
+      const cellW = Math.min(colW, rowH); // square renders — fit cells start square
+      const cellH = cellMode === "tall" ? Math.min(Math.round(cellW * 1.5), rowH) : cellW;
+      const gridW = layout.cols * cellW + (layout.cols - 1) * GRID_GUTTER;
+      const gridH = layout.rows * cellH + (layout.rows - 1) * GRID_GUTTER;
+      const x0 = Math.round((EDGE - gridW) / 2);
+      const y0 = Math.round((EDGE - gridH) / 2);
+      for (let i = 0; i < used.length; i++) {
+        const col = i % layout.cols;
+        const row = Math.floor(i / layout.cols);
+        const resized = await sharp(tiles[i])
+          .resize(cellW, cellH, { fit: cellMode === "tall" ? "cover" : "contain", position: "centre", background })
+          .png()
+          .toBuffer();
+        composites.push({
+          input: resized,
+          left: x0 + col * (cellW + GRID_GUTTER),
+          top: y0 + row * (cellH + GRID_GUTTER),
+        });
+      }
     }
     const png = await sharp({
-      create: { width: EDGE, height: EDGE, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+      create: { width: EDGE, height: EDGE, channels: 4, background },
     })
       .composite(composites)
       .png()
@@ -236,6 +287,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       url: `/api/generated-mockups/${record.id}/file?v=${encodeURIComponent(record.lastEdited)}`,
       used: used.length,
       layout: `${layout.cols}×${layout.rows}`,
+      cellMode,
       cells: used.map((g) => String(g.props["Colour"] ?? "") || (g.title || "render")),
       hasGridSlot: Boolean(gridSlot()),
     });

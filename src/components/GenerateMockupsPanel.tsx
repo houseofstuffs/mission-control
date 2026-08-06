@@ -285,14 +285,6 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cells: string[]; hasGridSlot: boolean } | null>(null);
 
   const gridCells = { "2x2": 4, "3x1": 3, "2x3": 6, "3x2": 6, "3x3": 9 }[gridLayout] ?? 4;
-  // one template across N colours is the point — candidates are approved
-  // tiles of the chosen template, toggled in and out in cell order
-  const gridTemplates = [...new Map(
-    data.tiles.filter((t) => t.generatedId && verdictOf(t) === "approved").map((t) => [t.templateId, t.templateName])
-  ).entries()];
-  const gridCandidates = data.tiles.filter(
-    (t) => t.generatedId && verdictOf(t) === "approved" && (!gridTemplate || t.templateId === gridTemplate)
-  );
 
   function toggleGridTile(generatedId: string) {
     setGridPicked((cur) =>
@@ -427,6 +419,19 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     }
     setSendBusy(false);
   }
+
+  // one template across N colours is the point — candidates are approved
+  // tiles of the chosen template, toggled in and out in cell order.
+  // These live BELOW verdictOf on purpose: computing them above it was a
+  // temporal-dead-zone crash that only fired once a listing HAD renders
+  // (generatedId short-circuits first) — the margaritas listing broke
+  // while the render-less t-shirt sailed.
+  const gridTemplates = [...new Map(
+    data.tiles.filter((t) => t.generatedId && verdictOf(t) === "approved").map((t) => [t.templateId, t.templateName])
+  ).entries()];
+  const gridCandidates = data.tiles.filter(
+    (t) => t.generatedId && verdictOf(t) === "approved" && (!gridTemplate || t.templateId === gridTemplate)
+  );
 
   const generated = data.tiles.filter((t) => t.url !== null);
   const approved = generated.filter((t) => verdictOf(t) === "approved");

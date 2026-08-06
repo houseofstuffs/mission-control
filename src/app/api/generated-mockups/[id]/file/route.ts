@@ -45,10 +45,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       const ext = (stored.match(/\.(webp|png|jpe?g)$/i)?.[1] ?? "webp").toLowerCase();
       // the variant name the operator already recognises, not a hash
       const base = (rec.title || "mockup").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+      // HTTP headers are Latin-1: an em dash in the title throws before the
+      // response is even built. RFC 5987 dual form — ASCII fallback in
+      // filename=, the real name UTF-8-encoded in filename*=.
+      const ascii = base.replace(/[^\x20-\x7e]+/g, "-").replace(/-{2,}/g, "-").trim() || "mockup";
+      const encoded = encodeURIComponent(`${base}.${ext}`).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
       return new NextResponse(bytes, {
         headers: {
           "Content-Type": res.headers.get("content-type") ?? `image/${ext}`,
-          "Content-Disposition": `attachment; filename="${base}.${ext}"`,
+          "Content-Disposition": `attachment; filename="${ascii}.${ext}"; filename*=UTF-8''${encoded}`,
           "Cache-Control": "private, max-age=600",
         },
       });

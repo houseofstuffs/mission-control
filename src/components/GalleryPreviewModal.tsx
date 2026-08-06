@@ -11,19 +11,50 @@
  * surprise at push time.
  *
  * Portalled to the body like every modal (transformed ancestors would
- * cage it), sized to the WINDOW: square main image at min(72vh, usable
- * width), filmstrip of numbered thumbs below, arrows / arrow keys /
- * pen-or-finger swipe, Escape closes.
+ * cage it), sized to the WINDOW: square main image at min(72vh, 900px,
+ * usable width AND height), filmstrip of numbered thumbs below, arrows /
+ * arrow keys / pen-or-finger swipe. Escape, the ✕, or a tap on the dark
+ * surround closes — overlay only, never navigation.
  */
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface GallerySlide {
+  /** slot record id — external asset refs are proxied through it */
+  id: string;
   position: number;
   label: string;
   status: string;
   /** empty = a planned gap, shown as a placeholder */
   assetRef: string;
+}
+
+/**
+ * Internal refs (our own /api/... routes) go straight into the <img>.
+ * External ones — a hand-pasted Drive share link on a graphic-card slot —
+ * would render Drive's HTML viewer page as a blank; those route through
+ * the slot's asset-thumb proxy, which fetches the real bytes.
+ */
+function displayRef(sl: GallerySlide, size: 320 | 1200): string {
+  if (!sl.assetRef) return "";
+  if (sl.assetRef.startsWith("/")) return sl.assetRef;
+  return `/api/image-slots/${sl.id}/asset-thumb?size=${size}`;
+}
+
+/**
+ * The main image's square edge, from the window itself. This was a CSS
+ * width formula once — width-only, so a short-wide window let the square's
+ * HEIGHT overflow the flex column and bury the header and close button
+ * under the image. Numbers over min(): 72vh, the operator's 900px hard
+ * cap, usable width (arrows + padding), and usable height (header +
+ * filmstrip + gaps ≈ 190px).
+ */
+function squareEdge(): number {
+  if (typeof window === "undefined") return 550;
+  return Math.max(
+    220,
+    Math.min(900, Math.floor(window.innerHeight * 0.72), window.innerWidth - 150, window.innerHeight - 190)
+  );
 }
 
 export function GalleryPreviewModal({
@@ -35,10 +66,17 @@ export function GalleryPreviewModal({
 }) {
   const [mounted, setMounted] = useState(false);
   const [idx, setIdx] = useState(0);
+  const [edge, setEdge] = useState(550);
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    const onResize = () => setEdge(squareEdge());
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,11 +88,18 @@ export function GalleryPreviewModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [slides.length, onClose]);
 
-  // keep the highlighted thumb in view as the index moves
+  // keep the highlighted thumb in view — scroll ONLY the strip, by hand.
+  // scrollIntoView walks every scrollable ancestor, and each call nudged
+  // the page container a little further left; five slides in, the whole
+  // carousel had drifted off-centre.
   useEffect(() => {
-    stripRef.current
-      ?.querySelector<HTMLElement>(`[data-thumb="${idx}"]`)
-      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    const strip = stripRef.current;
+    const thumb = strip?.querySelector<HTMLElement>(`[data-thumb="${idx}"]`);
+    if (!strip || !thumb) return;
+    strip.scrollTo({
+      left: thumb.offsetLeft - (strip.clientWidth - thumb.offsetWidth) / 2,
+      behavior: "smooth",
+    });
   }, [idx]);
 
   if (!mounted || slides.length === 0) return null;
@@ -74,6 +119,7 @@ export function GalleryPreviewModal({
         gap: 10,
         touchAction: "pan-y",
       }}
+      data-backdrop
       onPointerDown={(e) => {
         swipe.current = { x: e.clientX, y: e.clientY };
       }}
@@ -82,13 +128,21 @@ export function GalleryPreviewModal({
         swipe.current = null;
         if (!s) return;
         const dx = e.clientX - s.x;
-        if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(e.clientY - s.y)) {
+        const dy = e.clientY - s.y;
+        if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) {
           setIdx((i) => (dx < 0 ? Math.min(slides.length - 1, i + 1) : Math.max(0, i - 1)));
+          return;
+        }
+        // a stationary tap on the dark surround (not the image, not a
+        // button) dismisses — overlay only, never navigation
+        if (Math.hypot(dx, dy) < 10 && (e.target as HTMLElement).hasAttribute("data-backdrop")) {
+          onClose();
         }
       }}
     >
-      {/* header: where am I, and the way out */}
-      <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, color: "#f2ead6" }}>
+      {/* header: where am I, and the way out — flex:none + zIndex so no
+          sizing mistake below can ever bury the close button again */}
+      <div style={{ flex: "none", zIndex: 1, width: "100%", display: "flex", alignItems: "center", gap: 12, color: "#f2ead6" }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>
           slot {cur.position} · {cur.label}
         </span>
@@ -115,8 +169,9 @@ export function GalleryPreviewModal({
         </button>
       </div>
 
-      {/* the image, as big as the window allows, never scrolling */}
+      {/* the image, capped hard at min(72vh, 900px, usable width/height) */}
       <div
+        data-backdrop
         style={{
           flex: "1 1 auto",
           minHeight: 0,
@@ -146,8 +201,9 @@ export function GalleryPreviewModal({
         </button>
         <div
           style={{
-            width: "min(72vh, calc(100% - 108px))",
-            aspectRatio: "1 / 1",
+            width: edge,
+            height: edge,
+            flex: "none",
             background: "#26221a",
             borderRadius: 14,
             overflow: "hidden",
@@ -159,7 +215,7 @@ export function GalleryPreviewModal({
           {cur.assetRef ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={cur.assetRef}
+              src={displayRef(cur, 1200)}
               alt={`Slot ${cur.position} — ${cur.label}`}
               style={{ width: "100%", height: "100%", objectFit: "contain" }}
               draggable={false}
@@ -226,7 +282,7 @@ export function GalleryPreviewModal({
             {sl.assetRef ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={sl.assetRef}
+                src={displayRef(sl, 320)}
                 alt=""
                 loading="lazy"
                 style={{ width: "100%", height: "100%", objectFit: "cover", opacity: i === idx ? 1 : 0.75 }}

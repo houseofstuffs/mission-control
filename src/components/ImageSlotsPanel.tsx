@@ -1034,7 +1034,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
           onClose={() => setPreviewOpen(false)}
           slides={[...data.slots]
             .sort((a, b) => a.position - b.position)
-            .map((sl) => ({ position: sl.position, label: sl.label, status: sl.status, assetRef: sl.assetRef }))}
+            .map((sl) => ({ id: sl.id, position: sl.position, label: sl.label, status: sl.status, assetRef: sl.assetRef }))}
         />
       ) : null}
       {debugPointer ? (

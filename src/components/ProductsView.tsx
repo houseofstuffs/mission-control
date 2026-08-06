@@ -34,6 +34,8 @@ export interface ProductCardData {
   /** distinct colours — the figure the Library, L4 and L5 all speak in */
   colourCount: number;
   sizeCount: number;
+  /** provider print resolution; null = 300 assumed (and labelled so) */
+  printDpi: number | null;
   syncedAt: string | null;
   hasVoiceText: boolean;
   /** the saved boilerplate itself — prefills the voice editor */
@@ -172,9 +174,23 @@ function ProductCard({
         <div className="body-sm" style={{ marginTop: 6 }}>
           {p.maxW && p.maxH ? (
             <>
-              max {p.maxW} × {p.maxH}px
-              <br />
-              {p.ratios}
+              max {p.maxW} × {p.maxH}px ≈{" "}
+              <strong>
+                {(p.maxW / (p.printDpi ?? 300)).toFixed(p.maxW % (p.printDpi ?? 300) ? 1 : 0)} ×{" "}
+                {(p.maxH / (p.printDpi ?? 300)).toFixed(p.maxH % (p.printDpi ?? 300) ? 1 : 0)} in
+              </strong>{" "}
+              <span title={p.printDpi ? `at the product's Print DPI` : "at 300 DPI, the DTG standard — set Print DPI on the product if this provider differs"}>
+                @ {p.printDpi ?? 300} DPI{p.printDpi ? "" : "*"}
+              </span>
+              {p.ratios ? (
+                <>
+                  <br />
+                  {/* "aspect w:h" spelled out — a bare "front: 22:25" once
+                      got read as 22.25 INCHES, and that number nearly went
+                      into a print-size field */}
+                  aspect (w:h) · {p.ratios}
+                </>
+              ) : null}
             </>
           ) : (
             "no print areas recorded"

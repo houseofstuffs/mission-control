@@ -315,14 +315,23 @@ function mockupsData(
     designId: designId ?? null,
     masterLink: String(design?.props["Master PNG Link"] ?? "").trim(),
     placement: parsePlacementMap(String(rec.props["Mockup Placement (JSON)"] ?? "")),
-    // the REAL print area — px from Printify's catalog, inches hand-set
-    // on the product when known. What lets Place talk print truth.
-    printArea: {
-      wPx: Number(product?.props["Max Print Width px"]) || null,
-      hPx: Number(product?.props["Max Print Height px"]) || null,
-      wIn: Number(product?.props["Print Area Width in"]) || null,
-      hIn: Number(product?.props["Print Area Height in"]) || null,
-    },
+    // the REAL print area — px from Printify's catalog; inches DERIVED as
+    // px / DPI (300 assumed unless the product sets Print DPI, and the
+    // readout says so). One input, no hand-copied inches to misread.
+    printArea: (() => {
+      const wPx = Number(product?.props["Max Print Width px"]) || null;
+      const hPx = Number(product?.props["Max Print Height px"]) || null;
+      const setDpi = Number(product?.props["Print DPI"]) || null;
+      const dpi = setDpi ?? 300;
+      return {
+        wPx,
+        hPx,
+        wIn: wPx ? wPx / dpi : null,
+        hIn: hPx ? hPx / dpi : null,
+        dpi,
+        dpiAssumed: setDpi === null,
+      };
+    })(),
   };
 }
 

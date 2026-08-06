@@ -54,7 +54,14 @@ export function PlacementModal({
   /** the listing's stored placement map — the modal edits into it */
   current: PlacementMap;
   /** the REAL print area, for the printed-size readout */
-  printArea: { wPx: number | null; hPx: number | null; wIn: number | null; hIn: number | null };
+  printArea: {
+    wPx: number | null;
+    hPx: number | null;
+    wIn: number | null;
+    hIn: number | null;
+    dpi: number;
+    dpiAssumed: boolean;
+  };
   onClose: () => void;
   onSaved: (scope: "all" | "variant") => void;
 }) {
@@ -333,16 +340,20 @@ export function PlacementModal({
           ) : masterDims ? (
             <div className="callout" style={{ fontSize: 12 }}>
               <strong>Printed for real:</strong>{" "}
-              {printedW && printedH ? (
+              {printedW && printedH && printArea.wIn && printArea.hIn ? (
                 <>
                   visible art ≈ {printedW.toFixed(1)}″ × {printedH.toFixed(1)}″ on the{" "}
-                  {printArea.wIn}″ × {printArea.hIn}″ print area
+                  {printArea.wIn.toFixed(printArea.wIn % 1 ? 1 : 0)}″ ×{" "}
+                  {printArea.hIn.toFixed(printArea.hIn % 1 ? 1 : 0)}″ print area
+                  <span className="hint">
+                    {" "}
+                    @ {printArea.dpi} DPI{printArea.dpiAssumed ? " (assumed — set Print DPI on the product if this provider differs)" : ""}
+                  </span>
                 </>
               ) : (
                 <>
                   visible art fills ≈ {Math.round(fileFracW * contentFracW * 100)}% ×{" "}
                   {Math.round(fileFracH * contentFracH * 100)}% of the print area
-                  <span className="hint"> — set Print Area Width/Height (in) on the product to see inches</span>
                 </>
               )}
               {content && masterDims && (contentFracW < 0.98 || contentFracH < 0.98) ? (

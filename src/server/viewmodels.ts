@@ -331,6 +331,7 @@ export function productCards(): ProductCardData[] {
     providerName: str(p.props["Print Provider Name"]),
     maxW: num(p.props["Max Print Width px"]),
     maxH: num(p.props["Max Print Height px"]),
+    printDpi: num(p.props["Print DPI"]),
     ratios: str(p.props["Aspect Ratios"]),
     recompose: Boolean(p.props["Recomposition Flag"]),
     costMin: num(p.props["Base Cost Min"]),

@@ -95,8 +95,16 @@ export interface MockupsData {
   masterLink: string;
   /** how the design sits in the print region — default + per-variant */
   placement: PlacementMap;
-  /** the REAL print area: px from Printify, inches hand-set when known */
-  printArea: { wPx: number | null; hPx: number | null; wIn: number | null; hIn: number | null };
+  /** the REAL print area: px from Printify, inches derived as px / DPI */
+  printArea: {
+    wPx: number | null;
+    hPx: number | null;
+    wIn: number | null;
+    hIn: number | null;
+    dpi: number;
+    /** 300 was assumed because the product sets no Print DPI — readouts say so */
+    dpiAssumed: boolean;
+  };
 }
 
 type Verdict = "approved" | "flagged";

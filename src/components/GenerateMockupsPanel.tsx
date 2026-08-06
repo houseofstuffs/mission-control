@@ -1074,14 +1074,14 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               title={
                 unplacedToSend.length === 0
                   ? approvedToSend.length > 0
-                    ? "Everything approved here is already in a slot"
+                    ? "Everything approved here is already assigned to a slot"
                     : "Nothing approved yet"
                   : undefined
               }
               onClick={sendApproved}
             >
               <Spinner active={sendBusy} />
-              Send {unplacedToSend.length} new approved → image slots
+              Send {unplacedToSend.length} unassigned → image slots
             </button>
           </span>
         </div>

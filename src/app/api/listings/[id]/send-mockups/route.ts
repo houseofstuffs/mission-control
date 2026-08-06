@@ -114,7 +114,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (placedIn) {
         results.push({
           name,
-          detail: `already in slot ${slotPos(placedIn)} (${placedIn.title})`,
+          detail: `already assigned to slot ${slotPos(placedIn)} (${placedIn.title})`,
           ok: true,
           skipped: true,
         });

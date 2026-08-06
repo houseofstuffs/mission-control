@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cachedRecord, updateRecord, archiveRecord } from "@/server/notion/store";
 import { slotsForListing } from "@/server/imageSlots";
+import { generatedFor } from "@/server/mockup/plan";
 import type { SimpleValue } from "@/server/notion/props";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,37 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           );
         }
       }
+
+      // ONE action, ONE fact: the variant relation and the placed asset
+      // are two halves of "what image is this slot showing", and letting
+      // them move independently is what minted crossed pairs. Picking a
+      // variant RE-POINTS THE ASSET to that variant's render in the same
+      // write — and if no render exists yet, nothing is written at all.
+      const listingId = ((slot.props["Listing"] as string[] | null) ?? [])[0] ?? "";
+      const assetIsOurs = String(slot.props["Asset Ref"] ?? "").startsWith("/api/generated-mockups/");
+      if (body.mockupTemplateId) {
+        const variantId = String(body.mockupTemplateId);
+        const render = generatedFor(listingId, variantId);
+        if (!render) {
+          const tpl = cachedRecord(variantId);
+          return NextResponse.json(
+            {
+              error: `No render for "${tpl?.title ?? "that variant"}" yet — generate it at L4 first. Nothing was changed.`,
+            },
+            { status: 409 }
+          );
+        }
+        values["Asset Ref"] = `/api/generated-mockups/${render.id}/file`;
+        // a slot that now HAS an image can't honestly stay "Planned";
+        // every other status (Designing, Placed…) is the operator's
+        if (String(slot.props["Status"] ?? "") === "Planned") values["Status"] = "Made";
+      } else if (assetIsOurs) {
+        // clearing the variant clears OUR render with it — the halves
+        // stay in lockstep in both directions. Hand-pasted external
+        // links are the operator's and stay put.
+        values["Asset Ref"] = null;
+      }
+
       values["Mockup Template"] = body.mockupTemplateId ? [String(body.mockupTemplateId)] : [];
       // auto-fill shot type from the template unless the caller overrode it
       if (body.mockupTemplateId && body.shotType === undefined) {

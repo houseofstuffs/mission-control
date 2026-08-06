@@ -33,7 +33,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
-    const failing = publishGates(rec).filter((g) => !g.ok);
+    const failing = publishGates(rec).filter((g) => !g.ok && !g.advisory);
     if (failing.length > 0) {
       return NextResponse.json(
         { error: `${failing.length} publish gate${failing.length === 1 ? "" : "s"} failing — the push unlocks at all green. First: ${failing[0].label}` },

@@ -20,7 +20,11 @@ export const SHOT_TYPES = [
   "Artwork Only",      // design on flat/transparent bg, no garment
   "Flat Lay",          // garment laid flat, whole, no props
   "Flat Lay Styled",   // flat lay with props/scene
-  "On Model",          // worn by a person
+  // split so a listing can show BOTH and tell them apart; bare "On
+  // Model" remains a valid legacy value on existing records (Send
+  // matches by string equality, so legacy still pairs with legacy)
+  "On Model — Female", // worn by a female model
+  "On Model — Male",   // worn by a male model
   "Ghost Mannequin",   // invisible-mannequin form shot
   "Hanging",           // on hanger
   "Folded",            // folded/stacked
@@ -33,7 +37,14 @@ export const SHOT_TYPES = [
 ] as const;
 export type ShotType = (typeof SHOT_TYPES)[number];
 
-export const SLOT_STATUSES = ["Planned", "Made", "Placed"] as const;
+/**
+ * Planned → Source mockup → Designing → Made → Placed.
+ * "Source mockup" (red) = blocked on something external — a mockup set
+ * that has to be bought/imported before work can continue. "Designing"
+ * (amber) = actively in progress (a live Canva file). Both are purely
+ * informational: gates and readiness counts read Made/Placed only.
+ */
+export const SLOT_STATUSES = ["Planned", "Source mockup", "Designing", "Made", "Placed"] as const;
 export type SlotStatus = (typeof SLOT_STATUSES)[number];
 
 /** The three Product-level reusable graphics an L5 slot can pull from — exact match to the Notion select options on image_slots' "Product Link Role". */
@@ -56,17 +67,17 @@ export interface SeedSlot {
  * this is the default plan, not a quota. Position 1 is the search thumbnail.
  */
 export const SINGLE_SEED: SeedSlot[] = [
-  { position: 1, label: "hero — best-selling color", bucket: "Sell Design", shotType: "On Model" },
+  { position: 1, label: "hero — best-selling color", bucket: "Sell Design", shotType: "On Model — Female" },
   { position: 2, label: "artwork detail", bucket: "Sell Design", shotType: "Artwork Only" },
   { position: 3, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 4, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 5, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 6, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 7, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
-  { position: 8, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 8, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model — Female" },
   { position: 9, label: "lifestyle", bucket: "Sell Belief", shotType: "Lifestyle Scene" },
-  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
-  { position: 11, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model — Female" },
+  { position: 11, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model — Female" },
   { position: 12, label: "print detail", bucket: "Sell Belief", shotType: "Closeup Print" },
   { position: 13, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
   { position: 14, label: "objection", bucket: "Sell Belief", shotType: "Closeup Fabric" },
@@ -93,10 +104,10 @@ export const MULTI_SEED: SeedSlot[] = [
   { position: 6, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 7, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
   { position: 8, label: "colorway", bucket: "Sell Design", shotType: "Flat Lay" },
-  { position: 9, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
-  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
-  { position: 11, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model" },
-  { position: 12, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model" },
+  { position: 9, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model — Female" },
+  { position: 10, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model — Female" },
+  { position: 11, label: "lifestyle", bucket: "Sell Belief", shotType: "On Model — Female" },
+  { position: 12, label: "scale + fit", bucket: "Sell Belief", shotType: "On Model — Female" },
   { position: 13, label: "print detail", bucket: "Sell Belief", shotType: "Closeup Print" },
   { position: 14, label: "fabric detail", bucket: "Sell Belief", shotType: "Closeup Fabric" },
   { position: 15, label: "personalisation — how to submit custom text", bucket: "Sell Specifics", shotType: "Graphic Card" },

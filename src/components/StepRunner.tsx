@@ -34,7 +34,7 @@ export interface RunnerRecord {
   workflowKey: "creative" | "listing";
   current: string;
   steps: Record<string, { status: StepStatus; note?: string; at?: string }>;
-  gates?: Array<{ label: string; ok: boolean; fixStep?: string; attest?: string }>;
+  gates?: Array<{ label: string; ok: boolean; fixStep?: string; attest?: string; advisory?: boolean }>;
   /** step id → why "done" is blocked; enforced server-side too */
   blockedDone?: Record<string, string>;
 }
@@ -142,7 +142,10 @@ export function StepRunner({
   // L6's card speaks in live gate counts — the step IS the panel, so its
   // NEEDS line and status bar read from the same list the panel renders
   const gateList = record.gates ?? [];
-  const failingGates = gateList.filter((g) => !g.ok);
+  // advisory rows inform (amber) but never fail, block, or join counts
+  const hardGates = gateList.filter((g) => !g.advisory);
+  const advisories = gateList.filter((g) => g.advisory);
+  const failingGates = hardGates.filter((g) => !g.ok);
   const isGateStep = record.workflowKey === "listing" && selected.id === "L6";
 
   return (
@@ -217,7 +220,7 @@ export function StepRunner({
               {isGateStep && gateList.length > 0 ? (
                 // live, not boilerplate: the count and the fix path
                 <div className="body-sm" style={{ marginTop: 8 }}>
-                  All <strong>{gateList.length} gates</strong> in the panel must pass.
+                  All <strong>{hardGates.length} gates</strong> in the panel must pass.
                   {failingGates.length > 0 ? (
                     <>
                       {" "}
@@ -255,11 +258,11 @@ export function StepRunner({
               {failingGates.length > 0 ? (
                 <>
                   ⛔ <strong>{failingGates.length} gate{failingGates.length === 1 ? "" : "s"} failing</strong>{" "}
-                  — Mark step done unlocks when all {gateList.length} are green.
+                  — Mark step done unlocks when all {hardGates.length} are green.
                 </>
               ) : (
                 <>
-                  ✓ <strong>All {gateList.length} gates passing</strong> — this listing is
+                  ✓ <strong>All {hardGates.length} gates passing</strong> — this listing is
                   publish-ready. Mark step done to hand off to Push draft.
                 </>
               )}
@@ -452,7 +455,7 @@ export function StepRunner({
             </div>
             {record.workflowKey === "listing" && gateList.length > 0 ? (
               <div className="hint" style={{ margin: "0 2px 8px" }}>
-                {gateList.length - failingGates.length} of {gateList.length} passing
+                {hardGates.length - failingGates.length} of {hardGates.length} passing
                 {failingGates.some((g) => g.fixStep)
                   ? " · red gates are buttons — click to fix"
                   : ""}
@@ -462,7 +465,20 @@ export function StepRunner({
               <div className="gate-item ok">Nothing failing right now.</div>
             ) : (
               gateList.map((g) =>
-                !g.ok && g.attest ? (
+                g.advisory ? (
+                  // amber advisory — informs, never blocks; still jumps
+                  <button
+                    key={g.label}
+                    type="button"
+                    className="gate-item gate-jump"
+                    style={{ color: "var(--status-stale, #b8792a)" }}
+                    onClick={() => g.fixStep && setSelectedId(g.fixStep)}
+                    title={g.fixStep ? `Advisory — never blocks. Jump to ${g.fixStep}.` : "Advisory — never blocks."}
+                  >
+                    <span style={{ flex: 1, textAlign: "left" }}>⚠ {g.label}</span>
+                    {g.fixStep ? <span className="gate-fix">{g.fixStep}</span> : null}
+                  </button>
+                ) : !g.ok && g.attest ? (
                   // a self-attestation: the fix IS a claim, so the gate row
                   // takes it directly instead of jumping somewhere with
                   // nothing to act on

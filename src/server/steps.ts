@@ -156,7 +156,7 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
       // The general rule the specific messages above are instances of: L6
       // is a checkpoint, and a checkpoint marked done while red is a lie.
       // Same list the gate panel renders — one source, no drift.
-      const failing = publishGates(rec).filter((g) => !g.ok);
+      const failing = publishGates(rec).filter((g) => !g.ok && !g.advisory);
       if (failing.length > 0) {
         return `${failing.length} publish gate${failing.length === 1 ? "" : "s"} failing — all must pass. First: ${failing[0].label}`;
       }

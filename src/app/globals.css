@@ -675,6 +675,12 @@ a:hover { color: var(--candy); }
 .l5-status .d { width: 8px; height: 8px; border-radius: 50%; }
 .l5-status.st-planned { background: #efeae0; color: #8b8275; }
 .l5-status.st-planned .d { background: #8b8275; }
+/* blocked on something external — a mockup set to buy and import */
+.l5-status.st-source { background: #f6d9d4; color: #a53c2e; }
+.l5-status.st-source .d { background: #a53c2e; }
+/* actively in progress — a live Canva file, not just planned */
+.l5-status.st-designing { background: #fbe9c6; color: #b8792a; }
+.l5-status.st-designing .d { background: #b8792a; }
 .l5-status.st-made { background: #f6e7c4; color: #9a6e12; }
 .l5-status.st-made .d { background: #9a6e12; }
 .l5-status.st-placed { background: #dceddf; color: #3e7a4e; }

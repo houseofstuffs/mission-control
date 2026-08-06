@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
+import { GalleryPreviewModal } from "./GalleryPreviewModal";
 import {
   BUCKETS,
   SHOT_TYPES,
@@ -85,6 +86,8 @@ function ProvenanceChip({ slot }: { slot: SlotRow }) {
 /** the comp's three status tints, by real status value */
 const STATUS_CLASS: Record<string, string> = {
   Planned: "st-planned",
+  "Source mockup": "st-source",
+  Designing: "st-designing",
   Made: "st-made",
   Placed: "st-placed",
 };
@@ -158,7 +161,9 @@ function OverflowMenu({
   canUp,
   canDown,
   bucket,
+  role,
   onBucket,
+  onRole,
   onMove,
   onDelete,
 }: {
@@ -166,7 +171,10 @@ function OverflowMenu({
   canUp: boolean;
   canDown: boolean;
   bucket: string;
+  /** current graphic-card role ("" = not a graphic card) */
+  role: string;
   onBucket: (b: string) => void;
+  onRole: (r: string) => void;
   onMove: (dir: "up" | "down") => void;
   onDelete: () => void;
 }) {
@@ -203,6 +211,26 @@ function OverflowMenu({
               >
                 {b === bucket ? "✓ " : "   "}
                 {b}
+              </button>
+            ))}
+            <span className="kicker" style={{ padding: "2px 8px", marginTop: 2 }}>GRAPHIC ROLE</span>
+            {[
+              ["", "not a graphic card"],
+              ["Highlights & Sizing", "size chart"],
+              ["Care & Policies", "care info"],
+              ["Colorways", "colorways"],
+            ].map(([value, label]) => (
+              <button
+                key={value || "none"}
+                className="btn btn-tertiary"
+                style={item}
+                onClick={() => {
+                  setOpen(false);
+                  if (value !== role) onRole(value);
+                }}
+              >
+                {value === role ? "✓ " : "   "}
+                {label}
               </button>
             ))}
             <span className="kicker" style={{ padding: "2px 8px", marginTop: 2 }}>ORDER</span>
@@ -384,6 +412,8 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
   // ---- colorway slots ↔ the listing's current mockup colours ----
   const [colorwayNote, setColorwayNote] = useState<string | null>(null);
+  /** the buyer's-eye pass — L5's slots as a full-screen carousel */
+  const [previewOpen, setPreviewOpen] = useState(false);
   async function refreshColorways() {
     setBusy("colorways");
     setError(null);
@@ -407,6 +437,24 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
   const patch = (id: string, body: Record<string, unknown>) =>
     call(id, `/api/image-slots/${id}`, "PATCH", body);
+
+  // duplicate-use detection: the same file behind two slots — flagged on
+  // BOTH rows, and an advisory line in the publish-gate panel
+  const dupSlots = (() => {
+    const byRef = new Map<string, number[]>();
+    for (const sl of data.slots) {
+      const ref = sl.assetRef.split("?")[0].trim();
+      if (!ref) continue;
+      byRef.set(ref, [...(byRef.get(ref) ?? []), sl.position]);
+    }
+    const out = new Map<string, number[]>();
+    for (const sl of data.slots) {
+      const ref = sl.assetRef.split("?")[0].trim();
+      const positions = ref ? byRef.get(ref) ?? [] : [];
+      if (positions.length > 1) out.set(sl.id, positions.filter((pp) => pp !== sl.position));
+    }
+    return out;
+  })();
 
   const filled = data.slots.filter((s) => s.status === "Made" || s.status === "Placed");
   const placed = data.slots.filter((s) => s.status === "Placed");
@@ -563,6 +611,14 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
             </span>
             <span className="row-gap-8" style={{ flexWrap: "wrap" }}>
               <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                title="View the gallery in slot order, the way a buyer scrolls it"
+                onClick={() => setPreviewOpen(true)}
+              >
+                ▶ Preview gallery
+              </button>
+              <button
                 className="btn btn-tertiary"
                 style={{ fontSize: 12, padding: "4px 12px" }}
                 disabled={busy !== null}
@@ -630,6 +686,9 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                         const open = expandedIds.has(s.id);
                         const i = data.slots.findIndex((x) => x.id === s.id);
                         const isGraphic = Boolean(s.productLinkRole);
+                        // graphic cards don't come from templates — their
+                        // controls collapse to label + role + link
+                        const isGraphicish = isGraphic || s.shotType === "Graphic Card";
                         return (
                           <div
                             key={s.id}
@@ -686,7 +745,11 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                 {isGraphic ? (
                                   // the graphic-card slots are handled-or-missing, never
                                   // per-listing work — say which, in their own voice
-                                  s.provenance === "product" ? (
+                                  <>
+                                  <span className="l5-tag" title="Graphic-card role — the publish gate counts role-carrying slots; change it via ⋯">
+                                    {s.productLinkRole === "Highlights & Sizing" ? "size chart" : s.productLinkRole === "Care & Policies" ? "care info" : "colorways"}
+                                  </span>
+                                  {s.provenance === "product" ? (
                                     <span className="l5-fromprod">✓ Pulled from Product record</span>
                                   ) : s.provenance === "custom" ? (
                                     <span className="l5-fromprod" title={`Hand-replaced — no longer matches the Product's ${s.productLinkRole} graphic`}>
@@ -694,7 +757,8 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                     </span>
                                   ) : (
                                     <span className="l5-fromprod warn">⚠ Not in Product yet — add it there</span>
-                                  )
+                                  )}
+                                  </>
                                 ) : (
                                   <>
                                     <span className="l5-tag">{s.shotType || "no shot type"}</span>
@@ -713,6 +777,11 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                         open ↗
                                       </a>
                                     ) : null}
+                                    {dupSlots.has(s.id) ? (
+                                      <span className="l5-tag" style={{ background: "#f6e7c8", color: "#8a5f14" }} title="The same image is in more than one gallery slot">
+                                        ⚠ also in slot {dupSlots.get(s.id)!.join(" & ")}
+                                      </span>
+                                    ) : null}
                                   </>
                                 )}
                               </div>
@@ -722,7 +791,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   style={{ flexWrap: "wrap", alignItems: "center", marginTop: 8 }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
-                                  {!s.colour ? (
+                                  {!s.colour && !isGraphicish ? (
                                     <select
                                       className="select input-compact"
                                       style={{ width: 150 }}
@@ -731,15 +800,18 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                       onChange={(e) => patch(s.id, { shotType: e.target.value })}
                                     >
                                       <option value="">Shot type…</option>
+                                      {s.shotType && !(SHOT_TYPES as readonly string[]).includes(s.shotType) ? (
+                                        <option value={s.shotType}>{s.shotType} (legacy)</option>
+                                      ) : null}
                                       {SHOT_TYPES.map((t) => <option key={t}>{t}</option>)}
                                     </select>
                                   ) : null}
-                                  {s.colour ? (
+                                  {s.colour && !isGraphicish ? (
                                     <span className="chip neutral" style={{ fontSize: 10 }} title="This slot's own colour — the shot picker auto-selects this colour's variant">
                                       {s.colour}
                                     </span>
                                   ) : null}
-                                  {s.colour ? (
+                                  {isGraphicish ? null : s.colour ? (
                                     // a coloured slot decides the COLOUR itself — the
                                     // operator picks the SHOT, and the matching-colour
                                     // variant is selected for them. No way to cross
@@ -816,22 +888,6 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                       }}
                                     />
                                   )}
-                                  {/* the gate reads role-carrying slots and ONLY those — a
-                                      hand-added size chart without the role stayed invisible
-                                      to "Graphic card: size chart" forever. Settable here. */}
-                                  <select
-                                    className="select input-compact"
-                                    style={{ width: 190 }}
-                                    value={s.productLinkRole ?? ""}
-                                    disabled={busy !== null}
-                                    title="Marks this slot as one of the three graphic cards — the publish gate counts role-carrying slots"
-                                    onChange={(e) => patch(s.id, { productLinkRole: e.target.value })}
-                                  >
-                                    <option value="">not a graphic card</option>
-                                    <option value="Highlights & Sizing">graphic: size chart</option>
-                                    <option value="Care & Policies">graphic: care info</option>
-                                    <option value="Colorways">graphic: colorways</option>
-                                  </select>
                                 </div>
                               ) : null}
                               {open && s.assetVariantId && s.templateId !== s.assetVariantId ? (
@@ -868,7 +924,9 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                 canUp={i > 0}
                                 canDown={i < data.slots.length - 1}
                                 bucket={s.bucket}
+                                role={s.productLinkRole ?? ""}
                                 onBucket={(bk) => patch(s.id, { bucket: bk })}
+                                onRole={(r) => patch(s.id, { productLinkRole: r })}
                                 onMove={(dir) => patch(s.id, { move: dir })}
                                 onDelete={() => {
                                   if (window.confirm(`Delete slot ${s.position} (${s.label})?`)) {
@@ -971,6 +1029,14 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
           ) : null}
         </>
       )}
+      {previewOpen ? (
+        <GalleryPreviewModal
+          onClose={() => setPreviewOpen(false)}
+          slides={[...data.slots]
+            .sort((a, b) => a.position - b.position)
+            .map((sl) => ({ position: sl.position, label: sl.label, status: sl.status, assetRef: sl.assetRef }))}
+        />
+      ) : null}
       {debugPointer ? (
         // ?pointerdebug — screengrab this while attempting a drag; it
         // shows exactly which pointer events the device delivers and

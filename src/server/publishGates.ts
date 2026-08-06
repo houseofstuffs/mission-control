@@ -25,6 +25,9 @@ export interface PublishGate {
    *  claim, not work in another step, so jumping anywhere would be a
    *  dead end. Names the PATCH field the confirm button flips. */
   attest?: "trademarkScreened";
+  /** advisory rows inform but never block — the push route and the step
+   *  engine skip them, and the panel styles them amber, not red */
+  advisory?: boolean;
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -170,6 +173,31 @@ export function publishGates(rec: SimpleRecord): PublishGate[] {
   // the L2 keyword workflow guarantees visibility keywords land in the
   // tags, so the gate never failed and was pure panel noise. All counts
   // downstream derive from gates.length, so nothing else changes.
+
+  // ADVISORY: the same image in two gallery slots. Easy to do while
+  // reassigning by hand, never what a buyer should see — but a warning,
+  // not a block, by operator call. Only appears when duplicates exist.
+  const slotsOfListing = cachedRecords("image_slots").filter((s) =>
+    rel(s.props["Listing"]).includes(rec.id)
+  );
+  const byAsset = new Map<string, number[]>();
+  for (const s of slotsOfListing) {
+    // compare by the stable route, version params stripped — the same
+    // render behind two slots is a duplicate however it's linked
+    const ref = str(s.props["Asset Ref"]).split("?")[0].trim();
+    if (!ref) continue;
+    byAsset.set(ref, [...(byAsset.get(ref) ?? []), Number(s.props["Position"]) || 0]);
+  }
+  for (const positions of byAsset.values()) {
+    if (positions.length > 1) {
+      gates.push({
+        label: `Duplicate gallery image — slots ${positions.sort((a, b) => a - b).join(" & ")} show the same file.`,
+        ok: false,
+        advisory: true,
+        fixStep: "L5",
+      });
+    }
+  }
 
   return gates;
 }

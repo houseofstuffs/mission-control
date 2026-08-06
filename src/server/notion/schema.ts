@@ -258,9 +258,10 @@ export const SCHEMA: DbSpec[] = [
       "Shot Type": {
         type: "select",
         options: [
-          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
-          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
-          "Grid Composite", "Graphic Card", "Video",
+          "Artwork Only", "Flat Lay", "Flat Lay Styled",
+          "On Model — Female", "On Model — Male", "On Model", // bare On Model = legacy
+          "Ghost Mannequin", "Hanging", "Folded", "Closeup Print", "Closeup Fabric",
+          "Lifestyle Scene", "Grid Composite", "Graphic Card", "Video",
         ],
       },
       // The cropped sample the geometry was drawn on, preview-sized. Kept
@@ -342,9 +343,10 @@ export const SCHEMA: DbSpec[] = [
       "Shot Type": {
         type: "select",
         options: [
-          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
-          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
-          "Grid Composite", "Graphic Card", "Video",
+          "Artwork Only", "Flat Lay", "Flat Lay Styled",
+          "On Model — Female", "On Model — Male", "On Model", // bare On Model = legacy
+          "Ghost Mannequin", "Hanging", "Folded", "Closeup Print", "Closeup Fabric",
+          "Lifestyle Scene", "Grid Composite", "Graphic Card", "Video",
         ],
       },
       Notes: { type: "rich_text" },
@@ -745,12 +747,13 @@ export const SCHEMA: DbSpec[] = [
       "Shot Type": {
         type: "select",
         options: [
-          "Artwork Only", "Flat Lay", "Flat Lay Styled", "On Model", "Ghost Mannequin",
-          "Hanging", "Folded", "Closeup Print", "Closeup Fabric", "Lifestyle Scene",
-          "Grid Composite", "Graphic Card", "Video",
+          "Artwork Only", "Flat Lay", "Flat Lay Styled",
+          "On Model — Female", "On Model — Male", "On Model", // bare On Model = legacy
+          "Ghost Mannequin", "Hanging", "Folded", "Closeup Print", "Closeup Fabric",
+          "Lifestyle Scene", "Grid Composite", "Graphic Card", "Video",
         ],
       },
-      Status: { type: "select", options: ["Planned", "Made", "Placed"] },
+      Status: { type: "select", options: ["Planned", "Source mockup", "Designing", "Made", "Placed"] },
       // The COLOUR a slot is for — set on the per-colour colorway slots the
       // seed derives from Mockup Colours ("colorway — espresso" carries
       // "Espresso"). Send matches on it: a render only lands in a coloured

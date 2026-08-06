@@ -7,7 +7,7 @@
  * coverage hint shows both so "twelve flat lays and nothing on a model" is
  * visible at a glance. Advisory throughout; only the publish gates block.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
@@ -334,6 +334,32 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     setBusy(null);
   }
 
+  // ---- optimistic order: the row settles the moment the pen lifts ----
+  // The reorder write is several Notion round-trips; waiting for
+  // router.refresh() left the dropped row sitting in its OLD spot for a
+  // beat or two. On drop the view reorders immediately from this
+  // override (positions renumbered, bucket applied); fresh server props
+  // are the reconciliation and clear it — and a failed write clears it
+  // too, snapping the row back beside its named error.
+  const [pendingOrder, setPendingOrder] = useState<{
+    ids: string[];
+    bucket?: { slotId: string; bucket: string };
+  } | null>(null);
+  useEffect(() => setPendingOrder(null), [data.slots]);
+  const slots = useMemo(() => {
+    if (!pendingOrder) return data.slots;
+    const byId = new Map(data.slots.map((s) => [s.id, s]));
+    const ordered = pendingOrder.ids
+      .map((sid) => byId.get(sid))
+      .filter((s): s is (typeof data.slots)[number] => Boolean(s));
+    for (const s of data.slots) if (!pendingOrder.ids.includes(s.id)) ordered.push(s);
+    return ordered.map((s, i) => ({
+      ...s,
+      position: i + 1,
+      bucket: pendingOrder.bucket?.slotId === s.id ? pendingOrder.bucket.bucket : s.bucket,
+    }));
+  }, [data.slots, pendingOrder]);
+
   // ---- drag-to-reorder: pointer-based (pen and finger, no hover), the
   // grip is the handle so row-click still expands. Position renumbers on
   // drop; dropping among another bucket's rows re-buckets too. The ⋯
@@ -350,8 +376,8 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   // with the error callout scrolled far above the drop. One stray slot
   // = drag silently dead across the whole panel.
   const displayedOrder = () => [
-    ...BUCKETS.flatMap((b) => data.slots.filter((s) => s.bucket === b)),
-    ...data.slots.filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket)),
+    ...BUCKETS.flatMap((b) => slots.filter((s) => s.bucket === b)),
+    ...slots.filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket)),
   ];
 
   const dragIdRef = useRef<string | null>(null); // mirror for the debug listeners
@@ -405,7 +431,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
       const ids = displayedOrder().map((s) => s.id).filter((x) => x !== dragged);
       const idx = drop.beforeId ? ids.indexOf(drop.beforeId) : ids.length;
       ids.splice(idx, 0, dragged);
-      const draggedSlot = data.slots.find((s) => s.id === dragged);
+      const draggedSlot = slots.find((s) => s.id === dragged);
       // never re-bucket INTO an unknown bucket — dropping below the stray
       // section reorders only
       const bucketChange =
@@ -420,6 +446,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
       // direct call, not call(): the row needs the OUTCOME, not just a
       // refresh — reorder's error also lands here, where the pen is,
       // instead of only in the callout scrolled off the top
+      setPendingOrder({ ids, bucket: bucketChange }); // settle the row NOW; the write catches up
       setBusy("reorder");
       setError(null);
       const res = await apiJson<{ writes?: number }>(`/api/listings/${data.listingId}/slots-reorder`, "POST", {
@@ -427,6 +454,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
         bucketChange,
       });
       if (!res.ok) {
+        setPendingOrder(null); // snap back beside the named error
         setError(res.error);
         setDropNote({ slotId: dragged, ok: false, text: `reorder failed — ${res.error}` });
         logPointer(`reorder FAILED: ${res.error}`);
@@ -485,13 +513,13 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   // BOTH rows, and an advisory line in the publish-gate panel
   const dupSlots = (() => {
     const byRef = new Map<string, number[]>();
-    for (const sl of data.slots) {
+    for (const sl of slots) {
       const ref = sl.assetRef.split("?")[0].trim();
       if (!ref) continue;
       byRef.set(ref, [...(byRef.get(ref) ?? []), sl.position]);
     }
     const out = new Map<string, number[]>();
-    for (const sl of data.slots) {
+    for (const sl of slots) {
       const ref = sl.assetRef.split("?")[0].trim();
       const positions = ref ? byRef.get(ref) ?? [] : [];
       if (positions.length > 1) out.set(sl.id, positions.filter((pp) => pp !== sl.position));
@@ -499,9 +527,9 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
     return out;
   })();
 
-  const filled = data.slots.filter((s) => s.status === "Made" || s.status === "Placed");
-  const placed = data.slots.filter((s) => s.status === "Placed");
-  const attention = data.slots.filter((s) => s.status !== "Placed");
+  const filled = slots.filter((s) => s.status === "Made" || s.status === "Placed");
+  const placed = slots.filter((s) => s.status === "Placed");
+  const attention = slots.filter((s) => s.status !== "Placed");
 
   // Offer colour-neutral templates always; colour-tagged ones only when the
   // colour survives the full intersection (sold/mockup-colors ∩ an
@@ -521,7 +549,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
   // shot-type spread — the second axis the coverage header doesn't show
   const shotCounts = new Map<string, number>();
-  for (const s of data.slots) {
+  for (const s of slots) {
     if (s.shotType) shotCounts.set(s.shotType, (shotCounts.get(s.shotType) ?? 0) + 1);
   }
   const shotLine = [...shotCounts.entries()]
@@ -532,7 +560,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
   return (
     <div className="card supporting">
       <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-        <Kicker>IMAGE SLOTS · {filled.length} FILLED / {data.slots.length} PLANNED (CAP {MAX_IMAGES})</Kicker>
+        <Kicker>IMAGE SLOTS · {filled.length} FILLED / {slots.length} PLANNED (CAP {MAX_IMAGES})</Kicker>
         <div className="row-gap-12" style={{ alignItems: "center" }}>
           {data.hasProductLinks ? (
             <button
@@ -589,7 +617,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
         </div>
       ) : null}
 
-      {data.slots.length === 0 ? (
+      {slots.length === 0 ? (
         <div className="stack-12">
           <div className="body-sm muted">
             No slot plan yet. Seeding lays out the default allocation for a
@@ -613,12 +641,12 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
               bar per bucket, in the bucket's own accent colour */}
           <div className="l5-coverage">
             <div className="l5-cov-total">
-              <span className="big">{placed.length}/{data.slots.length}</span>
+              <span className="big">{placed.length}/{slots.length}</span>
               <span className="kicker">PLACED</span>
             </div>
             <div className="l5-cov-buckets">
               {BUCKETS.map((b) => {
-                const inBucket = data.slots.filter((s) => s.bucket === b);
+                const inBucket = slots.filter((s) => s.bucket === b);
                 if (inBucket.length === 0) return null;
                 const done = inBucket.filter((s) => s.status === "Placed").length;
                 return (
@@ -696,7 +724,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
 
           <div ref={listRef} className="stack-12" style={{ gap: 10 }}>
             {BUCKETS.map((b) => {
-              const inBucket = data.slots.filter((s) => s.bucket === b);
+              const inBucket = slots.filter((s) => s.bucket === b);
               if (inBucket.length === 0) return null;
               const done = inBucket.filter((s) => s.status === "Placed").length;
               const isCollapsed = collapsed.has(b);
@@ -727,7 +755,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                   {!isCollapsed
                     ? visible.map((s) => {
                         const open = expandedIds.has(s.id);
-                        const i = data.slots.findIndex((x) => x.id === s.id);
+                        const i = slots.findIndex((x) => x.id === s.id);
                         const isGraphic = Boolean(s.productLinkRole);
                         // graphic cards don't come from templates — their
                         // controls collapse to label + role + link
@@ -973,7 +1001,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                               <OverflowMenu
                                 disabled={busy !== null}
                                 canUp={i > 0}
-                                canDown={i < data.slots.length - 1}
+                                canDown={i < slots.length - 1}
                                 bucket={s.bucket}
                                 role={s.productLinkRole ?? ""}
                                 onBucket={(bk) => patch(s.id, { bucket: bk })}
@@ -1003,7 +1031,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                 (leaving them out made EVERY drag 409) and dragging one into
                 a bucket re-buckets it — the repair path for exactly the
                 data that broke the drag. */}
-            {data.slots
+            {slots
               .filter((s) => !(BUCKETS as readonly string[]).includes(s.bucket))
               .map((s) => (
                 <div
@@ -1059,7 +1087,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
               ["Colorways", "colorways", "🎨"],
             ] as const
           )
-            .filter(([role]) => !data.slots.some((s) => s.productLinkRole === role))
+            .filter(([role]) => !slots.some((s) => s.productLinkRole === role))
             .map(([role, label, icon]) => (
               <div key={role} className="l5-slot graphic" style={{ borderLeftColor: "#B4741F" }}>
                 <span className="ord">—</span>
@@ -1080,7 +1108,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                   <button
                     className="btn btn-secondary"
                     style={{ fontSize: 12, padding: "4px 12px" }}
-                    disabled={busy !== null || data.slots.length >= MAX_IMAGES}
+                    disabled={busy !== null || slots.length >= MAX_IMAGES}
                     onClick={() =>
                       call("re-add", "/api/image-slots", "POST", {
                         listingId: data.listingId,
@@ -1098,7 +1126,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
               </div>
             ))}
 
-          {data.slots.length < MAX_IMAGES ? (
+          {slots.length < MAX_IMAGES ? (
             <div className="row-gap-12">
               <button
                 className="btn btn-tertiary"
@@ -1107,7 +1135,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
               >
                 + Add a slot
               </button>
-              <span className="hint">{MAX_IMAGES - data.slots.length} of the cap unplanned (buffer is fine)</span>
+              <span className="hint">{MAX_IMAGES - slots.length} of the cap unplanned (buffer is fine)</span>
             </div>
           ) : null}
         </>
@@ -1115,7 +1143,7 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
       {previewOpen ? (
         <GalleryPreviewModal
           onClose={() => setPreviewOpen(false)}
-          slides={[...data.slots]
+          slides={[...slots]
             .sort((a, b) => a.position - b.position)
             .map((sl) => ({ id: sl.id, position: sl.position, label: sl.label, status: sl.status, assetRef: sl.assetRef }))}
         />

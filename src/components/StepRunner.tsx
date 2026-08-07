@@ -383,7 +383,9 @@ export function StepRunner({
         {record.workflowKey === "listing" && selected.id === "L7" && push ? (
           <PushDraftPanel
             data={push}
-            gates={gateList}
+            /* HARD gates only — advisories (amber, e.g. duplicate-image)
+               inform in the rail but must never hold the push hostage */
+            gates={hardGates}
             busyOutside={busy}
             onJump={setSelectedId}
             onAttest={attest}

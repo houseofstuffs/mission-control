@@ -22,7 +22,7 @@
  */
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Kicker, Spinner } from "./ui";
+import { Kicker, Spinner, Tag } from "./ui";
 import { apiJson } from "@/lib/api";
 import { computeMargin, SALE_TIERS, offsiteAds } from "@/config/fees";
 
@@ -55,17 +55,14 @@ export interface PushGateView {
 
 const SHOP_MANAGER_URL = "https://www.etsy.com/your/shops/me/tools/listings";
 
+/** The ownership tag IS the edit control: "(L5 ✎)" in the header jumps
+ *  to the owning step — no separate right-aligned button. */
 function Owner({ label, step, onJump }: { label: string; step: string; onJump: (s: string) => void }) {
   return (
-    <div className="row-gap-8" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
-      <span className="kicker" style={{ fontSize: 10 }}>{label} · OWNED BY {step}</span>
-      <button
-        type="button"
-        className="btn btn-tertiary"
-        style={{ fontSize: 11, padding: "1px 8px" }}
-        onClick={() => onJump(step)}
-      >
-        edit at {step} →
+    <div className="kicker" style={{ fontSize: 11 }}>
+      {label}{" "}
+      <button type="button" className="owner-jump" title={`Edit at ${step}`} onClick={() => onJump(step)}>
+        ({step} ✎)
       </button>
     </div>
   );
@@ -248,20 +245,11 @@ export function PushDraftPanel({
         <Owner label={`IMAGES · ${data.gallery.length} SLOTS FILLED, PUSHED IN THIS ORDER`} step="L5" onJump={onJump} />
         <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
           {data.gallery.map((s, i) => (
-            <span
-              key={s.position}
-              className="chip"
-              style={{
-                fontSize: 11,
-                background: s.isGraphic ? "#EFE6CF" : "var(--surface-sunk, #f4efe2)",
-                fontWeight: 600,
-              }}
-              title={s.label}
-            >
+            <Tag key={s.position} gold={s.isGraphic} title={s.label}>
               {i === 0 ? "★ " : ""}
               {s.position} · {s.label}
               {i === 0 ? " · THUMBNAIL" : ""}
-            </span>
+            </Tag>
           ))}
           {data.gallery.length === 0 ? <span className="hint">no filled slots</span> : null}
         </div>
@@ -313,7 +301,7 @@ export function PushDraftPanel({
         <Owner label={`TAGS · ${data.tags.length}/13`} step="L2" onJump={onJump} />
         <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
           {data.tags.map((t) => (
-            <span key={t} className="chip count" style={{ fontSize: 11 }}>{t}</span>
+            <Tag key={t}>{t}</Tag>
           ))}
         </div>
       </div>

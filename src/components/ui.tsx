@@ -74,6 +74,15 @@ export function Kicker({ children }: { children: ReactNode }) {
   return <div className="kicker">{children}</div>;
 }
 
+/** The quiet pill (L5's row tag, promoted). `gold` marks graphic cards — a fill, never a stroke. */
+export function Tag({ children, gold, title }: { children: ReactNode; gold?: boolean; title?: string }) {
+  return (
+    <span className={`tag${gold ? " gold" : ""}`} title={title}>
+      {children}
+    </span>
+  );
+}
+
 /**
  * Spinner that always occupies its space — hidden when idle rather than
  * unmounted, so a button never changes width the moment it starts working.

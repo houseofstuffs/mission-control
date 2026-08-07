@@ -660,7 +660,27 @@ a:hover { color: var(--candy); }
 .l5-slot .mid { min-width: 0; }
 .l5-slot .nm { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .l5-slot .meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
-.l5-tag { font-size: 11px; padding: 2px 9px; border-radius: 20px; background: #f2ece0; color: #7c7361; font-weight: 600; white-space: nowrap; }
+/* the ONE quiet-pill primitive — promoted from L5's row tags so the L7
+   preview (image pills + tag pills) reads as the same component. No
+   border anywhere; the gold variant is a FILL, and it's how graphic
+   cards stay legible without the old stroke. */
+.tag,
+.l5-tag { font-size: 11px; padding: 2px 9px; border-radius: 20px; background: #f2ece0; color: #7c7361; font-weight: 600; white-space: nowrap; border: none; }
+.tag.gold { background: #efe3bd; color: #8a6d1c; }
+
+/* the "(L5 ✎)" in a preview section header — the ownership tag IS the
+   edit control, one clickable target inside the kicker line */
+.owner-jump {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--blueberry, #1f4897);
+  cursor: pointer;
+  text-transform: none;
+}
+.owner-jump:hover { text-decoration: underline; }
 .l5-asset { font-size: 11.5px; color: var(--text-secondary, #8b8275); }
 .l5-asset.has { color: #3e7a4e; font-weight: 600; }
 .l5-right { display: flex; align-items: center; gap: 10px; }

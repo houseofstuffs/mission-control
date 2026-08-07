@@ -360,6 +360,163 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setGridBusy(false);
   }
 
+  // ---- print close-up: zoom into a render's PRINT REGION ----
+  interface CuPreset { key: string; label: string; outPx: number; ok: boolean; reason: string | null }
+  const [cuPicked, setCuPicked] = useState<string | null>(null); // generatedId
+  const [cuOpts, setCuOpts] = useState<{ sourcePx: number; presets: CuPreset[] } | null>(null);
+  const [cuTightness, setCuTightness] = useState<string>("");
+  const [cuBusy, setCuBusy] = useState(false);
+  const [cuError, setCuError] = useState<string | null>(null);
+  const [cuNote, setCuNote] = useState<string | null>(null);
+  const [cuStaged, setCuStaged] = useState<{
+    recordId: string; url: string; source: string; colour: string; tightness: string; outPx: number; hasSlot: boolean;
+  } | null>(null);
+
+  async function pickCloseupTile(generatedId: string) {
+    if (cuPicked === generatedId) { setCuPicked(null); setCuOpts(null); return; }
+    setCuPicked(generatedId);
+    setCuOpts(null);
+    setCuError(null);
+    setCuBusy(true);
+    const res = await apiJson<{ sourcePx?: number; presets?: CuPreset[] }>(
+      `/api/listings/${data.listingId}/print-closeup`, "POST", { optionsFor: generatedId });
+    if (!res.ok) setCuError(res.error);
+    else {
+      const presets = res.data.presets ?? [];
+      setCuOpts({ sourcePx: res.data.sourcePx ?? 0, presets });
+      // default to the middle setting when it's honest, else the widest honest one
+      const pick = presets.find((p) => p.key === "mid" && p.ok) ?? presets.find((p) => p.ok);
+      setCuTightness(pick?.key ?? "");
+    }
+    setCuBusy(false);
+  }
+
+  async function buildCloseup() {
+    if (!cuPicked || !cuTightness) return;
+    setCuBusy(true);
+    setCuError(null);
+    setCuNote(null);
+    const res = await apiJson<{
+      recordId?: string; url?: string; source?: string; colour?: string; tightness?: string; outPx?: number; hasSlot?: boolean;
+    }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { generatedId: cuPicked, tightness: cuTightness }, 240_000);
+    if (!res.ok) setCuError(res.error);
+    else setCuStaged({
+      recordId: res.data.recordId!, url: res.data.url!, source: res.data.source ?? "render",
+      colour: res.data.colour ?? "", tightness: res.data.tightness ?? cuTightness,
+      outPx: res.data.outPx ?? 0, hasSlot: res.data.hasSlot ?? true,
+    });
+    setCuBusy(false);
+  }
+
+  async function assignCloseup() {
+    if (!cuStaged) return;
+    setCuBusy(true);
+    const res = await apiJson<{ slot?: { position: number; label: string } }>(
+      `/api/listings/${data.listingId}/print-closeup`, "POST", { assignRecordId: cuStaged.recordId });
+    if (!res.ok) setCuError(res.error);
+    else {
+      setCuNote(
+        `✓ print close-up placed — from ${cuStaged.source} (${cuStaged.colour}) · ${cuStaged.tightness} crop · ${cuStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "closeup"})`
+      );
+      setCuStaged(null);
+      router.refresh();
+    }
+    setCuBusy(false);
+  }
+
+  async function discardCloseup() {
+    if (!cuStaged) return;
+    setCuBusy(true);
+    await apiJson(`/api/listings/${data.listingId}/print-closeup`, "POST", { discardRecordId: cuStaged.recordId });
+    setCuStaged(null);
+    setCuBusy(false);
+  }
+
+  // ---- artwork detail: the design alone, from the MASTER, watermarked ----
+  const [awWmOn, setAwWmOn] = useState(true);
+  const [awWmOpacity, setAwWmOpacity] = useState(9); // percent
+  const [awBusy, setAwBusy] = useState(false);
+  const [awError, setAwError] = useState<string | null>(null);
+  const [awNote, setAwNote] = useState<string | null>(null);
+  const [awPreviews, setAwPreviews] = useState<{
+    dark: string; light: string; outPx: number; floorOk: boolean; reason: string | null;
+  } | null>(null);
+  const [awLastBg, setAwLastBg] = useState<"dark" | "light">("dark");
+  const [awStaged, setAwStaged] = useState<{
+    recordId: string; url: string; outPx: number; background: string; hasSlot: boolean;
+  } | null>(null);
+  useEffect(() => {
+    const saved = window.localStorage.getItem("stuffs.artworkBg");
+    if (saved === "dark" || saved === "light") setAwLastBg(saved);
+    const wm = window.localStorage.getItem("stuffs.artworkWm");
+    if (wm) {
+      try {
+        const p = JSON.parse(wm);
+        if (typeof p.on === "boolean") setAwWmOn(p.on);
+        if (Number.isFinite(p.opacity)) setAwWmOpacity(p.opacity);
+      } catch { /* stale setting — defaults stand */ }
+    }
+  }, []);
+  const awWm = () => ({ on: awWmOn, opacity: awWmOpacity / 100 });
+
+  async function previewArtwork() {
+    setAwBusy(true);
+    setAwError(null);
+    setAwNote(null);
+    setAwStaged(null);
+    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity }));
+    const res = await apiJson<{
+      dark?: string; light?: string; outPx?: number; floorOk?: boolean; reason?: string | null;
+    }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { previews: true, watermark: awWm() }, 240_000);
+    if (!res.ok) setAwError(res.error);
+    else setAwPreviews({
+      dark: res.data.dark ?? "", light: res.data.light ?? "",
+      outPx: res.data.outPx ?? 0, floorOk: res.data.floorOk ?? false, reason: res.data.reason ?? null,
+    });
+    setAwBusy(false);
+  }
+
+  async function buildArtwork(background: "dark" | "light") {
+    setAwBusy(true);
+    setAwError(null);
+    setAwLastBg(background);
+    window.localStorage.setItem("stuffs.artworkBg", background);
+    const res = await apiJson<{
+      recordId?: string; url?: string; outPx?: number; background?: string; hasSlot?: boolean;
+    }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { background, watermark: awWm() }, 240_000);
+    if (!res.ok) setAwError(res.error);
+    else setAwStaged({
+      recordId: res.data.recordId!, url: res.data.url!, outPx: res.data.outPx ?? 0,
+      background: res.data.background ?? background, hasSlot: res.data.hasSlot ?? true,
+    });
+    setAwBusy(false);
+  }
+
+  async function assignArtwork() {
+    if (!awStaged) return;
+    setAwBusy(true);
+    const res = await apiJson<{ slot?: { position: number; label: string } }>(
+      `/api/listings/${data.listingId}/artwork-detail`, "POST", { assignRecordId: awStaged.recordId });
+    if (!res.ok) setAwError(res.error);
+    else {
+      setAwNote(
+        `✓ artwork detail placed — from the design master · ${awStaged.background} background · watermark ${awWmOn ? `on (${awWmOpacity}%)` : "off"} · ${awStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "artwork"})`
+      );
+      setAwStaged(null);
+      setAwPreviews(null);
+      router.refresh();
+    }
+    setAwBusy(false);
+  }
+
+  async function discardArtwork() {
+    if (!awStaged) return;
+    setAwBusy(true);
+    await apiJson(`/api/listings/${data.listingId}/artwork-detail`, "POST", { discardRecordId: awStaged.recordId });
+    setAwStaged(null);
+    setAwBusy(false);
+  }
+
   // ---- placement: how the design sits in the region ----
   const [placeTile, setPlaceTile] = useState<MockupTile | null>(null);
 
@@ -1246,6 +1403,207 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           {gridNote ? (
             <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
           ) : null}
+        </div>
+
+        {/* print close-up: re-rendered at native sharpness, cropped to the
+            PRINT REGION — never a soft blow-up of the 2000px gallery render */}
+        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+          <span className="hint">
+            Build the <strong>print close-up</strong> for the Closeup Print slot — a zoom into one
+            render&apos;s print region, design on fabric. Pick a source render:
+          </span>
+          <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+            {gridCandidates.length === 0 ? (
+              <span className="hint">No approved renders yet — approve some tiles above first.</span>
+            ) : (
+              gridCandidates.map((t) => (
+                <button
+                  key={`cu-${t.generatedId}`}
+                  type="button"
+                  className={`chip ${cuPicked === t.generatedId ? "done" : "neutral"}`}
+                  style={{ cursor: "pointer", fontSize: 11 }}
+                  title={`${t.templateName} — zoom into this render's print region`}
+                  onClick={() => pickCloseupTile(t.generatedId!)}
+                >
+                  {t.colour} ({t.templateName})
+                </button>
+              ))
+            )}
+          </div>
+          {cuPicked && cuOpts ? (
+            <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+              <span className="hint">source {cuOpts.sourcePx}px · crop:</span>
+              {cuOpts.presets.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  className={`chip ${cuTightness === p.key ? "done" : "neutral"}`}
+                  style={{ cursor: p.ok ? "pointer" : "not-allowed", fontSize: 11, opacity: p.ok ? 1 : 0.45 }}
+                  disabled={!p.ok}
+                  title={p.ok ? `${p.label} → ${p.outPx}px output` : p.reason ?? ""}
+                  onClick={() => p.ok && setCuTightness(p.key)}
+                >
+                  {p.label} · {p.outPx}px
+                </button>
+              ))}
+              {cuOpts.presets.filter((p) => !p.ok).map((p) => (
+                <span key={`r-${p.key}`} className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                  ⚠ {p.reason}
+                </span>
+              ))}
+              <button
+                className="btn btn-tertiary"
+                style={{ fontSize: 12 }}
+                disabled={cuBusy || !cuTightness}
+                title="Build the close-up — nothing is placed until you confirm"
+                onClick={buildCloseup}
+              >
+                <Spinner active={cuBusy && !cuStaged} />
+                Build close-up
+              </button>
+            </div>
+          ) : null}
+          {cuStaged ? (
+            <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+              <a href={cuStaged.url} target="_blank" rel="noreferrer" title="Open full size">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={cuStaged.url}
+                  alt="Built print close-up"
+                  style={{ width: 220, borderRadius: 10, border: "1px solid var(--border-soft, #e7e2d6)" }}
+                />
+              </a>
+              <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
+                <span className="body-sm">
+                  from <strong>{cuStaged.source}</strong> ({cuStaged.colour}) · {cuStaged.tightness} crop · {cuStaged.outPx}px
+                </span>
+                {!cuStaged.hasSlot ? (
+                  <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                    ⚠ no Closeup Print slot on this listing — add one at L5 before placing
+                  </span>
+                ) : null}
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={cuBusy || !cuStaged.hasSlot} onClick={assignCloseup}>
+                    <Spinner active={cuBusy} />
+                    Send to Closeup Print slot
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={cuBusy} onClick={buildCloseup}>
+                    Rebuild
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={cuBusy} onClick={discardCloseup}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {cuError ? <div className="callout blocked">print close-up — {cuError}</div> : null}
+          {cuNote ? <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{cuNote}</span> : null}
+        </div>
+
+        {/* artwork detail: the design ALONE from the master — and the one
+            output that carries the "stuffs" watermark */}
+        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+          <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+            <span className="hint" style={{ flex: "1 1 240px" }}>
+              Build the <strong>artwork detail</strong> for the Artwork Only slot — the design alone,
+              from the design master. Watermarked; the close-up and mockups never are.
+            </span>
+            <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
+              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <input type="checkbox" checked={awWmOn} onChange={(e) => setAwWmOn(e.target.checked)} />
+                watermark
+              </label>
+              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                opacity
+                <input
+                  className="input input-compact"
+                  style={{ width: 52 }}
+                  type="number"
+                  min={2}
+                  max={50}
+                  value={awWmOpacity}
+                  disabled={!awWmOn}
+                  onChange={(e) => setAwWmOpacity(Math.min(50, Math.max(2, Number(e.target.value) || 9)))}
+                />
+                %
+              </label>
+              <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={previewArtwork}>
+                <Spinner active={awBusy && !awPreviews && !awStaged} />
+                Preview both backgrounds
+              </button>
+            </span>
+          </div>
+          {awPreviews && !awStaged ? (
+            <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+              {(["dark", "light"] as const).map((bg) => (
+                <div key={bg} className="stack-12" style={{ gap: 6 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={awPreviews[bg]}
+                    alt={`Artwork detail — ${bg} background`}
+                    style={{
+                      width: 220,
+                      borderRadius: 10,
+                      border: awLastBg === bg ? "2px solid var(--blueberry, #1f4897)" : "1px solid var(--border-soft, #e7e2d6)",
+                    }}
+                  />
+                  <button
+                    className={`btn ${awLastBg === bg ? "btn-save" : "btn-secondary"}`}
+                    style={{ fontSize: 12 }}
+                    disabled={awBusy || !awPreviews.floorOk}
+                    title={awPreviews.floorOk ? `Build full-res on the ${bg} background` : awPreviews.reason ?? ""}
+                    onClick={() => buildArtwork(bg)}
+                  >
+                    <Spinner active={awBusy} />
+                    Use {bg === "dark" ? "dark (black)" : "light (eggshell)"}
+                  </button>
+                </div>
+              ))}
+              <span className="hint" style={{ alignSelf: "center" }}>
+                output {awPreviews.outPx}px
+                {!awPreviews.floorOk ? (
+                  <span style={{ color: "var(--status-blocked, #b3423a)" }}> · ⚠ {awPreviews.reason}</span>
+                ) : null}
+              </span>
+            </div>
+          ) : null}
+          {awStaged ? (
+            <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+              <a href={awStaged.url} target="_blank" rel="noreferrer" title="Open full size">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={awStaged.url}
+                  alt="Built artwork detail"
+                  style={{ width: 220, borderRadius: 10, border: "1px solid var(--border-soft, #e7e2d6)" }}
+                />
+              </a>
+              <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
+                <span className="body-sm">
+                  <strong>{awStaged.background}</strong> background · watermark {awWmOn ? `on (${awWmOpacity}%)` : "off"} · {awStaged.outPx}px
+                </span>
+                {!awStaged.hasSlot ? (
+                  <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                    ⚠ no Artwork Only slot on this listing — add one at L5 before placing
+                  </span>
+                ) : null}
+                <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={awBusy || !awStaged.hasSlot} onClick={assignArtwork}>
+                    <Spinner active={awBusy} />
+                    Send to Artwork Only slot
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => setAwStaged(null)}>
+                    Back to previews
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={discardArtwork}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          {awError ? <div className="callout blocked">artwork detail — {awError}</div> : null}
+          {awNote ? <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{awNote}</span> : null}
         </div>
       </div>
 

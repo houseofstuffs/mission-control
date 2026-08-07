@@ -41,6 +41,13 @@ export interface TemplateSpec {
   fit?: FitMode;
   /** design-in-region adjustment (listing-scoped) — identity when absent */
   placement?: ArtPlacement | null;
+  /**
+   * Long-edge cap for loading the base. Defaults to RENDER_MAX_EDGE —
+   * right for gallery renders, where more is wasted work. The print
+   * close-up passes the base's native size instead: it crops INTO the
+   * render, so the pixels it keeps must exist at full sharpness.
+   */
+  baseMaxEdge?: number;
 }
 
 export interface TemplateLayers {
@@ -267,8 +274,11 @@ export async function renderMockup(
   quadOverride?: Quad | null,
   artworkOpacity = 1
 ): Promise<Buffer> {
-  const base = await loadRaw(layers.base);
-  const artwork = await loadRaw(artworkBuf, 2400);
+  const edgeCap = spec.baseMaxEdge ?? RENDER_MAX_EDGE;
+  const base = await loadRaw(layers.base, edgeCap);
+  // artwork keeps pace with the base — warping a 2400px master onto a
+  // 4000px base would soften exactly the pixels a close-up zooms into
+  const artwork = await loadRaw(artworkBuf, Math.max(2400, edgeCap));
   if (artworkOpacity < 1) {
     const k = Math.max(0.05, artworkOpacity);
     for (let i = 3; i < artwork.data.length; i += 4) {

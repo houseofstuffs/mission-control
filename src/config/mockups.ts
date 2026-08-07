@@ -228,6 +228,19 @@ export const GRID_BACKGROUND = "#FBF6EC";
 export const GRID_GUTTER = 28;
 export const GRID_MARGIN = 60;
 
+/* ---------- artwork-detail composite ---------- */
+
+/**
+ * The two backgrounds the artwork-detail shot offers — the operator picks
+ * per design (dark-built art reads differently on light). Settings, not
+ * hard-codes; the light one matches the graphic cards' eggshell.
+ */
+export const ARTWORK_BACKGROUNDS = { dark: "#000000", light: "#FBF6EC" } as const;
+export type ArtworkBackground = keyof typeof ARTWORK_BACKGROUNDS;
+
+/** Breathing room around the artwork's bounding box in its square, as a fraction of art width. */
+export const ARTWORK_PAD_FRAC = 0.04;
+
 /* ---------- render tunables ---------- */
 
 /** Long edge the render works at — Etsy wants ~2000px; bigger is wasted work. */

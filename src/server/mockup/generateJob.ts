@@ -113,7 +113,7 @@ function firstFileUrl(v: unknown): string | null {
   return ((v[0] as { url?: string })?.url) || null;
 }
 
-class LayerExpiredError extends Error {}
+export class LayerExpiredError extends Error {}
 
 async function fetchLayer(url: string | null, label: string): Promise<Buffer | null> {
   if (!url) return null;
@@ -130,7 +130,7 @@ async function fetchLayer(url: string | null, label: string): Promise<Buffer | n
   return Buffer.from(await res.arrayBuffer());
 }
 
-async function fetchLayers(template: SimpleRecord) {
+export async function fetchLayers(template: SimpleRecord) {
   return {
     base: await fetchLayer(firstFileUrl(template.props["Base Image"]), "base image"),
     displacement: await fetchLayer(firstFileUrl(template.props["Displacement Map"]), "displacement map"),

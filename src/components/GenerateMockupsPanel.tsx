@@ -18,7 +18,7 @@ import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { CropAdjustModal } from "./CropAdjustModal";
 import { PlacementModal } from "./PlacementModal";
-import { DEFAULT_GRID_CELL_MODE, type GridCellMode, type PlacementMap, type Quad } from "@/config/mockups";
+import { CARD_DEFAULTS, CARD_MAX_CELLS, CARD_ROWS, type PlacementMap, type Quad } from "@/config/mockups";
 
 export interface MockupTile {
   /** the variant behind this tile — the unique key; templateId is the GROUP */
@@ -287,21 +287,34 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [cropTile, setCropTile] = useState<MockupTile | null>(null);
   const [cropNote, setCropNote] = useState<string | null>(null);
 
-  // ---- the colour grid: pick tiles → build → SEE it → then the slot ----
-  const [gridLayout, setGridLayout] = useState("2x2");
-  /** the crop-tightness dial — Fit (default, nothing shaved) / Tall / Full bleed */
-  const [gridCellMode, setGridCellMode] = useState<GridCellMode>(DEFAULT_GRID_CELL_MODE);
+  // ---- the branded colour card: pick tiles in order → build → SEE it →
+  // then the slot. Supersedes the plain grid composite — every colour
+  // grid the shop ships carries the title, labels and footer line.
   const [gridTemplate, setGridTemplate] = useState<string>("");
   const [gridPicked, setGridPicked] = useState<string[]>([]); // generatedIds, in cell order
   const [gridBusy, setGridBusy] = useState(false);
   const [gridNote, setGridNote] = useState<string | null>(null);
-  // grid failures surface HERE, in the grid block — the first version
-  // routed them to the Generate card's error box, where a failed BUILD
-  // read as a failed RUN and the build itself looked like a silent no-op
+  // card failures surface HERE, in this block — a failed BUILD must
+  // never read as a failed generate RUN
   const [gridError, setGridError] = useState<string | null>(null);
-  const [gridStaged, setGridStaged] = useState<{ recordId: string; url: string; layout: string; cellMode: string; cells: string[]; hasGridSlot: boolean } | null>(null);
+  const [cardLayout, setCardLayout] = useState<string>("auto");
+  const [cardTitle, setCardTitle] = useState(CARD_DEFAULTS.title);
+  const [cardFooter, setCardFooter] = useState(CARD_DEFAULTS.footer);
+  const [cardEmail, setCardEmail] = useState(CARD_DEFAULTS.email);
+  const [cardStaged, setCardStaged] = useState<{
+    recordId: string; url: string; layout: string; cells: string[]; title: string; hasSlot: boolean; openSlots: number;
+  } | null>(null);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("stuffs.cardText") ?? "{}");
+      if (typeof saved.title === "string" && saved.title) setCardTitle(saved.title);
+      if (typeof saved.footer === "string") setCardFooter(saved.footer);
+      if (typeof saved.email === "string") setCardEmail(saved.email);
+    } catch { /* stale setting — defaults stand */ }
+  }, []);
 
-  const gridCells = { "2x2": 4, "3x1": 3, "2x3": 6, "3x2": 6, "3x3": 9 }[gridLayout] ?? 4;
+  const cardRowsLabel = (n: number) => (CARD_ROWS[n] ? CARD_ROWS[n].join("+") : "?");
+  const cardNeed = cardLayout === "auto" ? gridPicked.length : Number(cardLayout);
 
   function toggleGridTile(generatedId: string) {
     setGridPicked((cur) =>
@@ -309,54 +322,71 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     );
   }
 
-  async function buildGrid() {
+  async function buildCard() {
     setGridBusy(true);
     setGridNote(null);
     setGridError(null);
-    const res = await apiJson<{ recordId?: string; url?: string; layout?: string; cellMode?: string; cells?: string[]; hasGridSlot?: boolean }>(
-      `/api/listings/${data.listingId}/grid-composite`,
+    window.localStorage.setItem("stuffs.cardText", JSON.stringify({ title: cardTitle, footer: cardFooter, email: cardEmail }));
+    // a rebuild replaces the staged record — archive the old one so a
+    // series never accumulates orphaned staged cards
+    if (cardStaged) {
+      await apiJson(`/api/listings/${data.listingId}/colour-card`, "POST", { discardRecordId: cardStaged.recordId });
+      setCardStaged(null);
+    }
+    const res = await apiJson<{
+      recordId?: string; url?: string; layout?: string; cells?: string[]; title?: string; hasSlot?: boolean; openSlots?: number;
+    }>(
+      `/api/listings/${data.listingId}/colour-card`,
       "POST",
-      { layout: gridLayout, cellMode: gridCellMode, generatedIds: gridPicked },
+      {
+        generatedIds: gridPicked,
+        layout: cardLayout === "auto" ? undefined : Number(cardLayout),
+        title: cardTitle,
+        footer: cardFooter,
+        email: cardEmail,
+      },
       180_000
     );
     if (!res.ok) setGridError(res.error);
     else {
-      setGridStaged({
+      setCardStaged({
         recordId: res.data.recordId!,
         url: res.data.url!,
-        layout: res.data.layout ?? gridLayout,
-        cellMode: res.data.cellMode ?? gridCellMode,
+        layout: res.data.layout ?? "",
         cells: res.data.cells ?? [],
-        hasGridSlot: res.data.hasGridSlot ?? true,
+        title: res.data.title ?? cardTitle,
+        hasSlot: res.data.hasSlot ?? true,
+        openSlots: res.data.openSlots ?? 0,
       });
     }
     setGridBusy(false);
   }
 
-  async function assignGrid() {
-    if (!gridStaged) return;
+  async function assignCard() {
+    if (!cardStaged) return;
     setGridBusy(true);
     const res = await apiJson<{ slot?: { position: number; label: string } }>(
-      `/api/listings/${data.listingId}/grid-composite`,
+      `/api/listings/${data.listingId}/colour-card`,
       "POST",
-      { assignRecordId: gridStaged.recordId }
+      { assignRecordId: cardStaged.recordId }
     );
     if (!res.ok) setGridError(res.error);
     else {
       setGridNote(
-        `✓ grid placed — ${gridStaged.layout} · ${gridStaged.cells.join(" → ")} · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
+        `✓ colour card placed — ${cardStaged.cells.length} colours (${cardStaged.cells.join(" → ")}) · ${cardStaged.layout} · "${cardStaged.title}" · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
       );
-      setGridStaged(null);
+      setCardStaged(null);
+      setGridPicked([]);
       router.refresh();
     }
     setGridBusy(false);
   }
 
-  async function discardGrid() {
-    if (!gridStaged) return;
+  async function discardCard() {
+    if (!cardStaged) return;
     setGridBusy(true);
-    await apiJson(`/api/listings/${data.listingId}/grid-composite`, "POST", { discardRecordId: gridStaged.recordId });
-    setGridStaged(null);
+    await apiJson(`/api/listings/${data.listingId}/colour-card`, "POST", { discardRecordId: cardStaged.recordId });
+    setCardStaged(null);
     setGridBusy(false);
   }
 
@@ -1273,20 +1303,22 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           </div>
         ) : null}
 
-        {/* the colour grid, assembled here rather than in Canva: pick ONE
-            template's approved renders in cell order, build, LOOK at it,
-            then send it to the Grid Composite slot — never sight-unseen */}
+        {/* the branded colour card, assembled here rather than in Canva:
+            pick renders in cell order, build, LOOK at it, then send it to
+            a Grid Composite slot — never sight-unseen. Max 6 cells; more
+            colours = a series of cards. */}
         <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
           <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
             <span className="hint" style={{ flex: "1 1 240px" }}>
-              Build the <strong>colour grid</strong> for the Grid Composite slot — one template across
-              its colours. Tap tiles below in the order you want the cells filled.
+              Build the branded <strong>colour card</strong> for the Grid Composite slot — title, colour
+              labels and footer included. Tap tiles below in cell order; max {CARD_MAX_CELLS} per card,
+              more colours = a series of cards.
             </span>
             <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
               <select
                 className="select input-compact"
                 style={{ width: "auto", fontSize: 12 }}
-                aria-label="Grid source template"
+                aria-label="Card source template"
                 value={gridTemplate}
                 onChange={(e) => {
                   setGridTemplate(e.target.value);
@@ -1301,41 +1333,71 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               <select
                 className="select input-compact"
                 style={{ width: "auto", fontSize: 12 }}
-                aria-label="Grid layout"
-                value={gridLayout}
-                onChange={(e) => setGridLayout(e.target.value)}
+                aria-label="Card layout"
+                title="Chosen automatically by how many you tick — override here"
+                value={cardLayout}
+                onChange={(e) => setCardLayout(e.target.value)}
               >
-                {["2x2", "3x1", "2x3", "3x2", "3x3"].map((l) => (
-                  <option key={l} value={l}>{l.replace("x", " × ")}</option>
+                <option value="auto">
+                  auto{gridPicked.length >= 2 && gridPicked.length <= CARD_MAX_CELLS ? ` (${cardRowsLabel(gridPicked.length)})` : ""}
+                </option>
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={String(n)}>{n} cells · {cardRowsLabel(n)}</option>
                 ))}
-              </select>
-              <select
-                className="select input-compact"
-                style={{ width: "auto", fontSize: 12 }}
-                aria-label="Cell crop tightness"
-                title="How each render meets its cell — Fit never shaves an edge; Tall crops closer but keeps the garment whole; Full bleed is the edge-to-edge cover crop"
-                value={gridCellMode}
-                onChange={(e) => setGridCellMode(e.target.value as GridCellMode)}
-              >
-                <option value="fit">Fit — whole render</option>
-                <option value="tall">Tall crop — 1.5×</option>
-                <option value="cover">Full bleed</option>
               </select>
               <button
                 className="btn btn-tertiary"
                 style={{ fontSize: 12 }}
-                disabled={gridBusy || gridPicked.length !== gridCells}
-                title={
-                  gridPicked.length !== gridCells
-                    ? `Pick exactly ${gridCells} tiles for ${gridLayout.replace("x", " × ")} — ${gridPicked.length} picked`
-                    : "Build the grid — nothing is placed until you confirm"
+                disabled={
+                  gridBusy ||
+                  gridPicked.length < 2 ||
+                  gridPicked.length > CARD_MAX_CELLS ||
+                  (cardLayout !== "auto" && gridPicked.length !== cardNeed)
                 }
-                onClick={buildGrid}
+                title={
+                  gridPicked.length < 2
+                    ? "Pick at least 2 renders"
+                    : gridPicked.length > CARD_MAX_CELLS
+                      ? `Max ${CARD_MAX_CELLS} cells per card — build a series`
+                      : cardLayout !== "auto" && gridPicked.length !== cardNeed
+                        ? `The ${cardRowsLabel(cardNeed)} layout needs ${cardNeed} renders — ${gridPicked.length} picked`
+                        : "Build the card — nothing is placed until you confirm"
+                }
+                onClick={buildCard}
               >
-                <Spinner active={gridBusy && !gridStaged} />
-                Build {gridLayout.replace("x", " × ")} · {gridPicked.length}/{gridCells}
+                <Spinner active={gridBusy && !cardStaged} />
+                Build card · {gridPicked.length}/{cardLayout === "auto" ? CARD_MAX_CELLS + " max" : cardNeed}
               </button>
             </span>
+          </div>
+          <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+            <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              title
+              <input
+                className="input input-compact"
+                style={{ width: 170 }}
+                value={cardTitle}
+                onChange={(e) => setCardTitle(e.target.value)}
+              />
+            </label>
+            <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              footer
+              <input
+                className="input input-compact"
+                style={{ width: 280 }}
+                value={cardFooter}
+                onChange={(e) => setCardFooter(e.target.value)}
+              />
+            </label>
+            <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              email
+              <input
+                className="input input-compact"
+                style={{ width: 220 }}
+                value={cardEmail}
+                onChange={(e) => setCardEmail(e.target.value)}
+              />
+            </label>
           </div>
           {gridCandidates.length > 0 ? (
             <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
@@ -1365,41 +1427,45 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           ) : (
             <span className="hint">No approved renders yet — approve some tiles above first.</span>
           )}
-          {gridStaged ? (
+          {cardStaged ? (
             <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
-              <a href={gridStaged.url} target="_blank" rel="noreferrer" title="Open full size">
+              <a href={cardStaged.url} target="_blank" rel="noreferrer" title="Open full size">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={gridStaged.url}
-                  alt="Built grid composite"
+                  src={cardStaged.url}
+                  alt="Built colour card"
                   style={{ width: 220, borderRadius: 10, border: "1px solid var(--border-soft, #e7e2d6)" }}
                 />
               </a>
               <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
                 <span className="body-sm">
-                  <strong>{gridStaged.layout}</strong> · {gridStaged.cellMode === "fit" ? "fit" : gridStaged.cellMode === "tall" ? "tall crop" : "full bleed"} · {gridStaged.cells.join(" → ")}
+                  <strong>{cardStaged.layout}</strong> · &quot;{cardStaged.title}&quot; · {cardStaged.cells.join(" → ")}
                 </span>
-                {!gridStaged.hasGridSlot ? (
+                {!cardStaged.hasSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
-                    ⚠ no Grid Composite slot on this listing — seed or add one at L5 before placing
+                    ⚠ no Grid Composite slot on this listing — add one at L5 before placing
+                  </span>
+                ) : cardStaged.openSlots === 0 ? (
+                  <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                    ⚠ every Grid Composite slot is filled — sending will replace the first one (a series needs one slot per card at L5)
                   </span>
                 ) : null}
                 <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={gridBusy || !gridStaged.hasGridSlot} onClick={assignGrid}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={gridBusy || !cardStaged.hasSlot} onClick={assignCard}>
                     <Spinner active={gridBusy} />
                     Send to Grid Composite slot
                   </button>
-                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={buildGrid}>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={buildCard}>
                     Rebuild
                   </button>
-                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={discardGrid}>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={gridBusy} onClick={discardCard}>
                     Discard
                   </button>
                 </div>
               </div>
             </div>
           ) : null}
-          {gridError ? <div className="callout blocked">grid build — {gridError}</div> : null}
+          {gridError ? <div className="callout blocked">colour card — {gridError}</div> : null}
           {gridNote ? (
             <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{gridNote}</span>
           ) : null}

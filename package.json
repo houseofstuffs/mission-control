@@ -2,7 +2,7 @@
   "name": "stuffs-mission-control",
   "version": "0.1.0",
   "private": true,
-  "description": "STUFFS Mission Control \u2014 workflow dashboard for an Etsy print-on-demand shop. Front end over Notion (system of record) with a local cache.",
+  "description": "STUFFS Mission Control — workflow dashboard for an Etsy print-on-demand shop. Front end over Notion (system of record) with a local cache.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,6 +19,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@notionhq/client": "^2.3.0",
     "better-sqlite3": "^11.10.0",
+    "fontkit": "^2.0.4",
     "next": "^15.3.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/fontkit": "^2.0.9",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

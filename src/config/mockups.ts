@@ -228,6 +228,67 @@ export const GRID_BACKGROUND = "#FBF6EC";
 export const GRID_GUTTER = 28;
 export const GRID_MARGIN = 60;
 
+/* ---------- branded colour card ---------- */
+
+/**
+ * The colour-card generator's text, all operator-editable per build —
+ * these are just the defaults. The title varies occasionally; footer and
+ * email rarely.
+ */
+export const CARD_DEFAULTS = {
+  title: "available colors",
+  footer: "want it in a different color? message me.",
+  email: "hello.shopstuffs@gmail.com",
+};
+
+/**
+ * Card geometry at the 2000px reference edge — every number scales
+ * proportionally at other sizes. Measured off the operator's approved
+ * reference renders, which win over the written spec where they
+ * disagreed (the title "baseline ~92" was actually the TOP of the text;
+ * the measured baseline is 180).
+ */
+export const CARD_GEOM = {
+  edge: 2000,
+  margin: 110,
+  gutter: 46,
+  /** label strip under each row: gap above bar + bar height + air below */
+  labelBlock: 76,
+  labelGapTop: 18,
+  labelBarW: 9,
+  labelBarH: 50,
+  labelIndent: 30,
+  labelSize: 45,
+  /** the image area — rows centre vertically between these bounds */
+  imageTop: 290,
+  footerReserve: 250,
+  titleSize: 88,
+  titleBaseline: 180,
+  dotSize: 22,
+  dotSpacing: 46,
+  dotCentreY: 226,
+  footerSize: 42,
+  footerBaseline: 1862,
+  emailSize: 44,
+  emailBaseline: 1926,
+  bg: "#FBF6EC",
+  ink: "#2A3540",
+  muted: "#7A7469",
+  candy: "#D7242A",
+  /** brand dots, in order */
+  dots: ["#D7242A", "#FFD00D", "#68C2A9", "#1F4897"],
+};
+
+/** rows per cell count: fewer on top, matching the operator's 3-cell rhythm */
+export const CARD_ROWS: Record<number, number[]> = {
+  2: [2],
+  3: [1, 2],
+  4: [2, 2],
+  5: [2, 3],
+  6: [3, 3],
+};
+export const CARD_MAX_CELLS = 6;
+
 /* ---------- artwork-detail composite ---------- */
 
 /**

@@ -64,9 +64,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       // a series fills empty grid slots first; a lone card overwrites its slot
       const slot = slots.find((s) => !String(s.props["Asset Ref"] ?? "").trim()) ?? slots[0];
+      // the builder KNOWS the source template — stamp it, don't make the
+      // operator re-pick it at L5. And a card arrives from a
+      // preview-then-commit flow with nothing left to judge, so it lands
+      // Placed (mockup sends stay Made — those get reviewed in place).
+      const srcVariant = cachedRecord(String(body.sourceVariantId ?? ""));
       await updateRecord("image_slots", slot.id, {
         "Asset Ref": `/api/generated-mockups/${rec.id}/file`,
-        Status: "Made",
+        ...(srcVariant && srcVariant.dbKey === "mockup_templates" ? { "Mockup Template": [srcVariant.id] } : {}),
+        Status: "Placed",
       });
       await updateRecord("generated_mockups", rec.id, { "Sent To Slot": [slot.id] });
       return NextResponse.json({
@@ -134,6 +140,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
       cells.push({ image: bytes, label: String(g.props["Colour"] ?? "").trim() || "colour" });
     }
+    // cell 1's variant stands for the card's source template on the slot
+    const firstGen = cachedRecord(ids[0]);
+    const sourceVariantId = ((firstGen?.props["Variant"] as string[] | null) ?? [])[0] ?? null;
 
     const png = await buildColourCard(cells, rows, {
       title: typeof body.title === "string" ? body.title : undefined,
@@ -162,6 +171,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       url: `/api/generated-mockups/${record.id}/file?v=${encodeURIComponent(record.lastEdited)}`,
       layout: rows.join("+"),
       cells: cells.map((c) => c.label.toLowerCase()),
+      sourceVariantId,
       title: typeof body.title === "string" && body.title.trim() ? body.title : CARD_DEFAULTS.title,
       hasSlot: gridSlots().length > 0,
       openSlots: gridSlots().filter((s) => !String(s.props["Asset Ref"] ?? "").trim()).length,

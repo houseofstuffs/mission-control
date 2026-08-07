@@ -130,9 +130,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           { status: 400 }
         );
       }
+      // Placed, not Made — the artwork detail arrives from a
+      // preview-then-commit flow with nothing left to judge. (No template
+      // stamp: it's built from the design master, no variant exists.)
       await updateRecord("image_slots", slot.id, {
         "Asset Ref": `/api/generated-mockups/${rec.id}/file`,
-        Status: "Made",
+        Status: "Placed",
       });
       await updateRecord("generated_mockups", rec.id, { "Sent To Slot": [slot.id] });
       return NextResponse.json({

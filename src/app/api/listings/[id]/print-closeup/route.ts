@@ -103,9 +103,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           { status: 400 }
         );
       }
+      // stamp the source template and land Placed — the close-up comes
+      // out of a preview-then-commit flow; there's nothing left to judge
+      const srcVariant = cachedRecord(String(body.sourceVariantId ?? ""));
       await updateRecord("image_slots", slot.id, {
         "Asset Ref": `/api/generated-mockups/${rec.id}/file`,
-        Status: "Made",
+        ...(srcVariant && srcVariant.dbKey === "mockup_templates" ? { "Mockup Template": [srcVariant.id] } : {}),
+        Status: "Placed",
       });
       await updateRecord("generated_mockups", rec.id, { "Sent To Slot": [slot.id] });
       return NextResponse.json({
@@ -254,6 +258,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       url: `/api/generated-mockups/${record.id}/file?v=${encodeURIComponent(record.lastEdited)}`,
       source: gen.title || "render",
       colour,
+      sourceVariantId: variantId || null,
       tightness,
       outPx: rect.side,
       sourcePx,

@@ -303,6 +303,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [cardEmail, setCardEmail] = useState(CARD_DEFAULTS.email);
   const [cardStaged, setCardStaged] = useState<{
     recordId: string; url: string; layout: string; cells: string[]; title: string; hasSlot: boolean; openSlots: number;
+    sourceVariantId: string | null;
   } | null>(null);
   useEffect(() => {
     try {
@@ -335,6 +336,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     }
     const res = await apiJson<{
       recordId?: string; url?: string; layout?: string; cells?: string[]; title?: string; hasSlot?: boolean; openSlots?: number;
+      sourceVariantId?: string | null;
     }>(
       `/api/listings/${data.listingId}/colour-card`,
       "POST",
@@ -357,6 +359,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         title: res.data.title ?? cardTitle,
         hasSlot: res.data.hasSlot ?? true,
         openSlots: res.data.openSlots ?? 0,
+        sourceVariantId: res.data.sourceVariantId ?? null,
       });
     }
     setGridBusy(false);
@@ -368,7 +371,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     const res = await apiJson<{ slot?: { position: number; label: string } }>(
       `/api/listings/${data.listingId}/colour-card`,
       "POST",
-      { assignRecordId: cardStaged.recordId }
+      { assignRecordId: cardStaged.recordId, sourceVariantId: cardStaged.sourceVariantId }
     );
     if (!res.ok) setGridError(res.error);
     else {
@@ -400,6 +403,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [cuNote, setCuNote] = useState<string | null>(null);
   const [cuStaged, setCuStaged] = useState<{
     recordId: string; url: string; source: string; colour: string; tightness: string; outPx: number; hasSlot: boolean;
+    sourceVariantId: string | null;
   } | null>(null);
 
   async function pickCloseupTile(generatedId: string) {
@@ -428,12 +432,14 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setCuNote(null);
     const res = await apiJson<{
       recordId?: string; url?: string; source?: string; colour?: string; tightness?: string; outPx?: number; hasSlot?: boolean;
+      sourceVariantId?: string | null;
     }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { generatedId: cuPicked, tightness: cuTightness }, 240_000);
     if (!res.ok) setCuError(res.error);
     else setCuStaged({
       recordId: res.data.recordId!, url: res.data.url!, source: res.data.source ?? "render",
       colour: res.data.colour ?? "", tightness: res.data.tightness ?? cuTightness,
       outPx: res.data.outPx ?? 0, hasSlot: res.data.hasSlot ?? true,
+      sourceVariantId: res.data.sourceVariantId ?? null,
     });
     setCuBusy(false);
   }
@@ -442,7 +448,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     if (!cuStaged) return;
     setCuBusy(true);
     const res = await apiJson<{ slot?: { position: number; label: string } }>(
-      `/api/listings/${data.listingId}/print-closeup`, "POST", { assignRecordId: cuStaged.recordId });
+      `/api/listings/${data.listingId}/print-closeup`, "POST", { assignRecordId: cuStaged.recordId, sourceVariantId: cuStaged.sourceVariantId });
     if (!res.ok) setCuError(res.error);
     else {
       setCuNote(
@@ -1333,7 +1339,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 ))}
               </select>
               <button
-                className="btn btn-tertiary"
+                className="btn btn-primary"
                 style={{ fontSize: 12 }}
                 disabled={
                   gridBusy ||
@@ -1353,7 +1359,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 onClick={buildCard}
               >
                 <Spinner active={gridBusy && !cardStaged} />
-                Build card · {gridPicked.length}/{cardLayout === "auto" ? CARD_MAX_CELLS + " max" : cardNeed}
+                Generate color grid · {gridPicked.length}/{cardLayout === "auto" ? CARD_MAX_CELLS : cardNeed}
               </button>
             </span>
           </div>
@@ -1509,14 +1515,14 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 </span>
               ))}
               <button
-                className="btn btn-tertiary"
+                className="btn btn-primary"
                 style={{ fontSize: 12 }}
                 disabled={cuBusy || !cuTightness}
                 title="Build the close-up — nothing is placed until you confirm"
                 onClick={buildCloseup}
               >
                 <Spinner active={cuBusy && !cuStaged} />
-                Build close-up
+                Generate print close-up
               </button>
             </div>
           ) : null}
@@ -1600,9 +1606,9 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 <option value="dark">dark (black)</option>
                 <option value="light">light (eggshell)</option>
               </select>
-              <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => buildArtwork(awBg)}>
+              <button className="btn btn-primary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => buildArtwork(awBg)}>
                 <Spinner active={awBusy && !awStaged} />
-                Build artwork detail
+                Generate artwork detail
               </button>
             </span>
           </div>

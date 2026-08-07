@@ -168,11 +168,16 @@ a:hover { color: var(--candy); }
 .kicker {
   font-family: var(--font-body);
   font-weight: 800;
-  font-size: 11.5px;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
+  /* 11.5px read flat once pages grew past a few sections — scanning L4
+     for one tool meant reading, not skimming. Bigger, with a hairline
+     that gives every section a visible starting edge. */
+  font-size: 13px;
+  line-height: 1.25;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--text-label);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft, #e7e0ce);
 }
 .body-sm { font-size: 12.5px; line-height: 1.5; }
 .muted { color: var(--text-muted); }

@@ -468,16 +468,15 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   const [awBusy, setAwBusy] = useState(false);
   const [awError, setAwError] = useState<string | null>(null);
   const [awNote, setAwNote] = useState<string | null>(null);
-  const [awPreviews, setAwPreviews] = useState<{
-    dark: string; light: string; outPx: number; floorOk: boolean; reason: string | null;
-  } | null>(null);
-  const [awLastBg, setAwLastBg] = useState<"dark" | "light">("dark");
+  // the background is a decision the operator makes up front (the ART
+  // determines it) — a selector, not a side-by-side comparison
+  const [awBg, setAwBg] = useState<"dark" | "light">("dark");
   const [awStaged, setAwStaged] = useState<{
     recordId: string; url: string; outPx: number; background: string; hasSlot: boolean;
   } | null>(null);
   useEffect(() => {
     const saved = window.localStorage.getItem("stuffs.artworkBg");
-    if (saved === "dark" || saved === "light") setAwLastBg(saved);
+    if (saved === "dark" || saved === "light") setAwBg(saved);
     const wm = window.localStorage.getItem("stuffs.artworkWm");
     if (wm) {
       try {
@@ -489,28 +488,12 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   }, []);
   const awWm = () => ({ on: awWmOn, opacity: awWmOpacity / 100 });
 
-  async function previewArtwork() {
-    setAwBusy(true);
-    setAwError(null);
-    setAwNote(null);
-    setAwStaged(null);
-    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity }));
-    const res = await apiJson<{
-      dark?: string; light?: string; outPx?: number; floorOk?: boolean; reason?: string | null;
-    }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { previews: true, watermark: awWm() }, 240_000);
-    if (!res.ok) setAwError(res.error);
-    else setAwPreviews({
-      dark: res.data.dark ?? "", light: res.data.light ?? "",
-      outPx: res.data.outPx ?? 0, floorOk: res.data.floorOk ?? false, reason: res.data.reason ?? null,
-    });
-    setAwBusy(false);
-  }
-
   async function buildArtwork(background: "dark" | "light") {
     setAwBusy(true);
     setAwError(null);
-    setAwLastBg(background);
+    setAwNote(null);
     window.localStorage.setItem("stuffs.artworkBg", background);
+    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity }));
     const res = await apiJson<{
       recordId?: string; url?: string; outPx?: number; background?: string; hasSlot?: boolean;
     }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { background, watermark: awWm() }, 240_000);
@@ -533,7 +516,6 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         `✓ artwork detail placed — from the design master · ${awStaged.background} background · watermark ${awWmOn ? `on (${awWmOpacity}%)` : "off"} · ${awStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "artwork"})`
       );
       setAwStaged(null);
-      setAwPreviews(null);
       router.refresh();
     }
     setAwBusy(false);
@@ -1238,6 +1220,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
       </div>
 
       <div className="card supporting">
+        <Kicker>SEND TO IMAGE SLOTS</Kicker>
         <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
           <span className="hint" style={{ flex: "1 1 260px" }}>
             Send fills <strong>empty matching slots only</strong> — it never overwrites an asset,
@@ -1303,11 +1286,15 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           </div>
         ) : null}
 
-        {/* the branded colour card, assembled here rather than in Canva:
-            pick renders in cell order, build, LOOK at it, then send it to
-            a Grid Composite slot — never sight-unseen. Max 6 cells; more
-            colours = a series of cards. */}
-        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+      </div>
+
+      {/* the branded colour card, assembled here rather than in Canva:
+          pick renders in cell order, build, LOOK at it, then send it to
+          a Grid Composite slot — never sight-unseen. Max 6 cells; more
+          colours = a series of cards. */}
+      <div className="card supporting">
+        <Kicker>COLOUR CARD · GRID COMPOSITE SLOT</Kicker>
+        <div className="stack-12" style={{ gap: 8 }}>
           <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
             <span className="hint" style={{ flex: "1 1 240px" }}>
               Build the branded <strong>colour card</strong> for the Grid Composite slot — title, colour
@@ -1471,9 +1458,13 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           ) : null}
         </div>
 
-        {/* print close-up: re-rendered at native sharpness, cropped to the
-            PRINT REGION — never a soft blow-up of the 2000px gallery render */}
-        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+      </div>
+
+      {/* print close-up: re-rendered at native sharpness, cropped to the
+          PRINT REGION — never a soft blow-up of the 2000px gallery render */}
+      <div className="card supporting">
+        <Kicker>PRINT CLOSE-UP · CLOSEUP PRINT SLOT</Kicker>
+        <div className="stack-12" style={{ gap: 8 }}>
           <span className="hint">
             Build the <strong>print close-up</strong> for the Closeup Print slot — a zoom into one
             render&apos;s print region, design on fabric. Pick a source render:
@@ -1567,9 +1558,13 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
           {cuNote ? <span className="hint" style={{ color: "var(--status-done, #3e7a4e)" }}>{cuNote}</span> : null}
         </div>
 
-        {/* artwork detail: the design ALONE from the master — and the one
-            output that carries the "stuffs" watermark */}
-        <div className="stack-12" style={{ borderTop: "1px dashed var(--border-soft, #e7e0ce)", paddingTop: 10, gap: 8 }}>
+      </div>
+
+      {/* artwork detail: the design ALONE from the master — and the one
+          output that carries the "stuffs" watermark */}
+      <div className="card supporting">
+        <Kicker>ARTWORK DETAIL · ARTWORK ONLY SLOT</Kicker>
+        <div className="stack-12" style={{ gap: 8 }}>
           <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
             <span className="hint" style={{ flex: "1 1 240px" }}>
               Build the <strong>artwork detail</strong> for the Artwork Only slot — the design alone,
@@ -1594,46 +1589,23 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 />
                 %
               </label>
-              <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={previewArtwork}>
-                <Spinner active={awBusy && !awPreviews && !awStaged} />
-                Preview both backgrounds
+              <select
+                className="select input-compact"
+                style={{ width: "auto", fontSize: 12 }}
+                aria-label="Artwork background"
+                title="The art decides — chosen up front, no comparison step"
+                value={awBg}
+                onChange={(e) => setAwBg(e.target.value as "dark" | "light")}
+              >
+                <option value="dark">dark (black)</option>
+                <option value="light">light (eggshell)</option>
+              </select>
+              <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => buildArtwork(awBg)}>
+                <Spinner active={awBusy && !awStaged} />
+                Build artwork detail
               </button>
             </span>
           </div>
-          {awPreviews && !awStaged ? (
-            <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
-              {(["dark", "light"] as const).map((bg) => (
-                <div key={bg} className="stack-12" style={{ gap: 6 }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={awPreviews[bg]}
-                    alt={`Artwork detail — ${bg} background`}
-                    style={{
-                      width: 220,
-                      borderRadius: 10,
-                      border: awLastBg === bg ? "2px solid var(--blueberry, #1f4897)" : "1px solid var(--border-soft, #e7e2d6)",
-                    }}
-                  />
-                  <button
-                    className={`btn ${awLastBg === bg ? "btn-save" : "btn-secondary"}`}
-                    style={{ fontSize: 12 }}
-                    disabled={awBusy || !awPreviews.floorOk}
-                    title={awPreviews.floorOk ? `Build full-res on the ${bg} background` : awPreviews.reason ?? ""}
-                    onClick={() => buildArtwork(bg)}
-                  >
-                    <Spinner active={awBusy} />
-                    Use {bg === "dark" ? "dark (black)" : "light (eggshell)"}
-                  </button>
-                </div>
-              ))}
-              <span className="hint" style={{ alignSelf: "center" }}>
-                output {awPreviews.outPx}px
-                {!awPreviews.floorOk ? (
-                  <span style={{ color: "var(--status-blocked, #b3423a)" }}> · ⚠ {awPreviews.reason}</span>
-                ) : null}
-              </span>
-            </div>
-          ) : null}
           {awStaged ? (
             <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
               <a href={awStaged.url} target="_blank" rel="noreferrer" title="Open full size">
@@ -1658,8 +1630,8 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                     <Spinner active={awBusy} />
                     Send to Artwork Only slot
                   </button>
-                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => setAwStaged(null)}>
-                    Back to previews
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={() => buildArtwork(awBg)}>
+                    Rebuild
                   </button>
                   <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={awBusy} onClick={discardArtwork}>
                     Discard

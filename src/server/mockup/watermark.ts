@@ -35,6 +35,12 @@ export const WATERMARK_DEFAULTS = {
   darkColour: "#FFFFFF",
   /** brand ink for the light/eggshell background */
   lightColour: "#2A3540",
+  /**
+   * Measured: 9% ink on eggshell blends ~20% fainter than 9% white on
+   * black (pixel deltas 56 vs 69). This boost applies to the LIGHT
+   * background only, so the mark reads equally faint on both.
+   */
+  lightBoost: 1.25,
 };
 
 export interface WatermarkSettings {
@@ -84,6 +90,8 @@ export async function applyWatermark(
 ): Promise<Buffer> {
   if (!settings.on) return image;
   const colour = background === "dark" ? WATERMARK_DEFAULTS.darkColour : WATERMARK_DEFAULTS.lightColour;
-  const svg = watermarkSvg(edge, colour, settings.opacity);
+  const opacity =
+    background === "light" ? Math.min(0.5, settings.opacity * WATERMARK_DEFAULTS.lightBoost) : settings.opacity;
+  const svg = watermarkSvg(edge, colour, opacity);
   return sharp(image).composite([{ input: Buffer.from(svg) }]).png().toBuffer();
 }

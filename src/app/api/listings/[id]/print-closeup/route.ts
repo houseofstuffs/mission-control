@@ -5,6 +5,8 @@ import { uploadFileToNotion } from "@/server/notion/upload";
 import { fetchLayers, fetchMaster, LayerExpiredError } from "@/server/mockup/generateJob";
 import { renderMockup } from "@/server/mockup/render";
 import { masterPngLink, perColourArt } from "@/server/mockup/plan";
+import { createSlotForShotType } from "@/server/imageSlots";
+import { MAX_IMAGES } from "@/config/images";
 import {
   MOCKUP_CROP_MIN,
   UPLOAD_BUDGET_BYTES,
@@ -28,39 +30,46 @@ export const maxDuration = 300;
  * renders are capped at 2000px; a crop of that would always be soft) and
  * the region is cut from those full-sharpness pixels.
  *
- * The zoom centres on the template's stored print-area quad — where the
- * design actually sits — never the image centre. Three tightness presets
- * (region +40% / +20% / tight), and the resolution guardrail is honest:
- * an option that can't produce >=2000px is OFFERED DISABLED with the
- * numbers visible, never silently soft.
+ * Framing is a DRAGGABLE CROP BOX on the client (the right crop depends
+ * on the artwork, so any fixed ladder of presets was arbitrary — the
+ * +40% preset proved not tight enough for a real design and the next
+ * step down would overshoot). The box is preloaded at the print-region
+ * quad; the 2000px guardrail is a CONSTRAINT on the box, re-checked
+ * here, never a disabled option.
  *
  * Bodies:
- *   { optionsFor: generatedId }        — preset availability + source px
- *   { generatedId, tightness }         — build & stage (no slot write)
- *   { assignRecordId }                 — staged -> the Closeup Print slot
+ *   { optionsFor: generatedId }        — render url + default rect + floor
+ *   { generatedId, rect:{x,y,size} }   — build & stage (no slot write)
+ *   { assignRecordId, sourceVariantId?, createSlot? } — staged -> slot
  *   { discardRecordId }                — archive a staged close-up
+ *
+ * rect is a CropRect: x/y as fractions of width/height, size as a
+ * fraction of the SHORTER edge — the same contract as the crop-adjust
+ * tool, so what the operator drags is exactly what gets cut.
  */
-
-const PRESETS = [
-  { key: "wide", label: "region +40%", factor: 1.4 },
-  { key: "mid", label: "region +20%", factor: 1.2 },
-  { key: "tight", label: "tight", factor: 1.0 },
-] as const;
-type Tightness = (typeof PRESETS)[number]["key"];
 
 /** cap for the native re-render — bounds CPU on oversized legacy bases */
 const NATIVE_EDGE_CAP = 4400;
 
-function cropRect(quad: Quad, W: number, H: number, factor: number) {
+/** the print-region quad's tight square, normalized — the box's start and reset point */
+function regionRect(quad: Quad, W: number, H: number) {
   const xs = quad.map((p) => p.x * W);
   const ys = quad.map((p) => p.y * H);
   const bw = Math.max(...xs) - Math.min(...xs);
   const bh = Math.max(...ys) - Math.min(...ys);
   const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
   const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-  const side = Math.round(Math.min(Math.max(bw, bh) * factor, Math.min(W, H)));
-  const left = Math.round(Math.min(Math.max(cx - side / 2, 0), W - side));
-  const top = Math.round(Math.min(Math.max(cy - side / 2, 0), H - side));
+  const side = Math.min(Math.max(bw, bh), Math.min(W, H));
+  const left = Math.min(Math.max(cx - side / 2, 0), W - side);
+  const top = Math.min(Math.max(cy - side / 2, 0), H - side);
+  return { x: left / W, y: top / H, size: side / Math.min(W, H) };
+}
+
+/** a client rect in image pixels, clamped inside the frame */
+function rectPixels(rect: { x: number; y: number; size: number }, W: number, H: number) {
+  const side = Math.round(Math.min(Math.max(rect.size, 0.01), 1) * Math.min(W, H));
+  const left = Math.round(Math.min(Math.max(rect.x * W, 0), W - side));
+  const top = Math.round(Math.min(Math.max(rect.y * H, 0), H - side));
   return { left, top, side };
 }
 
@@ -96,10 +105,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!rec || rec.dbKey !== "generated_mockups") {
         return NextResponse.json({ error: "That close-up is gone — rebuild it." }, { status: 404 });
       }
-      const slot = closeupSlot();
+      let slot = closeupSlot();
+      if (!slot && body.createSlot) {
+        // explicit create-and-send — never silent, cap enforced inside
+        slot = await createSlotForShotType(id, "Closeup Print", "print detail", "Sell Belief", MAX_IMAGES);
+      }
       if (!slot) {
         return NextResponse.json(
-          { error: "This listing has no Closeup Print slot — add one at L5 first." },
+          { error: "no Closeup Print slot on this listing", canCreate: true },
           { status: 400 }
         );
       }
@@ -164,33 +177,36 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const rw = Math.round(W * renderScale);
     const rh = Math.round(H * renderScale);
 
-    const presetInfo = PRESETS.map((p) => {
-      const { side } = cropRect(quad, rw, rh, p.factor);
-      const ok = side >= MOCKUP_CROP_MIN;
-      return {
-        key: p.key,
-        label: p.label,
-        outPx: side,
-        ok,
-        reason: ok
-          ? null
-          : `${p.key} crop unavailable: this render is ${sourcePx}px, a ${p.key} crop yields ${side}px`,
-      };
-    });
+    // the crop box works at RENDERED scale (what actually gets cut)
+    const renderPx = Math.min(rw, rh);
+    // the box can't shrink below the floor — expressed as a size fraction
+    const minSizeFrac = Math.min(1, MOCKUP_CROP_MIN / renderPx);
 
-    // ---- probe: which presets are honest at this source? ----
+    // ---- probe: everything the crop-box modal needs ----
     if (body.optionsFor) {
-      return NextResponse.json({ ok: true, sourcePx, presets: presetInfo });
+      return NextResponse.json({
+        ok: true,
+        sourcePx,
+        renderPx,
+        renderUrl: `/api/generated-mockups/${gen.id}/file`,
+        defaultRect: regionRect(quad, rw, rh),
+        minSizeFrac,
+      });
     }
 
-    const tightness = String(body.tightness ?? "") as Tightness;
-    const preset = PRESETS.find((p) => p.key === tightness);
-    if (!preset) {
-      return NextResponse.json({ error: "Pick a crop tightness — wide, mid or tight." }, { status: 400 });
+    const rect =
+      body.rect && typeof body.rect === "object"
+        ? { x: Number(body.rect.x), y: Number(body.rect.y), size: Number(body.rect.size) }
+        : null;
+    if (!rect || ![rect.x, rect.y, rect.size].every(Number.isFinite)) {
+      return NextResponse.json({ error: "Frame the crop first — no rect given." }, { status: 400 });
     }
-    const info = presetInfo.find((p) => p.key === tightness)!;
-    if (!info.ok) {
-      return NextResponse.json({ error: info.reason }, { status: 400 });
+    const px = rectPixels(rect, rw, rh);
+    if (px.side < MOCKUP_CROP_MIN) {
+      return NextResponse.json(
+        { error: `That framing yields ${px.side}px — under the ${MOCKUP_CROP_MIN}px floor. Drag the box larger.` },
+        { status: 400 }
+      );
     }
 
     // ---- re-render at native sharpness, then cut the region ----
@@ -221,9 +237,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       null
     );
     const rendered = await sharp(fullPng).metadata();
-    const rect = cropRect(quad, rendered.width ?? rw, rendered.height ?? rh, preset.factor);
+    // re-derive against the ACTUAL rendered dims — belt and braces if the
+    // render pipeline rounded differently than the probe predicted
+    const cut = rectPixels(rect, rendered.width ?? rw, rendered.height ?? rh);
     const cropped = await sharp(fullPng)
-      .extract({ left: rect.left, top: rect.top, width: rect.side, height: rect.side })
+      .extract({ left: cut.left, top: cut.top, width: cut.side, height: cut.side })
       .png()
       .toBuffer();
     const webp = await encodeUnderBudget(cropped);
@@ -259,8 +277,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       source: gen.title || "render",
       colour,
       sourceVariantId: variantId || null,
-      tightness,
-      outPx: rect.side,
+      outPx: cut.side,
       sourcePx,
       hasSlot: Boolean(closeupSlot()),
     });

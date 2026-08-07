@@ -4,6 +4,8 @@ import { archiveRecord, cachedRecord, cachedRecords, createRecord, refreshRecord
 import { uploadFileToNotion } from "@/server/notion/upload";
 import { buildColourCard, type CardCell } from "@/server/mockup/colourCard";
 import { CARD_DEFAULTS, CARD_MAX_CELLS, CARD_ROWS, UPLOAD_BUDGET_BYTES } from "@/config/mockups";
+import { createSlotForShotType } from "@/server/imageSlots";
+import { MAX_IMAGES } from "@/config/images";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -55,10 +57,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!rec || rec.dbKey !== "generated_mockups") {
         return NextResponse.json({ error: "That card is gone — rebuild it." }, { status: 404 });
       }
-      const slots = gridSlots();
+      let slots = gridSlots();
+      if (slots.length === 0 && body.createSlot) {
+        await createSlotForShotType(id, "Grid Composite", "color grid", "Sell Design", MAX_IMAGES);
+        slots = gridSlots();
+      }
       if (slots.length === 0) {
         return NextResponse.json(
-          { error: "This listing has no Grid Composite slot — add one at L5 first." },
+          { error: "no Grid Composite slot on this listing", canCreate: true },
           { status: 400 }
         );
       }

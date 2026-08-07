@@ -41,33 +41,49 @@ export const WATERMARK_DEFAULTS = {
    * background only, so the mark reads equally faint on both.
    */
   lightBoost: 1.25,
+  /**
+   * Tile-phase shift along the -30deg axis (up and to the right), as a
+   * fraction of the output edge. The default half-vertical-step moves
+   * the corner marks further INTO the canvas so they read as whole
+   * words, not clipped mistakes. Step-and-repeat means this changes
+   * WHICH marks meet the edges, never coverage or density. Both
+   * backgrounds share the footprint.
+   */
+  shift: 0.12,
 };
 
 export interface WatermarkSettings {
   on: boolean;
   opacity: number;
+  /** phase shift along the -30deg axis, fraction of edge */
+  shift: number;
 }
 
 export function parseWatermark(raw: unknown): WatermarkSettings {
-  const o = (raw ?? {}) as { on?: unknown; opacity?: unknown };
+  const o = (raw ?? {}) as { on?: unknown; opacity?: unknown; shift?: unknown };
   const op = Number(o.opacity);
+  const sh = Number(o.shift);
   return {
     on: o.on === undefined ? WATERMARK_DEFAULTS.on : Boolean(o.on),
     opacity: Number.isFinite(op) ? Math.min(0.5, Math.max(0.02, op)) : WATERMARK_DEFAULTS.opacity,
+    shift: Number.isFinite(sh) ? Math.min(0.5, Math.max(-0.5, sh)) : WATERMARK_DEFAULTS.shift,
   };
 }
 
 /** The tiled overlay as an SVG document sized edge x edge. */
-export function watermarkSvg(edge: number, colour: string, opacity: number): string {
+export function watermarkSvg(edge: number, colour: string, opacity: number, shift = WATERMARK_DEFAULTS.shift): string {
   const d = WATERMARK_DEFAULTS;
   const scale = (d.sizeFrac * edge) / WORD_UPEM;
   const stepX = d.stepXFrac * edge;
   const stepY = d.stepYFrac * edge;
+  // the phase shift rides the lattice's own x-axis; the outer rotation
+  // turns that into "up and to the right" on the canvas
+  const phase = shift * edge;
   // lattice big enough that the -30deg rotation still covers the corners
   const uses: string[] = [];
   let row = 0;
   for (let y = -edge; y <= edge * 2; y += stepY, row++) {
-    const off = row % 2 === 1 ? stepX / 2 : 0;
+    const off = (row % 2 === 1 ? stepX / 2 : 0) + phase;
     for (let x = -edge; x <= edge * 2; x += stepX) {
       uses.push(`<use href="#w" xlink:href="#w" x="${((x + off) / scale).toFixed(1)}" y="${(y / scale).toFixed(1)}"/>`);
     }
@@ -92,6 +108,6 @@ export async function applyWatermark(
   const colour = background === "dark" ? WATERMARK_DEFAULTS.darkColour : WATERMARK_DEFAULTS.lightColour;
   const opacity =
     background === "light" ? Math.min(0.5, settings.opacity * WATERMARK_DEFAULTS.lightBoost) : settings.opacity;
-  const svg = watermarkSvg(edge, colour, opacity);
+  const svg = watermarkSvg(edge, colour, opacity, settings.shift);
   return sharp(image).composite([{ input: Buffer.from(svg) }]).png().toBuffer();
 }

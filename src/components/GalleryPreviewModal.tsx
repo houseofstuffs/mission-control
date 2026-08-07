@@ -41,22 +41,6 @@ function displayRef(sl: GallerySlide, size: 320 | 1200): string {
   return `/api/image-slots/${sl.id}/asset-thumb?size=${size}`;
 }
 
-/**
- * The main image's square edge, from the window itself. This was a CSS
- * width formula once — width-only, so a short-wide window let the square's
- * HEIGHT overflow the flex column and bury the header and close button
- * under the image. Numbers over min(): 72vh, the operator's 900px hard
- * cap, usable width (arrows + padding), and usable height (header +
- * filmstrip + gaps ≈ 190px).
- */
-function squareEdge(): number {
-  if (typeof window === "undefined") return 550;
-  return Math.max(
-    220,
-    Math.min(900, Math.floor(window.innerHeight * 0.72), window.innerWidth - 150, window.innerHeight - 190)
-  );
-}
-
 export function GalleryPreviewModal({
   slides,
   onClose,
@@ -66,17 +50,33 @@ export function GalleryPreviewModal({
 }) {
   const [mounted, setMounted] = useState(false);
   const [idx, setIdx] = useState(0);
-  const [edge, setEdge] = useState(550);
+  const [edge, setEdge] = useState(400);
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const groupRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => setMounted(true), []);
+
+  // The square's edge comes from MEASURING the space that's actually
+  // left — vh formulas guessed at the chrome (header, filmstrip, gaps)
+  // and lost in a half-screen window, clipping the image. The contract:
+  // whatever the window, the whole image AND the whole filmstrip fit.
   useEffect(() => {
-    setMounted(true);
-    const onResize = () => setEdge(squareEdge());
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    const group = groupRef.current;
+    if (!group) return;
+    const measure = () => {
+      const stripH = stripRef.current?.offsetHeight ?? 84;
+      const next = Math.max(
+        180,
+        Math.min(900, group.clientWidth - 108, group.clientHeight - stripH - 12)
+      );
+      setEdge(Math.floor(next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(group);
+    return () => ro.disconnect();
+  }, [mounted]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,16 +88,17 @@ export function GalleryPreviewModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [slides.length, onClose]);
 
-  // keep the highlighted thumb in view — scroll ONLY the strip, by hand.
-  // scrollIntoView walks every scrollable ancestor, and each call nudged
-  // the page container a little further left; five slides in, the whole
-  // carousel had drifted off-centre.
+  // keep the highlighted thumb CENTRED — scroll ONLY the strip, by hand
+  // (scrollIntoView walks scrollable ancestors and drifted the page), and
+  // measure via rects so the inner centring wrapper can't skew the math
   useEffect(() => {
     const strip = stripRef.current;
     const thumb = strip?.querySelector<HTMLElement>(`[data-thumb="${idx}"]`);
     if (!strip || !thumb) return;
+    const t = thumb.getBoundingClientRect();
+    const s = strip.getBoundingClientRect();
     strip.scrollTo({
-      left: thumb.offsetLeft - (strip.clientWidth - thumb.offsetWidth) / 2,
+      left: strip.scrollLeft + (t.left - s.left) - (strip.clientWidth - t.width) / 2,
       behavior: "smooth",
     });
   }, [idx]);
@@ -169,12 +170,26 @@ export function GalleryPreviewModal({
         </button>
       </div>
 
-      {/* the image, capped hard at min(72vh, 900px, usable width/height) */}
+      {/* image + filmstrip as ONE centred group: the strip sits tight
+          under the image instead of at the window's bottom edge */}
       <div
+        ref={groupRef}
         data-backdrop
         style={{
           flex: "1 1 auto",
           minHeight: 0,
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+        }}
+      >
+      <div
+        data-backdrop
+        style={{
+          flex: "none",
           width: "100%",
           display: "flex",
           alignItems: "center",
@@ -247,18 +262,18 @@ export function GalleryPreviewModal({
         </button>
       </div>
 
-      {/* the filmstrip: full running order, current highlighted, tap to jump */}
+      {/* the filmstrip: centred under the image, current thumb kept
+          centred as the index moves — the strip scrolls under the eye */}
       <div
         ref={stripRef}
         style={{
           flex: "none",
           width: "100%",
-          display: "flex",
-          gap: 8,
           overflowX: "auto",
           padding: "4px 2px 8px",
         }}
       >
+        <div style={{ display: "flex", gap: 8, width: "max-content", margin: "0 auto" }}>
         {slides.map((sl, i) => (
           <button
             key={sl.position}
@@ -304,6 +319,8 @@ export function GalleryPreviewModal({
             </span>
           </button>
         ))}
+        </div>
+      </div>
       </div>
     </div>,
     document.body

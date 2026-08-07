@@ -44,6 +44,37 @@ export function compatForListing(listing: SimpleRecord): GarmentCompatibility {
 /** the most colorway slots a seed will mint — past this, colours share */
 export const MAX_COLORWAY_SLOTS = 6;
 
+/**
+ * One slot, appended at the end of the plan — the "create it and send"
+ * path when a generated card's destination slot is missing (deleted by
+ * hand, or a seed that predates the shot type). Never silent: callers
+ * only reach this from an explicit button, and the image cap is
+ * enforced HERE so no caller can push the plan past it.
+ */
+export async function createSlotForShotType(
+  listingId: string,
+  shotType: string,
+  label: string,
+  bucket: string,
+  cap: number
+): Promise<SimpleRecord> {
+  const slots = slotsForListing(listingId);
+  if (slots.length >= cap) {
+    throw new Error(
+      `The slot plan is at the ${cap}-image cap (${slots.length} slots) — remove one at L5 before creating another.`
+    );
+  }
+  const maxPos = slots.reduce((m, s) => Math.max(m, Number(s.props["Position"]) || 0), 0);
+  return createRecord("image_slots", {
+    Name: label,
+    Listing: [listingId],
+    Bucket: bucket,
+    "Shot Type": shotType,
+    Position: maxPos + 1,
+    Status: "Planned",
+  });
+}
+
 /** The listing's mockup colours — the SAME set the generate plan uses. */
 export function listingColours(listing: SimpleRecord | undefined | null): string[] {
   const parse = (raw: unknown): string[] => {

@@ -60,6 +60,27 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         }
       }
 
+      // CARD SLOTS ARE EXEMPT from the one-fact rule below. A colour
+      // grid / print close-up / artwork detail is a VARIANT-LESS
+      // composite: there is no render behind the template relation to
+      // keep in sync with, so "re-point the asset" could only replace
+      // finished work with a plain render. On these slots the template
+      // is a label — changing it changes the relation, never the asset.
+      // Swapping the image itself stays behind "replace…".
+      const assetRefStr = String(slot.props["Asset Ref"] ?? "");
+      const assetGenId = /^\/api\/generated-mockups\/([^/?]+)\/file/.exec(assetRefStr)?.[1];
+      const assetGen = assetGenId ? cachedRecord(assetGenId) : null;
+      const isCardAsset = Boolean(
+        assetGen &&
+          assetGen.dbKey === "generated_mockups" &&
+          (((assetGen.props["Variant"] as string[] | null) ?? []).length === 0)
+      );
+      if (isCardAsset) {
+        values["Mockup Template"] = body.mockupTemplateId ? [String(body.mockupTemplateId)] : [];
+        // no shot-type auto-fill either — it would overwrite the slot's
+        // own type (Grid Composite etc.), which the card senders key on
+      } else {
+
       // ONE action, ONE fact: the variant relation and the placed asset
       // are two halves of "what image is this slot showing", and letting
       // them move independently is what minted crossed pairs. Picking a
@@ -96,6 +117,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         const tpl = cachedRecord(String(body.mockupTemplateId));
         const tplShot = tpl?.props["Shot Type"];
         if (typeof tplShot === "string" && tplShot) values["Shot Type"] = tplShot;
+      }
       }
     }
 

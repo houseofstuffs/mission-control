@@ -17,6 +17,8 @@ import { useRouter } from "next/navigation";
 import { Kicker, Spinner } from "./ui";
 import { apiCall, apiJson } from "@/lib/api";
 import { CropAdjustModal } from "./CropAdjustModal";
+import { CloseupCropModal } from "./CloseupCropModal";
+import { cropSquarePixels, type CropRect } from "@/lib/mockupCrop";
 import { PlacementModal } from "./PlacementModal";
 import { CARD_DEFAULTS, CARD_MAX_CELLS, CARD_ROWS, type PlacementMap, type Quad } from "@/config/mockups";
 
@@ -305,6 +307,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     recordId: string; url: string; layout: string; cells: string[]; title: string; hasSlot: boolean; openSlots: number;
     sourceVariantId: string | null;
   } | null>(null);
+  const [cardNeedSlot, setCardNeedSlot] = useState(false);
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("stuffs.cardText") ?? "{}");
@@ -365,16 +368,19 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setGridBusy(false);
   }
 
-  async function assignCard() {
+  async function assignCard(createSlot = false) {
     if (!cardStaged) return;
     setGridBusy(true);
-    const res = await apiJson<{ slot?: { position: number; label: string } }>(
+    setCardNeedSlot(false);
+    const res = await apiJson<{ slot?: { position: number; label: string }; canCreate?: boolean }>(
       `/api/listings/${data.listingId}/colour-card`,
       "POST",
-      { assignRecordId: cardStaged.recordId, sourceVariantId: cardStaged.sourceVariantId }
+      { assignRecordId: cardStaged.recordId, sourceVariantId: cardStaged.sourceVariantId, ...(createSlot ? { createSlot: true } : {}) }
     );
-    if (!res.ok) setGridError(res.error);
-    else {
+    if (!res.ok) {
+      if (res.data.canCreate) setCardNeedSlot(true);
+      else setGridError(res.error);
+    } else {
       setGridNote(
         `✓ colour card placed — ${cardStaged.cells.length} colours (${cardStaged.cells.join(" → ")}) · ${cardStaged.layout} · "${cardStaged.title}" · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "grid"})`
       );
@@ -394,65 +400,80 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   }
 
   // ---- print close-up: zoom into a render's PRINT REGION ----
-  interface CuPreset { key: string; label: string; outPx: number; ok: boolean; reason: string | null }
   const [cuPicked, setCuPicked] = useState<string | null>(null); // generatedId
-  const [cuOpts, setCuOpts] = useState<{ sourcePx: number; presets: CuPreset[] } | null>(null);
-  const [cuTightness, setCuTightness] = useState<string>("");
+  const [cuOpts, setCuOpts] = useState<{
+    sourcePx: number; renderPx: number; renderUrl: string; defaultRect: CropRect; minSizeFrac: number;
+  } | null>(null);
+  /** the chosen framing — starts at the print region, edited in the crop modal */
+  const [cuRect, setCuRect] = useState<CropRect | null>(null);
+  const [cuModal, setCuModal] = useState(false);
   const [cuBusy, setCuBusy] = useState(false);
   const [cuError, setCuError] = useState<string | null>(null);
   const [cuNote, setCuNote] = useState<string | null>(null);
+  /** destination slot missing — offer create-and-send in place */
+  const [cuNeedSlot, setCuNeedSlot] = useState(false);
   const [cuStaged, setCuStaged] = useState<{
-    recordId: string; url: string; source: string; colour: string; tightness: string; outPx: number; hasSlot: boolean;
+    recordId: string; url: string; source: string; colour: string; outPx: number; hasSlot: boolean;
     sourceVariantId: string | null;
   } | null>(null);
 
   async function pickCloseupTile(generatedId: string) {
-    if (cuPicked === generatedId) { setCuPicked(null); setCuOpts(null); return; }
+    if (cuPicked === generatedId) { setCuPicked(null); setCuOpts(null); setCuRect(null); return; }
     setCuPicked(generatedId);
     setCuOpts(null);
+    setCuRect(null);
     setCuError(null);
     setCuBusy(true);
-    const res = await apiJson<{ sourcePx?: number; presets?: CuPreset[] }>(
-      `/api/listings/${data.listingId}/print-closeup`, "POST", { optionsFor: generatedId });
+    const res = await apiJson<{
+      sourcePx?: number; renderPx?: number; renderUrl?: string; defaultRect?: CropRect; minSizeFrac?: number;
+    }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { optionsFor: generatedId });
     if (!res.ok) setCuError(res.error);
-    else {
-      const presets = res.data.presets ?? [];
-      setCuOpts({ sourcePx: res.data.sourcePx ?? 0, presets });
-      // default to the middle setting when it's honest, else the widest honest one
-      const pick = presets.find((p) => p.key === "mid" && p.ok) ?? presets.find((p) => p.ok);
-      setCuTightness(pick?.key ?? "");
+    else if (res.data.defaultRect) {
+      setCuOpts({
+        sourcePx: res.data.sourcePx ?? 0,
+        renderPx: res.data.renderPx ?? 0,
+        renderUrl: res.data.renderUrl ?? "",
+        defaultRect: res.data.defaultRect,
+        minSizeFrac: res.data.minSizeFrac ?? 0,
+      });
+      setCuRect(res.data.defaultRect); // print-region framing until they adjust
     }
     setCuBusy(false);
   }
 
-  async function buildCloseup() {
-    if (!cuPicked || !cuTightness) return;
+  async function buildCloseup(rectArg?: CropRect) {
+    const rect = rectArg ?? cuRect;
+    if (!cuPicked || !rect) return;
     setCuBusy(true);
     setCuError(null);
     setCuNote(null);
     const res = await apiJson<{
-      recordId?: string; url?: string; source?: string; colour?: string; tightness?: string; outPx?: number; hasSlot?: boolean;
+      recordId?: string; url?: string; source?: string; colour?: string; outPx?: number; hasSlot?: boolean;
       sourceVariantId?: string | null;
-    }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { generatedId: cuPicked, tightness: cuTightness }, 240_000);
+    }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { generatedId: cuPicked, rect }, 240_000);
     if (!res.ok) setCuError(res.error);
     else setCuStaged({
       recordId: res.data.recordId!, url: res.data.url!, source: res.data.source ?? "render",
-      colour: res.data.colour ?? "", tightness: res.data.tightness ?? cuTightness,
+      colour: res.data.colour ?? "",
       outPx: res.data.outPx ?? 0, hasSlot: res.data.hasSlot ?? true,
       sourceVariantId: res.data.sourceVariantId ?? null,
     });
     setCuBusy(false);
   }
 
-  async function assignCloseup() {
+  async function assignCloseup(createSlot = false) {
     if (!cuStaged) return;
     setCuBusy(true);
-    const res = await apiJson<{ slot?: { position: number; label: string } }>(
-      `/api/listings/${data.listingId}/print-closeup`, "POST", { assignRecordId: cuStaged.recordId, sourceVariantId: cuStaged.sourceVariantId });
-    if (!res.ok) setCuError(res.error);
-    else {
+    setCuNeedSlot(false);
+    const res = await apiJson<{ slot?: { position: number; label: string }; canCreate?: boolean }>(
+      `/api/listings/${data.listingId}/print-closeup`, "POST",
+      { assignRecordId: cuStaged.recordId, sourceVariantId: cuStaged.sourceVariantId, ...(createSlot ? { createSlot: true } : {}) });
+    if (!res.ok) {
+      if (res.data.canCreate) setCuNeedSlot(true);
+      else setCuError(res.error);
+    } else {
       setCuNote(
-        `✓ print close-up placed — from ${cuStaged.source} (${cuStaged.colour}) · ${cuStaged.tightness} crop · ${cuStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "closeup"})`
+        `✓ print close-up placed — from ${cuStaged.source} (${cuStaged.colour}) · ${cuStaged.outPx}px crop · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "closeup"})`
       );
       setCuStaged(null);
       router.refresh();
@@ -471,9 +492,12 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   // ---- artwork detail: the design alone, from the MASTER, watermarked ----
   const [awWmOn, setAwWmOn] = useState(true);
   const [awWmOpacity, setAwWmOpacity] = useState(9); // percent
+  /** tile-phase shift along the -30° axis, % of edge — nudges which marks meet the corners */
+  const [awWmShift, setAwWmShift] = useState(12);
   const [awBusy, setAwBusy] = useState(false);
   const [awError, setAwError] = useState<string | null>(null);
   const [awNote, setAwNote] = useState<string | null>(null);
+  const [awNeedSlot, setAwNeedSlot] = useState(false);
   // the background is a decision the operator makes up front (the ART
   // determines it) — a selector, not a side-by-side comparison
   const [awBg, setAwBg] = useState<"dark" | "light">("dark");
@@ -489,17 +513,18 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         const p = JSON.parse(wm);
         if (typeof p.on === "boolean") setAwWmOn(p.on);
         if (Number.isFinite(p.opacity)) setAwWmOpacity(p.opacity);
+        if (Number.isFinite(p.shift)) setAwWmShift(p.shift);
       } catch { /* stale setting — defaults stand */ }
     }
   }, []);
-  const awWm = () => ({ on: awWmOn, opacity: awWmOpacity / 100 });
+  const awWm = () => ({ on: awWmOn, opacity: awWmOpacity / 100, shift: awWmShift / 100 });
 
   async function buildArtwork(background: "dark" | "light") {
     setAwBusy(true);
     setAwError(null);
     setAwNote(null);
     window.localStorage.setItem("stuffs.artworkBg", background);
-    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity }));
+    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity, shift: awWmShift }));
     const res = await apiJson<{
       recordId?: string; url?: string; outPx?: number; background?: string; hasSlot?: boolean;
     }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { background, watermark: awWm() }, 240_000);
@@ -511,13 +536,17 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     setAwBusy(false);
   }
 
-  async function assignArtwork() {
+  async function assignArtwork(createSlot = false) {
     if (!awStaged) return;
     setAwBusy(true);
-    const res = await apiJson<{ slot?: { position: number; label: string } }>(
-      `/api/listings/${data.listingId}/artwork-detail`, "POST", { assignRecordId: awStaged.recordId });
-    if (!res.ok) setAwError(res.error);
-    else {
+    setAwNeedSlot(false);
+    const res = await apiJson<{ slot?: { position: number; label: string }; canCreate?: boolean }>(
+      `/api/listings/${data.listingId}/artwork-detail`, "POST",
+      { assignRecordId: awStaged.recordId, ...(createSlot ? { createSlot: true } : {}) });
+    if (!res.ok) {
+      if (res.data.canCreate) setAwNeedSlot(true);
+      else setAwError(res.error);
+    } else {
       setAwNote(
         `✓ artwork detail placed — from the design master · ${awStaged.background} background · watermark ${awWmOn ? `on (${awWmOpacity}%)` : "off"} · ${awStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "artwork"})`
       );
@@ -1434,9 +1463,12 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 <span className="body-sm">
                   <strong>{cardStaged.layout}</strong> · &quot;{cardStaged.title}&quot; · {cardStaged.cells.join(" → ")}
                 </span>
-                {!cardStaged.hasSlot ? (
+                {!cardStaged.hasSlot || cardNeedSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
-                    ⚠ no Grid Composite slot on this listing — add one at L5 before placing
+                    ⚠ no Grid Composite slot on this listing ·{" "}
+                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "2px 10px" }} disabled={gridBusy} onClick={() => assignCard(true)}>
+                      create it and send
+                    </button>
                   </span>
                 ) : cardStaged.openSlots === 0 ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
@@ -1444,7 +1476,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                   </span>
                 ) : null}
                 <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={gridBusy || !cardStaged.hasSlot} onClick={assignCard}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={gridBusy || !cardStaged.hasSlot} onClick={() => assignCard()}>
                     <Spinner active={gridBusy} />
                     Send to Grid Composite slot
                   </button>
@@ -1493,33 +1525,28 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               ))
             )}
           </div>
-          {cuPicked && cuOpts ? (
+          {cuPicked && cuOpts && cuRect ? (
             <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
-              <span className="hint">source {cuOpts.sourcePx}px · crop:</span>
-              {cuOpts.presets.map((p) => (
-                <button
-                  key={p.key}
-                  type="button"
-                  className={`chip ${cuTightness === p.key ? "done" : "neutral"}`}
-                  style={{ cursor: p.ok ? "pointer" : "not-allowed", fontSize: 11, opacity: p.ok ? 1 : 0.45 }}
-                  disabled={!p.ok}
-                  title={p.ok ? `${p.label} → ${p.outPx}px output` : p.reason ?? ""}
-                  onClick={() => p.ok && setCuTightness(p.key)}
-                >
-                  {p.label} · {p.outPx}px
-                </button>
-              ))}
-              {cuOpts.presets.filter((p) => !p.ok).map((p) => (
-                <span key={`r-${p.key}`} className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
-                  ⚠ {p.reason}
-                </span>
-              ))}
+              <span className="hint">
+                source {cuOpts.sourcePx}px · framing:{" "}
+                <strong>{cropSquarePixels(cuOpts.renderPx, cuOpts.renderPx, cuRect)}px output</strong>
+                {cuRect === cuOpts.defaultRect ? " (print region)" : " (custom)"}
+              </span>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 12 }}
+                disabled={cuBusy}
+                title="Drag a crop box over the render — starts on the print region, can't shrink below the 2000px floor"
+                onClick={() => setCuModal(true)}
+              >
+                Frame the crop…
+              </button>
               <button
                 className="btn btn-primary"
                 style={{ fontSize: 12 }}
-                disabled={cuBusy || !cuTightness}
-                title="Build the close-up — nothing is placed until you confirm"
-                onClick={buildCloseup}
+                disabled={cuBusy}
+                title="Build the close-up at the current framing — nothing is placed until you confirm"
+                onClick={() => buildCloseup()}
               >
                 <Spinner active={cuBusy && !cuStaged} />
                 Generate print close-up
@@ -1538,19 +1565,27 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </a>
               <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
                 <span className="body-sm">
-                  from <strong>{cuStaged.source}</strong> ({cuStaged.colour}) · {cuStaged.tightness} crop · {cuStaged.outPx}px
+                  from <strong>{cuStaged.source}</strong> ({cuStaged.colour}) · {cuStaged.outPx}px crop
                 </span>
-                {!cuStaged.hasSlot ? (
+                {!cuStaged.hasSlot || cuNeedSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
-                    ⚠ no Closeup Print slot on this listing — add one at L5 before placing
+                    ⚠ no Closeup Print slot on this listing ·{" "}
+                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "2px 10px" }} disabled={cuBusy} onClick={() => assignCloseup(true)}>
+                      create it and send
+                    </button>
                   </span>
                 ) : null}
                 <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={cuBusy || !cuStaged.hasSlot} onClick={assignCloseup}>
+                  <button
+                    className="btn btn-save"
+                    style={{ fontSize: 12 }}
+                    disabled={cuBusy || !cuStaged.hasSlot}
+                    onClick={() => assignCloseup()}
+                  >
                     <Spinner active={cuBusy} />
                     Send to Closeup Print slot
                   </button>
-                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={cuBusy} onClick={buildCloseup}>
+                  <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={cuBusy} onClick={() => buildCloseup()}>
                     Rebuild
                   </button>
                   <button className="btn btn-tertiary" style={{ fontSize: 12 }} disabled={cuBusy} onClick={discardCloseup}>
@@ -1595,6 +1630,24 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 />
                 %
               </label>
+              <label
+                className="hint"
+                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+                title="Tile-phase shift along the diagonal — nudges which marks meet the corners; coverage and density never change"
+              >
+                shift
+                <input
+                  className="input input-compact"
+                  style={{ width: 52 }}
+                  type="number"
+                  min={-50}
+                  max={50}
+                  value={awWmShift}
+                  disabled={!awWmOn}
+                  onChange={(e) => setAwWmShift(Math.min(50, Math.max(-50, Number(e.target.value) || 0)))}
+                />
+                %
+              </label>
               <select
                 className="select input-compact"
                 style={{ width: "auto", fontSize: 12 }}
@@ -1626,13 +1679,16 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
                 <span className="body-sm">
                   <strong>{awStaged.background}</strong> background · watermark {awWmOn ? `on (${awWmOpacity}%)` : "off"} · {awStaged.outPx}px
                 </span>
-                {!awStaged.hasSlot ? (
+                {!awStaged.hasSlot || awNeedSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
-                    ⚠ no Artwork Only slot on this listing — add one at L5 before placing
+                    ⚠ no Artwork Only slot on this listing ·{" "}
+                    <button className="btn btn-secondary" style={{ fontSize: 11, padding: "2px 10px" }} disabled={awBusy} onClick={() => assignArtwork(true)}>
+                      create it and send
+                    </button>
                   </span>
                 ) : null}
                 <div className="row-gap-8" style={{ flexWrap: "wrap" }}>
-                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={awBusy || !awStaged.hasSlot} onClick={assignArtwork}>
+                  <button className="btn btn-save" style={{ fontSize: 12 }} disabled={awBusy || !awStaged.hasSlot} onClick={() => assignArtwork()}>
                     <Spinner active={awBusy} />
                     Send to Artwork Only slot
                   </button>
@@ -1651,6 +1707,21 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         </div>
       </div>
 
+      {cuModal && cuOpts && cuPicked ? (
+        <CloseupCropModal
+          renderUrl={cuOpts.renderUrl}
+          renderName={gridCandidates.find((t) => t.generatedId === cuPicked)?.colour ?? "render"}
+          renderPx={cuOpts.renderPx}
+          defaultRect={cuOpts.defaultRect}
+          initialRect={cuRect}
+          onClose={() => setCuModal(false)}
+          onConfirm={(rect) => {
+            setCuRect(rect);
+            setCuModal(false);
+            void buildCloseup(rect); // framing chosen = build it; the staged preview still gates the slot
+          }}
+        />
+      ) : null}
       {cropTile ? (
         <CropAdjustModal
           variantId={cropTile.variantId}

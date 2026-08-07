@@ -5,6 +5,8 @@ import { uploadFileToNotion } from "@/server/notion/upload";
 import { fetchMaster } from "@/server/mockup/generateJob";
 import { masterPngLink } from "@/server/mockup/plan";
 import { applyWatermark, parseWatermark } from "@/server/mockup/watermark";
+import { createSlotForShotType } from "@/server/imageSlots";
+import { MAX_IMAGES } from "@/config/images";
 import {
   ARTWORK_BACKGROUNDS,
   ARTWORK_PAD_FRAC,
@@ -123,10 +125,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!rec || rec.dbKey !== "generated_mockups") {
         return NextResponse.json({ error: "That artwork detail is gone — rebuild it." }, { status: 404 });
       }
-      const slot = artworkSlot();
+      let slot = artworkSlot();
+      if (!slot && body.createSlot) {
+        slot = await createSlotForShotType(id, "Artwork Only", "artwork detail", "Sell Design", MAX_IMAGES);
+      }
       if (!slot) {
         return NextResponse.json(
-          { error: "This listing has no Artwork Only slot — add one at L5 first." },
+          { error: "no Artwork Only slot on this listing", canCreate: true },
           { status: 400 }
         );
       }

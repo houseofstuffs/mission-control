@@ -829,6 +829,19 @@ export function ImageSlotsPanel({ data }: { data: SlotsData }) {
                                   ) : (
                                     <span className="l5-fromprod warn">⚠ Not in Product yet — add it there</span>
                                   )}
+                                  {/* same "show me the picture" affordance as every
+                                      other filled row — one pattern, not two */}
+                                  {s.assetRef ? (
+                                    <a
+                                      className="body-sm"
+                                      href={s.assetRef}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      open ↗
+                                    </a>
+                                  ) : null}
                                   </>
                                 ) : (
                                   <>

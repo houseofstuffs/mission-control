@@ -364,6 +364,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
         openSlots: res.data.openSlots ?? 0,
         sourceVariantId: res.data.sourceVariantId ?? null,
       });
+      setGridNote(`✓ colour card generated — ${res.data.layout ?? ""} — preview below, nothing placed yet`);
     }
     setGridBusy(false);
   }
@@ -452,12 +453,17 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
       sourceVariantId?: string | null;
     }>(`/api/listings/${data.listingId}/print-closeup`, "POST", { generatedId: cuPicked, rect }, 240_000);
     if (!res.ok) setCuError(res.error);
-    else setCuStaged({
-      recordId: res.data.recordId!, url: res.data.url!, source: res.data.source ?? "render",
-      colour: res.data.colour ?? "",
-      outPx: res.data.outPx ?? 0, hasSlot: res.data.hasSlot ?? true,
-      sourceVariantId: res.data.sourceVariantId ?? null,
-    });
+    else {
+      setCuStaged({
+        recordId: res.data.recordId!, url: res.data.url!, source: res.data.source ?? "render",
+        colour: res.data.colour ?? "",
+        outPx: res.data.outPx ?? 0, hasSlot: res.data.hasSlot ?? true,
+        sourceVariantId: res.data.sourceVariantId ?? null,
+      });
+      setCuNote(
+        `✓ print close-up generated — ${res.data.outPx ?? "?"}px${(res.data as { recovered?: boolean }).recovered ? " · previous record was archived, built a fresh one" : ""} — preview below, nothing placed yet`
+      );
+    }
     setCuBusy(false);
   }
 
@@ -490,9 +496,8 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
   }
 
   // ---- artwork detail: the design alone, from the MASTER, watermarked ----
-  const [awWmOn, setAwWmOn] = useState(true);
   const [awWmOpacity, setAwWmOpacity] = useState(9); // percent
-  /** tile-phase shift along the -30° axis, % of edge — nudges which marks meet the corners */
+  /** tile-phase offset along the -30° axis, % of edge — nudges which marks meet the corners */
   const [awWmShift, setAwWmShift] = useState(12);
   const [awBusy, setAwBusy] = useState(false);
   const [awError, setAwError] = useState<string | null>(null);
@@ -511,28 +516,36 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
     if (wm) {
       try {
         const p = JSON.parse(wm);
-        if (typeof p.on === "boolean") setAwWmOn(p.on);
         if (Number.isFinite(p.opacity)) setAwWmOpacity(p.opacity);
         if (Number.isFinite(p.shift)) setAwWmShift(p.shift);
       } catch { /* stale setting — defaults stand */ }
     }
   }, []);
-  const awWm = () => ({ on: awWmOn, opacity: awWmOpacity / 100, shift: awWmShift / 100 });
+  // watermark is ALWAYS on for the artwork detail — the card's own copy
+  // promises it, so an off switch would contradict a decision already made
+  const awWm = () => ({ on: true, opacity: awWmOpacity / 100, shift: awWmShift / 100 });
 
   async function buildArtwork(background: "dark" | "light") {
     setAwBusy(true);
     setAwError(null);
     setAwNote(null);
     window.localStorage.setItem("stuffs.artworkBg", background);
-    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ on: awWmOn, opacity: awWmOpacity, shift: awWmShift }));
+    window.localStorage.setItem("stuffs.artworkWm", JSON.stringify({ opacity: awWmOpacity, shift: awWmShift }));
     const res = await apiJson<{
       recordId?: string; url?: string; outPx?: number; background?: string; hasSlot?: boolean;
     }>(`/api/listings/${data.listingId}/artwork-detail`, "POST", { background, watermark: awWm() }, 240_000);
     if (!res.ok) setAwError(res.error);
-    else setAwStaged({
-      recordId: res.data.recordId!, url: res.data.url!, outPx: res.data.outPx ?? 0,
-      background: res.data.background ?? background, hasSlot: res.data.hasSlot ?? true,
-    });
+    else {
+      setAwStaged({
+        recordId: res.data.recordId!, url: res.data.url!, outPx: res.data.outPx ?? 0,
+        background: res.data.background ?? background, hasSlot: res.data.hasSlot ?? true,
+      });
+      // every generate ends in a visible line — the preview appearing is
+      // not enough when it renders below the fold
+      setAwNote(
+        `✓ artwork detail generated — ${res.data.outPx ?? "?"}px on ${background}${(res.data as { recovered?: boolean }).recovered ? " · previous record was archived, built a fresh one" : ""} — preview below, nothing placed yet`
+      );
+    }
     setAwBusy(false);
   }
 
@@ -548,7 +561,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
       else setAwError(res.error);
     } else {
       setAwNote(
-        `✓ artwork detail placed — from the design master · ${awStaged.background} background · watermark ${awWmOn ? `on (${awWmOpacity}%)` : "off"} · ${awStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "artwork"})`
+        `✓ artwork detail placed — from the design master · ${awStaged.background} background · watermark ${awWmOpacity}% / offset ${awWmShift}% · ${awStaged.outPx}px · slot ${res.data.slot?.position ?? "?"} (${res.data.slot?.label ?? "artwork"})`
       );
       setAwStaged(null);
       router.refresh();
@@ -993,7 +1006,13 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap", fontWeight: 600, fontSize: 14 }}>
                   {t.name}
-                  {t.shotType ? <span className="chip neutral" style={{ fontSize: 10 }}>{t.shotType.toUpperCase()}</span> : null}
+                  {t.shotType ? (
+                    /* the FULL stored value, wrapping if tight — truncated
+                       near-identical enum values have bitten before */
+                    <span className="chip neutral" style={{ fontSize: 10, whiteSpace: "normal", textAlign: "left" }}>
+                      {t.shotType.toUpperCase()}
+                    </span>
+                  ) : null}
                   {!t.hasGeometry ? <span className="chip stale" style={{ fontSize: 10 }}>no geometry</span> : null}
                 </span>
                 <span className="hint" style={{ display: "block", marginTop: 2 }}>
@@ -1612,41 +1631,31 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               from the design master. Watermarked; the close-up and mockups never are.
             </span>
             <span className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <input type="checkbox" checked={awWmOn} onChange={(e) => setAwWmOn(e.target.checked)} />
-                watermark
-              </label>
-              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 opacity
                 <input
-                  className="input input-compact"
-                  style={{ width: 52 }}
-                  type="number"
+                  type="range"
                   min={2}
-                  max={50}
+                  max={30}
+                  step={1}
                   value={awWmOpacity}
-                  disabled={!awWmOn}
-                  onChange={(e) => setAwWmOpacity(Math.min(50, Math.max(2, Number(e.target.value) || 9)))}
+                  style={{ width: 110 }}
+                  onChange={(e) => setAwWmOpacity(Number(e.target.value))}
                 />
-                %
+                <span style={{ fontWeight: 700, minWidth: 34 }}>{awWmOpacity}%</span>
               </label>
-              <label
-                className="hint"
-                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-                title="Tile-phase shift along the diagonal — nudges which marks meet the corners; coverage and density never change"
-              >
-                shift
+              <label className="hint" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                offset
                 <input
-                  className="input input-compact"
-                  style={{ width: 52 }}
-                  type="number"
+                  type="range"
                   min={-50}
                   max={50}
+                  step={1}
                   value={awWmShift}
-                  disabled={!awWmOn}
-                  onChange={(e) => setAwWmShift(Math.min(50, Math.max(-50, Number(e.target.value) || 0)))}
+                  style={{ width: 110 }}
+                  onChange={(e) => setAwWmShift(Number(e.target.value))}
                 />
-                %
+                <span style={{ fontWeight: 700, minWidth: 40 }}>{awWmShift}%</span>
               </label>
               <select
                 className="select input-compact"
@@ -1665,6 +1674,11 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </button>
             </span>
           </div>
+          <span className="hint">
+            <strong>opacity</strong> — how strongly the &quot;stuffs&quot; marks read ·{" "}
+            <strong>offset</strong> — slides the whole watermark pattern along its diagonal, changing
+            which marks meet the corners (coverage never changes). Nudge both until it looks right.
+          </span>
           {awStaged ? (
             <div className="row-gap-12" style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
               <a href={awStaged.url} target="_blank" rel="noreferrer" title="Open full size">
@@ -1677,7 +1691,7 @@ export function GenerateMockupsPanel({ data }: { data: MockupsData }) {
               </a>
               <div className="stack-12" style={{ gap: 6, flex: "1 1 220px" }}>
                 <span className="body-sm">
-                  <strong>{awStaged.background}</strong> background · watermark {awWmOn ? `on (${awWmOpacity}%)` : "off"} · {awStaged.outPx}px
+                  <strong>{awStaged.background}</strong> background · watermark {awWmOpacity}% / offset {awWmShift}% · {awStaged.outPx}px
                 </span>
                 {!awStaged.hasSlot || awNeedSlot ? (
                   <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>

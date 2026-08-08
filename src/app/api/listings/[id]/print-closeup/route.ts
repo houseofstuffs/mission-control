@@ -266,9 +266,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       "Generated At": new Date().toISOString().slice(0, 10),
       Verdict: "Approved",
     };
-    const record = existing
-      ? await updateRecord("generated_mockups", existing.id, values)
-      : await createRecord("generated_mockups", values);
+    // same archived-target recovery as the artwork detail — this builder
+    // shares the replace-in-place pattern, so it shares the failure mode
+    let record;
+    let recovered = false;
+    if (existing) {
+      try {
+        record = await updateRecord("generated_mockups", existing.id, values);
+      } catch (err) {
+        if (!/archiv/i.test((err as Error).message)) throw err;
+        try {
+          record = await createRecord("generated_mockups", values);
+          recovered = true;
+        } catch (err2) {
+          throw new Error(
+            `The stored print-closeup record ("${existing.title || name}", https://notion.so/${existing.id.replace(/-/g, "")}) is archived — likely a database cleanup moved it to trash — and a fresh record couldn't be created either: ${(err2 as Error).message}`
+          );
+        }
+      }
+    } else {
+      record = await createRecord("generated_mockups", values);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -279,6 +297,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       sourceVariantId: variantId || null,
       outPx: cut.side,
       sourcePx,
+      recovered,
       hasSlot: Boolean(closeupSlot()),
     });
   } catch (err) {

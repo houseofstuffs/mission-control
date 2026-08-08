@@ -217,9 +217,30 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       "Generated At": new Date().toISOString().slice(0, 10),
       Verdict: "Approved",
     };
-    const record = existing
-      ? await updateRecord("generated_mockups", existing.id, values)
-      : await createRecord("generated_mockups", values);
+    // NEVER dead-end on an archived target: a Database-cleanup run can
+    // leave the cache holding a record whose page (or whole database)
+    // sits in Notion's trash — updating it throws "Can't edit block that
+    // is archived". Recovery is a FRESH record; assign re-points the
+    // slot. If even that fails, the error names the record and links it.
+    let record;
+    let recovered = false;
+    if (existing) {
+      try {
+        record = await updateRecord("generated_mockups", existing.id, values);
+      } catch (err) {
+        if (!/archiv/i.test((err as Error).message)) throw err;
+        try {
+          record = await createRecord("generated_mockups", values);
+          recovered = true;
+        } catch (err2) {
+          throw new Error(
+            `The stored artwork-detail record ("${existing.title || name}", https://notion.so/${existing.id.replace(/-/g, "")}) is archived — likely a database cleanup moved it to trash — and a fresh record couldn't be created either: ${(err2 as Error).message}`
+          );
+        }
+      }
+    } else {
+      record = await createRecord("generated_mockups", values);
+    }
 
     return NextResponse.json({
       ok: true,
@@ -228,6 +249,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       outPx: sq.side,
       background,
       watermark: wm,
+      recovered,
       hasSlot: Boolean(artworkSlot()),
     });
   } catch (err) {

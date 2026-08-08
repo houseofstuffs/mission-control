@@ -287,7 +287,11 @@ function mockupsData(
     return {
       id: s.id,
       name: s.title || "Untitled template",
-      shotType: shotTypeByShot.get(s.id) ?? "",
+      // the SHOT record's own Shot Type first — a variant's stamped copy
+      // can lag a rename until Re-sync ("On Model" vs "On Model — Female"
+      // rendered as two labels for one template). Variant stamp is only
+      // the fallback for shots that predate the field.
+      shotType: String(s.props["Shot Type"] ?? "").trim() || (shotTypeByShot.get(s.id) ?? ""),
       thumbUrl: hasSample ? `/api/mockup-shots/${s.id}/thumb?v=${encodeURIComponent(s.lastEdited)}` : null,
       printRegionQuad: parseQuad(String(s.props["Print Region Quad (JSON)"] ?? "")),
       /** listing colours this template can actually produce, display-cased */

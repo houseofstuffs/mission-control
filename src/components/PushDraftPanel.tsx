@@ -20,7 +20,7 @@
  * it to Etsy AS DRAFT, by hand, in Printify's UI. This screen applies the
  * copy bundle to that draft via the Etsy API — the app's one write.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Kicker, Spinner, Tag } from "./ui";
 import { apiJson } from "@/lib/api";
@@ -95,6 +95,65 @@ export function PushDraftPanel({
   const [pushedNow, setPushedNow] = useState(false);
   // the deliberately-human finish list — local ticks, never persisted
   const [ticks, setTicks] = useState<Set<number>>(new Set());
+
+  // ---- image push: slots → Etsy ranks, resumable, per-slot receipts ----
+  interface ImgResult { slot: number; label: string; action: string; format?: string; kb?: number; rank?: number; ok: boolean }
+  const [imgResults, setImgResults] = useState<ImgResult[] | null>(null);
+  const [imgError, setImgError] = useState<string | null>(null);
+  const [otherIds, setOtherIds] = useState<number[]>([]);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  async function pushImages() {
+    setBusy("images");
+    setImgError(null);
+    setConfirmRemove(false);
+    const res = await apiJson<{
+      results?: ImgResult[]; uploaded?: number; skipped?: number; otherImageIds?: number[]; error?: string;
+    }>(`/api/listings/${data.listingId}/push-images`, "POST", {}, 300_000);
+    setImgResults(res.data.results ?? null);
+    setOtherIds(res.data.otherImageIds ?? []);
+    if (!res.ok || res.data.error) setImgError(res.error ?? res.data.error ?? null);
+    else void verifyOnEtsy(); // fresh truth right after the write
+    setBusy(null);
+  }
+
+  async function removeOthers() {
+    setBusy("remove");
+    const res = await apiJson<{ removed?: number }>(`/api/listings/${data.listingId}/push-images`, "POST", {
+      removeImageIds: otherIds,
+    });
+    if (!res.ok) setImgError(res.error);
+    else {
+      setOtherIds([]);
+      setConfirmRemove(false);
+      void verifyOnEtsy();
+    }
+    setBusy(null);
+  }
+
+  // ---- verify on Etsy: read the draft back, compare against what we sent ----
+  interface VerifyRow { label: string; ok: boolean; expected: string; actual: string }
+  const [verify, setVerify] = useState<{ rows: VerifyRow[]; at: string; allOk: boolean } | null>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const verifyRan = useRef(false);
+
+  async function verifyOnEtsy() {
+    setVerifyError(null);
+    const res = await apiJson<{ ok?: boolean; rows?: VerifyRow[]; verifiedAt?: string }>(
+      `/api/listings/${data.listingId}/verify-etsy`, "POST", {}, 60_000);
+    if (!res.ok) setVerifyError(res.error);
+    else setVerify({ rows: res.data.rows ?? [], at: res.data.verifiedAt ?? new Date().toISOString(), allOk: res.data.ok ?? false });
+  }
+
+  // automatic after every push (and on arriving at the pushed state) — the
+  // read is one call and confirmation from Etsy is the whole point
+  useEffect(() => {
+    if ((data.pushedAt || pushedNow) && !verifyRan.current) {
+      verifyRan.current = true;
+      void verifyOnEtsy();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.pushedAt, pushedNow]);
 
   const failing = gates.filter((g) => !g.ok);
   const anyBusy = busy !== null || busyOutside !== null;
@@ -186,11 +245,87 @@ export function PushDraftPanel({
           instead of duplicating.
         </div>
         <span className="body-sm">
-          <strong>What the push writes:</strong> title, description and tags — the copy bundle,
-          nothing else. <strong>Images don&apos;t travel with it:</strong> Printify adds its own
-          mockups to the draft; your slot images go in via Shop Manager for now (in-app image push
-          is coming). Price, attributes and video are Shop Manager&apos;s too.
+          <strong>What the push writes:</strong> title, description and tags — the copy bundle.
+          <strong> Images push separately below</strong>, slot order = Etsy order (slot 1 is the
+          thumbnail). Printify&apos;s own mockups sit alongside until you remove them. Price,
+          attributes and video stay Shop Manager&apos;s.
         </span>
+
+        {/* ---- the image push: slots → ranks, resumable ---- */}
+        <div className="well stack-12" style={{ gap: 8 }}>
+          <Kicker>SLOT IMAGES → ETSY</Kicker>
+          <div className="row-gap-12" style={{ flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-primary" style={{ fontSize: 12 }} disabled={anyBusy} onClick={pushImages}>
+              <Spinner active={busy === "images"} />
+              Push {data.gallery.length} slot image{data.gallery.length === 1 ? "" : "s"} to the draft
+            </button>
+            <span className="hint">
+              Uploads in slot order; unchanged slots are skipped, changed ones replaced. A failed run
+              resumes where it stopped.
+            </span>
+          </div>
+          {imgResults ? (
+            <div className="stack-12" style={{ gap: 2 }}>
+              {imgResults.map((r) => (
+                <span key={`${r.slot}-${r.label}`} className="hint" style={{ color: r.ok ? undefined : "var(--status-blocked, #b3423a)" }}>
+                  {r.ok ? "✓" : "✕"} slot {r.slot} ({r.label}) — {r.action}
+                  {r.format ? ` · ${r.format} · ${r.kb} KB · rank ${r.rank}` : ""}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {imgError ? <div className="callout blocked">{imgError}</div> : null}
+          {otherIds.length > 0 ? (
+            <div className="row-gap-8" style={{ flexWrap: "wrap", alignItems: "center" }}>
+              <span className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                {otherIds.length} image{otherIds.length === 1 ? "" : "s"} on the draft {otherIds.length === 1 ? "isn't" : "aren't"} from your slots (Printify&apos;s mockups).
+              </span>
+              {confirmRemove ? (
+                <>
+                  <button className="btn btn-primary" style={{ fontSize: 11, padding: "3px 10px" }} disabled={anyBusy} onClick={removeOthers}>
+                    <Spinner active={busy === "remove"} />
+                    Really remove {otherIds.length} — can&apos;t be undone
+                  </button>
+                  <button className="btn btn-tertiary" style={{ fontSize: 11, padding: "3px 10px" }} onClick={() => setConfirmRemove(false)}>
+                    Keep them
+                  </button>
+                </>
+              ) : (
+                <button className="btn btn-tertiary" style={{ fontSize: 11, padding: "3px 10px" }} disabled={anyBusy} onClick={() => setConfirmRemove(true)}>
+                  Remove them…
+                </button>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        {/* ---- verified on Etsy: what's ACTUALLY on the draft ---- */}
+        <div className="well stack-12" style={{ gap: 8 }}>
+          <div className="row-gap-12" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center" }}>
+            <Kicker>VERIFIED ON ETSY</Kicker>
+            <span className="row-gap-8" style={{ alignItems: "center" }}>
+              {verify ? (
+                <span className="hint">last verified {new Date(verify.at).toLocaleTimeString()}</span>
+              ) : null}
+              <button className="btn btn-tertiary" style={{ fontSize: 11, padding: "3px 10px" }} disabled={anyBusy} onClick={() => void verifyOnEtsy()}>
+                Verify on Etsy
+              </button>
+            </span>
+          </div>
+          {verifyError ? <div className="callout blocked">{verifyError}</div> : null}
+          {verify ? (
+            <div className="stack-12" style={{ gap: 4 }}>
+              {verify.rows.map((r) => (
+                <span key={r.label} className="body-sm" style={{ color: r.ok ? "var(--status-done, #3e7a4e)" : "var(--status-blocked, #b3423a)" }}>
+                  {r.ok ? "✓" : "✕"} <strong>{r.label}</strong>
+                  {r.ok ? ` — matches (${r.actual})` : ` — sent: ${r.expected} · Etsy has: ${r.actual}`}
+                </span>
+              ))}
+            </div>
+          ) : !verifyError ? (
+            <span className="hint"><Spinner active /> reading the draft back from Etsy…</span>
+          ) : null}
+        </div>
         <span className="body-sm">
           Pushed <strong>{data.pushedAt ? new Date(data.pushedAt).toLocaleString() : "just now"}</strong>
           {data.etsyListingId ? <> · Etsy draft ID <strong>#{data.etsyListingId}</strong></> : null} · bundle

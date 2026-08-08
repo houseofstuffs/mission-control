@@ -8,7 +8,15 @@ import { publishGates } from "@/server/publishGates";
 import { estimateFor, variantCostsFor } from "@/server/productCost";
 import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { asCategory } from "@/config/product-categories";
-import { KANBAN_STAGES, RETIRED_STEP_TITLES, WORKFLOWS } from "@/lib/workflows";
+import { KANBAN_STAGES, RETIRED_STEPS, RETIRED_STEP_TITLES, WORKFLOWS } from "@/lib/workflows";
+
+/**
+ * The stored Current Step prop lags a step retirement until the record's
+ * next WRITE — the step engine normalizes on read, but any surface that
+ * reads the raw prop must do the same or it advises retired steps
+ * ("do L6 — L6" on the Today page was this).
+ */
+const normStep = (id: string): string => RETIRED_STEPS[id] ?? id;
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
 import type { ListingRow } from "@/components/ListingsTable";
@@ -49,7 +57,7 @@ export function designKanbanCards(): KanbanCardData[] {
   const listings = cachedRecords("etsy_listings");
 
   return designs.map((d) => {
-    const current = str(d.props["Current Step"]) || "C1";
+    const current = normStep(str(d.props["Current Step"]) || "C1");
     const stage =
       KANBAN_STAGES.find((s) => s.steps.includes(current)) ??
       (current === "Done" ? KANBAN_STAGES[KANBAN_STAGES.length - 1] : KANBAN_STAGES[0]);
@@ -104,7 +112,7 @@ export function listingRows(): ListingRow[] {
       row: {
         id: l.id,
         title: l.title || "Untitled listing",
-        currentStep: str(l.props["Current Step"]) || "L1",
+        currentStep: normStep(str(l.props["Current Step"]) || "L1"),
         etsyState: str(l.props["Etsy State"]) || "Not pushed",
         originType: str(l.props["Origin Type"]) || "—",
         productName: titleOf(products, productId) || "—",
@@ -514,7 +522,7 @@ export function todaySummary(): TodaySummary {
 
   const byStep = new Map<string, number>();
   for (const d of designs) {
-    const step = str(d.props["Current Step"]) || "C1";
+    const step = normStep(str(d.props["Current Step"]) || "C1");
     byStep.set(step, (byStep.get(step) ?? 0) + 1);
   }
 
@@ -598,8 +606,8 @@ export function todaySummary(): TodaySummary {
     r.dbKey === "designs" ? `/designs/${r.id}` : `/listings/${r.id}`;
   const stepTitle = (r: SimpleRecord) => {
     const wf = WORKFLOWS[r.dbKey === "designs" ? "creative" : "listing"];
-    const cur = str(r.props["Current Step"]);
-    return wf.steps.find((s) => s.id === cur)?.title ?? cur;
+    const cur = normStep(str(r.props["Current Step"]));
+    return wf.steps.find((s) => s.id === cur)?.title ?? RETIRED_STEP_TITLES[cur] ?? cur;
   };
 
   for (const r of [...designs, ...listings]) {
@@ -631,9 +639,19 @@ export function todaySummary(): TodaySummary {
     }
   }
   for (const r of [...designs, ...listings]) {
-    const cur = str(r.props["Current Step"]);
+    const cur = normStep(str(r.props["Current Step"]));
     if (r.props["Has Blocked"] || r.props["Has Stale"]) continue;
     if (!cur || cur === "Done" || cur === "Pushed") continue;
+    // a pushed draft's remaining work lives on Etsy, not in a step —
+    // "do L7" on a listing that already pushed is stale advice
+    if (r.dbKey === "etsy_listings" && str(r.props["Pushed At"]).trim()) {
+      nextUp.push({
+        label: `Finish ${r.title || "Untitled"} in Etsy Shop Manager`,
+        why: "pushed as draft — attributes, video and Publish live on Etsy's side",
+        href: recordHref(r),
+      });
+      continue;
+    }
     nextUp.push({
       label: `${r.title || "Untitled"}: do ${cur} — ${stepTitle(r)}`,
       why: "the active record's next step",

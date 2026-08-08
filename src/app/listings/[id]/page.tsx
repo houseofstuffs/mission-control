@@ -228,7 +228,11 @@ function mockupsData(
       variantId: t.variantId,
       templateId: shotId ?? t.variantId,
       templateName: shot?.title || t.variantName,
-      shotType: t.shotType,
+      // DISPLAY reads the shot record's own Shot Type — the plan's copy
+      // comes from the variant stamp, which lags a rename until Re-sync
+      // (same fix as the L4 shortlist; Send's MATCHING still uses stamps
+      // by design, that's what Re-sync is for)
+      shotType: String(shot?.props["Shot Type"] ?? "").trim() || t.shotType,
       colour: t.colour,
       quad: parseQuad(String(variant?.props["Print Area Quad (JSON)"] ?? "")),
       url: g ? `/api/generated-mockups/${g.id}/file?v=${encodeURIComponent(g.lastEdited)}` : null,

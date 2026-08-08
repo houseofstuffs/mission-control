@@ -192,11 +192,12 @@ export class EtsyScopeError extends Error {
  * path. x-www-form-urlencoded body: Etsy's v3 update endpoints reject JSON.
  */
 export async function apiRequest<T>(
-  method: "GET" | "PATCH" | "PUT" | "POST",
+  method: "GET" | "PATCH" | "PUT" | "POST" | "DELETE",
   path: string,
   accessToken: string,
-  body?: Record<string, string>
+  body?: Record<string, string> | FormData
 ): Promise<T> {
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
   for (let attempt = 0; ; attempt++) {
     const res = await throttled(() =>
       fetch(`${API_BASE}${path}`, {
@@ -204,13 +205,18 @@ export async function apiRequest<T>(
         headers: {
           "x-api-key": apiKeyHeader(),
           Authorization: `Bearer ${accessToken}`,
-          ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+          // FormData sets its own multipart boundary — never override it
+          ...(body && !isForm ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
         },
-        body: body ? new URLSearchParams(body).toString() : undefined,
+        body: body ? (isForm ? (body as FormData) : new URLSearchParams(body as Record<string, string>).toString()) : undefined,
         cache: "no-store",
       })
     );
-    if (res.ok) return (await res.json()) as T;
+    if (res.ok) {
+      // DELETE answers 204 with no body — json() would throw on success
+      const text = await res.text().catch(() => "");
+      return (text ? JSON.parse(text) : {}) as T;
+    }
 
     const text = await res.text().catch(() => "");
     if (res.status === 429 && attempt < MAX_429_RETRIES) {

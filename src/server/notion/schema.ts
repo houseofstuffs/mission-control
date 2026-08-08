@@ -662,6 +662,9 @@ export const SCHEMA: DbSpec[] = [
       // draft, and exactly what was sent (so a re-push warns with facts)
       "Pushed At": { type: "date" },
       "Push Snapshot (JSON)": { type: "rich_text" },
+      // per-slot Etsy image ids from the image push — the re-push diff
+      // and partial-failure resume both read/write this as they go
+      "Pushed Images (JSON)": { type: "rich_text" },
       "Printify Product ID": { type: "rich_text" },
       "External IDs (JSON)": { type: "rich_text" },
     },

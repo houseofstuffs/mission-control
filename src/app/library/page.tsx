@@ -56,7 +56,18 @@ function shotOption(s: SimpleRecord, mockups: SimpleRecord[], slots: SimpleRecor
     importJob: (() => {
       const job = jobStatus(s.id);
       return job
-        ? { status: job.status, done: job.done, total: job.total, imported: job.imported }
+        ? {
+            status: job.status,
+            done: job.done,
+            total: job.total,
+            imported: job.imported,
+            /** when the run finished — "last import" needs a checkable date */
+            at: job.updatedAt,
+            /** the per-file failures, surfaced instead of buried in a count */
+            failed: job.results
+              .filter((r) => !r.ok)
+              .map((r) => ({ name: r.name, detail: r.detail, fileId: r.fileId ?? null, colour: r.colour ?? null })),
+          }
         : null;
     })(),
   };

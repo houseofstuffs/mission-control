@@ -719,7 +719,16 @@ export interface MockupShotOption {
   listingCount: number;
   /** the background Drive import's last known state — the card shows it so
    *  a run survives being navigated away from VISIBLY, not just technically */
-  importJob: { status: "running" | "complete" | "interrupted"; done: number; total: number; imported: number } | null;
+  importJob: {
+    status: "running" | "complete" | "interrupted";
+    done: number;
+    total: number;
+    imported: number;
+    /** when the run last wrote — "last import" needs a checkable date */
+    at?: string;
+    /** per-file failures, so a partial import is never just a count */
+    failed?: Array<{ name: string; detail: string; fileId: string | null; colour: string | null }>;
+  } | null;
   /** which garment this shoot is OF — L4 filters on it; empty = every listing */
   productId: string;
   /** HOW this shoot renders — Send's join key; empty = Send can't place its renders */
@@ -730,6 +739,13 @@ export interface MockupShotOption {
 export interface ProductOption {
   id: string;
   label: string;
+}
+
+/** " Aug 6" (leading space) — or nothing when the job predates the field */
+function importDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : ` ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
 /**
@@ -769,6 +785,24 @@ function TemplateRow({
   // loop, and a per-run count is also what catches a variant the stamp
   // missed (count printed < count on the button = something skipped)
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  // "some failed" expands to the per-file reasons — a partial import
+  // surfaced only as a count is the silent-failure pattern this project
+  // keeps paying for
+  const [showFailed, setShowFailed] = useState(false);
+  const [retryNote, setRetryNote] = useState<string | null>(null);
+
+  async function retryFile(f: { name: string; fileId: string | null; colour: string | null }) {
+    if (!f.fileId || !f.colour) return;
+    setBusy(true);
+    setRetryNote(null);
+    const res = await apiJson<{ job?: unknown }>("/api/drive/import", "POST", {
+      shotId: s.id,
+      files: [{ id: f.fileId, name: f.name, colour: f.colour }],
+    });
+    setRetryNote(res.ok ? `↻ retrying ${f.name} — watch the import chip` : `✕ ${res.error}`);
+    setBusy(false);
+    router.refresh();
+  }
   // the shot-level geometry fix: wrong region = wrong for every colour
   const [editingRegion, setEditingRegion] = useState(false);
 
@@ -985,8 +1019,11 @@ function TemplateRow({
                 no shot type — Send can&apos;t match
               </button>
             )}
+            {/* two different facts, labelled as such: lifetime library size
+                vs the LAST RUN's file count — "14 colours · 3/3 ✓" read as
+                a contradiction when they shared a bare number style */}
             <span className="chip count">
-              {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"}
+              {s.existingColours.length} {s.existingColours.length === 1 ? "colour" : "colours"} in library
             </span>
             {s.importJob ? (
               s.importJob.status === "running" ? (
@@ -998,11 +1035,20 @@ function TemplateRow({
                   import interrupted at {s.importJob.done}/{s.importJob.total}
                 </span>
               ) : s.importJob.imported === s.importJob.total ? (
-                <span className="chip done">imported {s.importJob.imported}/{s.importJob.total} ✓</span>
-              ) : (
-                <span className="chip stale" title="Some files failed — open ＋ Add colour variants for the per-file reasons">
-                  imported {s.importJob.imported}/{s.importJob.total} — some failed
+                <span className="chip done">
+                  last import{importDate(s.importJob.at)} · {s.importJob.imported}/{s.importJob.total} files ✓
                 </span>
+              ) : (
+                <button
+                  type="button"
+                  className="chip stale"
+                  style={{ cursor: "pointer" }}
+                  title="Show which files failed, and why"
+                  onClick={() => setShowFailed((v) => !v)}
+                >
+                  last import{importDate(s.importJob.at)} · {s.importJob.imported}/{s.importJob.total} files — some
+                  failed {showFailed ? "▴" : "▾"}
+                </button>
               )
             ) : null}
             {folderId ? (
@@ -1032,6 +1078,26 @@ function TemplateRow({
               </button>
             )}
           </div>
+          {showFailed && (s.importJob?.failed?.length ?? 0) > 0 ? (
+            <div className="stack-12" style={{ gap: 4, marginTop: 4 }}>
+              {s.importJob!.failed!.map((f) => (
+                <span key={f.name} className="hint" style={{ color: "var(--status-stale, #b8792a)" }}>
+                  ✕ {f.name} — {f.detail}
+                  {f.fileId && f.colour ? (
+                    <button
+                      className="btn btn-tertiary"
+                      style={{ fontSize: 11, padding: "1px 8px", marginLeft: 8 }}
+                      disabled={busy}
+                      onClick={() => retryFile(f)}
+                    >
+                      retry this file
+                    </button>
+                  ) : null}
+                </span>
+              ))}
+              {retryNote ? <span className="hint">{retryNote}</span> : null}
+            </div>
+          ) : null}
           {s.existingColours.length > 0 ? (
             <div className="hint" style={{ marginTop: 2 }}>{s.existingColours.join(" · ")}</div>
           ) : (

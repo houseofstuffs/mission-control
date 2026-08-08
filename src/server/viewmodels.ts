@@ -8,7 +8,7 @@ import { publishGates } from "@/server/publishGates";
 import { estimateFor, variantCostsFor } from "@/server/productCost";
 import { usDomesticCharge } from "@/server/etsy/profileCost";
 import { asCategory } from "@/config/product-categories";
-import { KANBAN_STAGES, WORKFLOWS } from "@/lib/workflows";
+import { KANBAN_STAGES, RETIRED_STEP_TITLES, WORKFLOWS } from "@/lib/workflows";
 import type { SimpleRecord } from "@/server/notion/props";
 import type { KanbanCardData } from "@/components/Kanban";
 import type { ListingRow } from "@/components/ListingsTable";
@@ -531,12 +531,15 @@ export function todaySummary(): TodaySummary {
     .map((n) => n.title);
 
   // Step ids are unique across workflows (C*/L*) — resolve to runner titles.
+  // Live resolution is the LAST resort: entries stamp their step titles at
+  // write time (and backfill covered the pre-stamp ones), so a retired id
+  // being reused can never relabel history.
   const titleOfStep = (id: string): string => {
     for (const wf of [WORKFLOWS.creative, WORKFLOWS.listing]) {
       const s = wf.steps.find((x) => x.id === id);
       if (s) return s.title;
     }
-    return id;
+    return RETIRED_STEP_TITLES[id] ?? id;
   };
   const recentMoves = logs
     .slice()
@@ -546,11 +549,15 @@ export function todaySummary(): TodaySummary {
       const rawEvent = str(l.props["Event"]) === "Created" ? "Created new" : str(l.props["Event"]);
       const from = str(l.props["From Step"]);
       const to = str(l.props["To Step"]);
+      const storedTitle: Record<string, string> = {
+        [from]: str(l.props["From Step Title"]),
+        [to]: str(l.props["To Step Title"]),
+      };
       // speak in step names, as the runner does — "Input branch done",
       // not "Step done (C1 → C2)"
       // step id kept alongside the title — "✓ C1 Input branch done" reads
       // as the rail does, and the ✓ matches the greenlit/done chip glyph
-      const label = (id: string) => (id ? `${id} ${titleOfStep(id)}` : "");
+      const label = (id: string) => (id ? `${id} ${storedTitle[id] || titleOfStep(id)}` : "");
       let event = rawEvent;
       switch (rawEvent) {
         case "Step done":

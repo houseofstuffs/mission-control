@@ -54,6 +54,12 @@ export interface PushGateView {
 }
 
 const SHOP_MANAGER_URL = "https://www.etsy.com/your/shops/me/tools/listings";
+/** straight to the DRAFT's editor — the listings index shows active
+ *  listings, the one place a draft isn't */
+const listingEditorUrl = (etsyListingId: string) =>
+  /^\d+$/.test(etsyListingId)
+    ? `https://www.etsy.com/your/shops/me/listing-editor/edit/${etsyListingId}`
+    : SHOP_MANAGER_URL;
 
 /** The ownership tag IS the edit control: "(L5 ✎)" in the header jumps
  *  to the owning step — no separate right-aligned button. */
@@ -180,6 +186,12 @@ export function PushDraftPanel({
           instead of duplicating.
         </div>
         <span className="body-sm">
+          <strong>What the push writes:</strong> title, description and tags — the copy bundle,
+          nothing else. <strong>Images don&apos;t travel with it:</strong> Printify adds its own
+          mockups to the draft; your slot images go in via Shop Manager for now (in-app image push
+          is coming). Price, attributes and video are Shop Manager&apos;s too.
+        </span>
+        <span className="body-sm">
           Pushed <strong>{data.pushedAt ? new Date(data.pushedAt).toLocaleString() : "just now"}</strong>
           {data.etsyListingId ? <> · Etsy draft ID <strong>#{data.etsyListingId}</strong></> : null} · bundle
           snapshot saved
@@ -205,8 +217,8 @@ export function PushDraftPanel({
           ))}
         </div>
         <div className="row-gap-12" style={{ flexWrap: "wrap" }}>
-          <a className="btn btn-secondary" href={SHOP_MANAGER_URL} target="_blank" rel="noreferrer">
-            Open in Etsy Shop Manager ↗
+          <a className="btn btn-secondary" href={listingEditorUrl(data.etsyListingId)} target="_blank" rel="noreferrer">
+            {/^\d+$/.test(data.etsyListingId) ? "Open this draft in Etsy ↗" : "Open in Etsy Shop Manager ↗"}
           </a>
           <button className="btn btn-tertiary" disabled={anyBusy} onClick={() => push(true)}>
             <Spinner active={busy === "push"} />

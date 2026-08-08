@@ -48,7 +48,8 @@ export interface ImportJobStatus {
   /** files processed so far — success and failure both count */
   done: number;
   imported: number;
-  results: Array<{ name: string; detail: string; ok: boolean }>;
+  // fileId + colour ride on FAILURES so the card can offer per-file retry
+  results: Array<{ name: string; detail: string; ok: boolean; fileId?: string; colour?: string }>;
   startedAt: string;
   updatedAt: string;
 }
@@ -170,6 +171,8 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
           name: f.name,
           detail: `skipped — a ${f.colour} variant already exists on this template (duplicate guard)`,
           ok: false,
+          fileId: f.id,
+          colour: f.colour,
         });
         continue;
       }
@@ -180,7 +183,7 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
       const w = meta.width ?? 0;
       const h = meta.height ?? 0;
       if (!w || !h) {
-        job.results.push({ name: f.name, detail: "unreadable image", ok: false });
+        job.results.push({ name: f.name, detail: "unreadable image", ok: false, fileId: f.id, colour: f.colour });
         continue;
       }
 
@@ -193,6 +196,8 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
           // them — "…_2000x2000.png" arrived at 1742px on the short edge
           detail: `skipped — crop yields ${cropPx}px, under ${MOCKUP_CROP_MIN} (source is actually ${w}×${h})`,
           ok: false,
+          fileId: f.id,
+          colour: f.colour,
         });
         continue;
       }
@@ -205,6 +210,8 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
           name: f.name,
           detail: `skipped — won't fit Notion's 5 MiB upload cap even at ${MOCKUP_CROP_MIN}px`,
           ok: false,
+          fileId: f.id,
+          colour: f.colour,
         });
         continue;
       }
@@ -247,13 +254,15 @@ async function runJob(args: StartArgs, job: ImportJobStatus): Promise<void> {
           name: f.name,
           detail: "Drive connection expired — reconnect and re-run; already-imported colours will be skipped",
           ok: false,
+          fileId: f.id,
+          colour: f.colour,
         });
         job.done++;
         job.status = "interrupted";
         writeJob(job);
         return;
       }
-      job.results.push({ name: f.name, detail: (err as Error).message, ok: false });
+      job.results.push({ name: f.name, detail: (err as Error).message, ok: false, fileId: f.id, colour: f.colour });
     } finally {
       if (job.status === "running") {
         job.done++;

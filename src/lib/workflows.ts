@@ -195,39 +195,37 @@ export const LISTING_WORKFLOW: WorkflowDef = {
       produces: ["Ordered image set — slot one is the search thumbnail"],
       dependsOn: ["L4"],
     },
-    {
-      id: "L6",
-      label: "publish gates",
-      title: "Publish gates",
-      // the runner overrides this with a live count when it has the gates —
-      // this static line is the fallback for anywhere that renders the
-      // definition without record context
-      needs: ["Every gate in the panel must pass — red gates are buttons, click one to jump to its fix"],
-      // Retitled at render time to "Confirms & locks for publish": L6 is a
-      // checkpoint, it creates nothing, and "produces" implied it built
-      // content.
-      produces: [
-        "Title, tags, attributes, description present",
-        "Required image slots filled in order",
-        "Size chart image present (always required)",
-        "Care + colorways covered by graphic card",
-        "Trademark screening confirmed complete",
-        "Cost snapshot recorded",
-      ],
-      dependsOn: ["L2", "L3", "L5"],
-      note: "Checkpoint — nothing is created here.",
-    },
+    // L6 ("Publish gates") is RETIRED — it created nothing, the gates
+    // panel renders in the right rail on every step, and L7 links into
+    // every section, so nothing was confirmed or locked there that isn't
+    // better checked live. Its requirement lives on in L7's needs. The
+    // id stays AVAILABLE for a future step: history stores step titles
+    // at write time (see steps.ts log()), so reuse can't rewrite it.
     {
       id: "L7",
       label: "push draft",
       title: "Push to Etsy as complete draft",
-      needs: ["All L6 gates passed"],
+      // count-agnostic on purpose: item 12 just grew the list to 12, and
+      // a hardcoded number is one gate away from lying
+      needs: ["All publish gates green (the panel in the right rail — red gates are buttons)"],
       produces: ["Complete Etsy draft (finish + publish in Shop Manager)"],
-      dependsOn: ["L6"],
+      dependsOn: ["L2", "L3", "L5"],
       note: "Sequenced LAST so Printify's hide-from-Etsy checkbox stops being load-bearing. Draft-only in v1.",
     },
   ],
 };
+
+/**
+ * Retired step ids → the step a record parked there should advance to.
+ * A retired checkpoint had no work of its own, so advancing skips
+ * nothing; bouncing backwards would misstate where the record actually
+ * is. parseStepState applies this on read.
+ */
+export const RETIRED_STEPS: Record<string, string> = { L6: "L7" };
+
+/** Titles retired steps had while they existed — the render fallback for
+ *  history entries written before titles were stored at write time. */
+export const RETIRED_STEP_TITLES: Record<string, string> = { L6: "Publish gates" };
 
 export const WORKFLOWS: Record<string, WorkflowDef> = {
   creative: CREATIVE_WORKFLOW,

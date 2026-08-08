@@ -108,6 +108,23 @@ export function publishGates(rec: SimpleRecord): PublishGate[] {
       ok: Boolean(thumb && filled(thumb)),
       fixStep: "L5",
     });
+    // The completeness check the panel was missing: a listing can be a
+    // slot short, carry a live needs-attention count, and still read
+    // publish-ready without this. Made-or-Placed on purpose — Made is a
+    // legitimate reviewed state (requiring Placed would reintroduce the
+    // manual step the card senders removed), and needs-attention counts
+    // Made too, so it would over-block. Failing slots are NAMED.
+    const unfilled = slots.filter((s) => !filled(s));
+    gates.push({
+      label:
+        unfilled.length === 0
+          ? `Slot plan complete — ${slots.length}/${slots.length} filled`
+          : `Slot plan incomplete: ${unfilled
+              .map((s) => `${s.title || `slot ${num(s.props["Position"]) ?? "?"}`} (${str(s.props["Status"]) || "Planned"})`)
+              .join(", ")}.`,
+      ok: unfilled.length === 0,
+      fixStep: "L5",
+    });
     // The graphic card, as one gate with three named parts. The size chart
     // is ALWAYS required — a buyer who can't size a garment returns it —
     // so a listing with no size-chart slot at all still fails. Care and

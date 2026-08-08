@@ -12,6 +12,8 @@ import {
   workflowForDbKey,
   downstreamOf,
   stepIndex,
+  RETIRED_STEPS,
+  RETIRED_STEP_TITLES,
   type StepStatus,
   type WorkflowDef,
 } from "@/lib/workflows";
@@ -48,6 +50,12 @@ export function parseStepState(rec: SimpleRecord): StepState {
   for (const step of wf.steps) {
     if (!state.steps[step.id]) state.steps[step.id] = { status: "pending" };
   }
+  // a record parked on a RETIRED step auto-advances to its successor —
+  // never back to step one, which is where the unknown-id fallback below
+  // would otherwise dump it. Stray state entries for retired ids are
+  // pruned so an old stale/blocked flag can't pin the record forever.
+  if (RETIRED_STEPS[state.current]) state.current = RETIRED_STEPS[state.current];
+  for (const retired of Object.keys(RETIRED_STEPS)) delete state.steps[retired];
   if (!wf.steps.some((s) => s.id === state!.current) && state.current !== "Done" && state.current !== "Pushed") {
     state.current = wf.steps[0].id;
   }
@@ -76,6 +84,15 @@ async function persist(rec: SimpleRecord, state: StepState): Promise<SimpleRecor
   });
 }
 
+/** The step's title AS OF NOW, stamped into the log so history survives
+ *  step retirement and id reuse — labels are never re-resolved against a
+ *  future config. Terminal pseudo-steps and unknown ids stamp nothing. */
+export function stepTitleNow(dbKey: string, stepId: string): string {
+  if (!stepId) return "";
+  const wf = workflowForDbKey(dbKey);
+  return wf.steps.find((s) => s.id === stepId)?.title ?? RETIRED_STEP_TITLES[stepId] ?? "";
+}
+
 async function log(
   rec: SimpleRecord,
   event: string,
@@ -86,6 +103,9 @@ async function log(
     Event: event,
     "From Step": fields.fromStep ?? "",
     "To Step": fields.toStep ?? "",
+    // titles stored AT WRITE TIME — see stepTitleNow
+    "From Step Title": stepTitleNow(rec.dbKey, fields.fromStep ?? ""),
+    "To Step Title": stepTitleNow(rec.dbKey, fields.toStep ?? ""),
     Reason: fields.reason ?? "",
     "Steps Marked Stale": (fields.stale ?? []).join(", "),
     At: new Date().toISOString(),
@@ -93,6 +113,42 @@ async function log(
   if (rec.dbKey === "designs") values["Design"] = [rec.id];
   if (rec.dbKey === "etsy_listings") values["Listing"] = [rec.id];
   await createRecord("workflow_log", values);
+}
+
+/**
+ * One-time backfill: stamp step titles onto workflow_log entries written
+ * before titles were stored at write time. Without this, every pre-stamp
+ * entry still falls back to live resolution — and the day a retired id
+ * (L6) is reused, all of them would silently relabel. Runs from
+ * Provision; idempotent (skips entries that already carry titles).
+ */
+export async function backfillLogStepTitles(): Promise<number> {
+  const { cachedRecords } = await import("@/server/notion/store");
+  const { WORKFLOWS } = await import("@/lib/workflows");
+  const titleOf = (id: string): string => {
+    for (const wf of [WORKFLOWS.creative, WORKFLOWS.listing]) {
+      const s = wf.steps.find((x) => x.id === id);
+      if (s) return s.title;
+    }
+    return RETIRED_STEP_TITLES[id] ?? "";
+  };
+  let patched = 0;
+  for (const l of cachedRecords("workflow_log")) {
+    const from = String(l.props["From Step"] ?? "");
+    const to = String(l.props["To Step"] ?? "");
+    const values: Record<string, SimpleValue> = {};
+    if (from && !String(l.props["From Step Title"] ?? "").trim() && titleOf(from)) {
+      values["From Step Title"] = titleOf(from);
+    }
+    if (to && !String(l.props["To Step Title"] ?? "").trim() && titleOf(to)) {
+      values["To Step Title"] = titleOf(to);
+    }
+    if (Object.keys(values).length > 0) {
+      await updateRecord("workflow_log", l.id, values);
+      patched++;
+    }
+  }
+  return patched;
 }
 
 function requireRecord(pageId: string): SimpleRecord {
@@ -130,7 +186,7 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
     if (stepId === "L2" && tagCount > TAG_COUNT) {
       return `${tagCount - TAG_COUNT} tag${tagCount - TAG_COUNT === 1 ? "" : "s"} over Etsy's limit of ${TAG_COUNT} — trim the selection before closing L2.`;
     }
-    if ((stepId === "L6" || stepId === "L7") && tagCount !== TAG_COUNT) {
+    if (stepId === "L7" && tagCount !== TAG_COUNT) {
       return tagCount > TAG_COUNT
         ? `${tagCount - TAG_COUNT} tag${tagCount - TAG_COUNT === 1 ? "" : "s"} over Etsy's limit of ${TAG_COUNT} — trim before publishing.`
         : `Only ${tagCount} of ${TAG_COUNT} tags — Etsy listings publish with all ${TAG_COUNT}.`;
@@ -138,12 +194,12 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
 
     // The publish gate is where an unexamined design stops being harmless:
     // it decides which garment colours ship. No default is safe here.
-    if ((stepId === "L6" || stepId === "L7") && compatForListing(rec) === "Unset") {
+    if (stepId === "L7" && compatForListing(rec) === "Unset") {
       return "Garment compatibility not set.";
     }
     // Dimensional products have no honest cost without their anchor size —
     // and a listing priced without a cost is a margin decided by accident.
-    if (stepId === "L6" || stepId === "L7") {
+    if (stepId === "L7") {
       const productId = ((rec.props["Product"] as string[] | null) ?? [])[0];
       const product = productId ? cachedRecord(productId) : null;
       if (
@@ -153,9 +209,9 @@ export function unmetRequirement(rec: SimpleRecord, stepId: string): string | nu
       ) {
         return "Needs representative size — pick it on the product card.";
       }
-      // The general rule the specific messages above are instances of: L6
-      // is a checkpoint, and a checkpoint marked done while red is a lie.
-      // Same list the gate panel renders — one source, no drift.
+      // The general rule the specific messages above are instances of:
+      // pushing while a gate is red is a lie. Same list the gate panel
+      // renders — one source, no drift. (Formerly L6's whole job.)
       const failing = publishGates(rec).filter((g) => !g.ok && !g.advisory);
       if (failing.length > 0) {
         return `${failing.length} publish gate${failing.length === 1 ? "" : "s"} failing — all must pass. First: ${failing[0].label}`;

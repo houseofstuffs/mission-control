@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { provisionSchema, checkSchema } from "@/server/notion/provision";
 import { notionConfigured } from "@/server/notion/client";
+import { backfillLogStepTitles } from "@/server/steps";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // ~30 throttled Notion calls on first run
@@ -35,7 +36,10 @@ export async function POST() {
       );
     }
     const result = await provisionSchema();
-    return NextResponse.json({ result });
+    // history hardening rides along: pre-existing workflow_log entries get
+    // their step titles stamped, so retired-id reuse can't relabel them
+    const backfilled = await backfillLogStepTitles();
+    return NextResponse.json({ result, logTitlesBackfilled: backfilled });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }

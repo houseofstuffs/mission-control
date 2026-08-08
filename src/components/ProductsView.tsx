@@ -239,7 +239,16 @@ function ProductCard({
           so this is only ever a default L3 pre-fills from, never a push */}
       {shippingProfiles.length > 0 ? (
         <div className="row-gap-8" style={{ alignItems: "center", flexWrap: "wrap" }}>
-          <span className="chip neutral" style={{ fontSize: 11 }}>Etsy shipping</span>
+          {/* NOT the L3 "Shipping profile confirmed" gate — that's the
+              operator's attest on the LISTING. Two truthful things were
+              wearing one name; this one says which it is. */}
+          <span
+            className="chip neutral"
+            style={{ fontSize: 11 }}
+            title="Which Etsy shipping profile listings of this product default to — separate from L3's per-listing confirmation"
+          >
+            Etsy shipping profile (push mapping)
+          </span>
           {/* full width on its own line — sharing the row with the chip
               squeezed the option text and clipped the rate, which is the
               part worth reading */}
@@ -254,7 +263,7 @@ function ProductCard({
             {/* a real choice, not prompt text — picking it clears the
                 relation. The chip above carries the field's name so this
                 doesn't have to double as a label. */}
-            <option value="">— none —</option>
+            <option value="">— not linked —</option>
             {shippingProfiles.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
